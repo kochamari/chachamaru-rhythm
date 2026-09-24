@@ -1,0 +1,19 @@
+/* Fixed view-box pivots keep cropped atlas images from changing the bones'
+   bounds. The head, paws, feet, ears, tail and scarf are real separate parts. */
+.chacha.chacha-anime g { transform-box: view-box; }
+.chacha-anime .dog-body, .chacha-anime .dog-paws { transform-origin: 207px 391px !important; }
+.chacha-anime .dog-tail { transform-origin: 287px 307px !important; }
+.chacha-anime .dog-head { transform-origin: 207px 217px !important; }
+.chacha-anime .dog-ear.left { transform-origin: 150px 88px !important; }
+.chacha-anime .dog-ear.right { transform-origin: 278px 98px !important; }
+.chacha-anime .arm-left { transform-origin: 130px 314px !important; }
+.chacha-anime .arm-right { transform-origin: 306px 314px !important; }
+.chacha-anime .dog-scarf { transform-origin: 273px 223px !important; }
+.chacha-anime .eyes-closed { opacity: 0; }
+.chacha-anime .is-blinking .eyes-open { opacity: 0; }
+.chacha-anime .is-blinking .eyes-closed { opacity: 1; }
+.hero-character .chacha-anime .eyes-open { animation: eyes-open 4.1s step-end infinite; }
+.hero-character .chacha-anime .eyes-closed { animation: eyes-closed 4.1s step-end infinite; }
+.hero-character .chacha-anime .dog-paws { animation: body-idle 1.1s ease-in-out infinite; }
+@keyframes eyes-open { 0%, 96.8%, 100% { opacity: 1; } 96.9% { opacity: 0; } }
+@keyframes eyes-closed { 0%, 96.8%, 100% { opacity: 0; } 96.9% { opacity: 1; } }

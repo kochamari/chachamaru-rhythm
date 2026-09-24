@@ -1,39 +1,76 @@
-let id=0;
+import {sprite} from './character-rig';
+
 export function crownSvg(){return '<svg viewBox="0 0 40 34" aria-hidden="true"><path d="M5 26 2 9 13 18 20 3 27 18 38 9 35 26Z" fill="#ffe484" stroke="#b37c28" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 29H34V33H6Z" fill="#e8b84f" stroke="#b37c28"/><circle cx="20" cy="3" r="2.5" fill="#fff3bf"/><circle cx="2" cy="9" r="2" fill="#fff3bf"/><circle cx="38" cy="9" r="2" fill="#fff3bf"/><path d="M20 19 23 23 20 27 17 23Z" fill="#397261"/></svg>';}
 export function flowerSvg(){return '<svg viewBox="0 0 64 64" aria-hidden="true">'+Array.from({length:12},(_,i)=>`<ellipse cx="32" cy="14" rx="7" ry="12" fill="#ffd166" transform="rotate(${i*30} 32 32)"/>`).join('')+'<circle cx="32" cy="32" r="13" fill="#674829"/><circle cx="28" cy="28" r="3" fill="#9a6b38"/></svg>';}
-export function characterSvg(drum=true){const k=`chacha-${++id}`;return `<svg class="chacha" viewBox="0 0 400 380" role="img" aria-label="ひまわりと緑の唐草スカーフをつけた赤柴のちゃちゃまる">
-<defs><linearGradient id="${k}-fur" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#fbd487"/><stop offset=".5" stop-color="#e5a44c"/><stop offset="1" stop-color="#bd6f31"/></linearGradient><linearGradient id="${k}-white" x2="0" y2="1"><stop stop-color="#fffdf0"/><stop offset="1" stop-color="#e6d9b8"/></linearGradient><linearGradient id="${k}-drum" x2="1" y2=".1"><stop stop-color="#903b2b"/><stop offset=".35" stop-color="#dd6742"/><stop offset=".75" stop-color="#a8432f"/><stop offset="1" stop-color="#71362b"/></linearGradient><pattern id="${k}-karakusa" width="24" height="22" patternUnits="userSpaceOnUse"><path d="M2 20C20 20 23 3 12 3C3 3 7 14 14 10M2 20Q4 9 0 4" fill="none" stroke="#dce7ae" stroke-width="2"/></pattern></defs>
-<ellipse cx="212" cy="346" rx="150" ry="15" fill="#392c22" opacity=".2"/>
-<g class="dog-body" stroke="#573d29" stroke-width="3.3" stroke-linejoin="round">
-<g class="dog-tail"><path d="M128 248C67 266 25 229 40 188C52 153 101 166 101 194C99 216 76 226 64 208C68 239 100 231 120 219Z" fill="url(#${k}-fur)"/><path d="M40 188C46 166 70 158 84 173L79 181L89 189L76 194L78 207L65 204L63 216C46 213 37 201 40 188Z" fill="url(#${k}-white)" stroke-width="1.7"/></g>
-<g class="dog-leg back-left"><path d="M132 244Q107 258 119 311L113 326Q108 344 136 343L160 338L162 266Z" fill="url(#${k}-fur)"/><path d="M119 319Q139 312 151 323L152 339L116 340Q109 332 119 319" fill="url(#${k}-white)"/></g>
-<g class="dog-leg back-right"><path d="M235 245Q267 255 267 312L285 324Q296 343 270 344L237 337L214 270Z" fill="url(#${k}-fur)"/><path d="M261 317Q274 316 287 331Q294 344 269 342L246 336L248 325Z" fill="url(#${k}-white)"/></g>
-<path d="M129 176C104 210 102 259 125 289Q180 324 248 288C273 253 263 203 237 178Z" fill="url(#${k}-fur)"/>
-<path d="M157 191Q185 181 219 194L228 213L222 221L234 234L229 266Q197 306 147 279Q130 247 145 215L139 211Z" fill="url(#${k}-white)" stroke="none"/>
-<g class="dog-scarf"><path d="M120 177Q172 157 248 173L245 207Q183 233 120 195Z" fill="#366448"/><path d="M122 176Q177 164 246 175L243 204Q187 226 123 193Z" fill="url(#${k}-karakusa)" stroke="none"/><path d="M232 194Q276 211 279 242L254 232L244 253Q243 219 222 213Z" fill="#3b6944"/><path d="M236 203Q250 222 266 228M249 220q19-12 10-14q-10 0-6 12" stroke="#dfe8b4" fill="none" stroke-width="2"/></g>
-<g class="dog-head">
-<g class="dog-ear left"><path d="M114 111C91 73 91 23 107 18C127 17 155 58 161 73Z" fill="url(#${k}-fur)"/><path d="M112 87Q98 51 108 34Q131 50 140 76Z" fill="#87523d"/><path d="M110 75L112 47L131 73Z" fill="#e6b589" stroke="none"/></g>
-<g class="dog-ear right"><path d="M212 68C221 36 254 14 264 23C276 42 262 99 248 111Z" fill="url(#${k}-fur)"/><path d="M231 75Q251 40 258 39Q263 59 248 88Z" fill="#87523d"/><path d="M238 74L254 52L248 84Z" fill="#e6b589" stroke="none"/></g>
-<path d="M105 97C127 67 157 62 185 64C219 62 250 74 264 110L280 128L273 132L282 145L270 147L277 159L262 161C245 195 218 208 184 207C150 209 110 193 99 161L86 156L94 144L84 137L98 127L91 120Z" fill="url(#${k}-fur)"/>
-<path d="M103 137C118 118 137 137 151 154Q169 166 186 162Q208 167 222 150C237 128 256 127 270 146L267 161C245 195 220 204 184 203C146 204 113 185 103 157Z" fill="url(#${k}-white)" stroke="none"/>
-<path d="M164 86Q175 103 169 123L184 143L199 123Q193 105 202 87Q185 75 164 86Z" fill="#fff3d5" opacity=".75" stroke="none"/>
-<path d="M122 109Q132 102 143 108M220 107Q232 101 243 109" stroke="#fff4d9" stroke-width="10" stroke-linecap="round"/>
-<g class="dog-eyes"><ellipse cx="139" cy="130" rx="9" ry="12" fill="#302923"/><ellipse cx="229" cy="130" rx="9" ry="12" fill="#302923"/><circle cx="136" cy="126" r="3.3" fill="white" stroke="none"/><circle cx="226" cy="126" r="3.3" fill="white" stroke="none"/></g>
-<ellipse cx="120" cy="158" rx="14" ry="7" fill="#e99972" opacity=".65" stroke="none"/><ellipse cx="249" cy="157" rx="14" ry="7" fill="#e99972" opacity=".65" stroke="none"/>
-<path d="M159 166Q184 186 210 165Q202 193 184 195Q168 190 159 166Z" fill="#59352c"/><path d="M175 185Q184 174 195 185L193 193Q182 201 175 189Z" fill="#ee9480" stroke-width="1.5"/>
-<ellipse cx="171" cy="162" rx="20" ry="14" fill="#fff9e6" stroke="none"/><ellipse cx="198" cy="162" rx="20" ry="14" fill="#fff9e6" stroke="none"/><path d="M175 147Q185 142 196 148Q199 153 186 160Q172 156 175 147Z" fill="#302a23"/><path d="M185 160V167Q172 176 160 166M185 167Q198 176 209 165" fill="none" stroke-width="2.5" stroke-linecap="round"/>
-<path d="M114 115L109 122M257 114L260 123M148 85L144 92M222 85L226 92" stroke="#bc793b" stroke-width="2"/>
-</g>
-<g class="dog-flower" transform="translate(117 189)">${Array.from({length:12},(_,i)=>`<ellipse cx="0" cy="-15" rx="6.5" ry="11" fill="${i%2?'#ffdf66':'#eebf32'}" stroke="#ba8027" stroke-width="1" transform="rotate(${i*30})"/>`).join('')}<circle r="11" fill="#77512c"/><path d="M-6-3L6 3M-5 4L4-5M-1-8L-1 8" stroke="#aa7841" stroke-width="2"/></g>
-<g class="dog-arm arm-left"><path d="M128 209Q97 213 97 245Q108 264 128 249L151 222Z" fill="url(#${k}-fur)"/><path d="M104 232Q118 224 129 237L127 250Q110 263 99 247Z" fill="url(#${k}-white)"/>${drum?'<path d="M117 242L149 184" stroke="#553b25" stroke-width="13" stroke-linecap="round"/><path d="M118 239L149 184" stroke="#e6c585" stroke-width="8" stroke-linecap="round"/>':''}</g>
-<g class="dog-arm arm-right"><path d="M242 207Q274 211 277 236Q275 254 256 254L224 225Z" fill="url(#${k}-fur)"/><path d="M251 234Q264 225 276 239Q278 255 260 255L249 249Z" fill="url(#${k}-white)"/>${drum?'<path d="M264 241L298 179" stroke="#553b25" stroke-width="13" stroke-linecap="round"/><path d="M265 238L298 179" stroke="#e6c585" stroke-width="8" stroke-linecap="round"/>':''}</g>
-</g>
-${drum?`<g class="dog-drum" stroke="#513b29" stroke-width="3"><path d="M206 290L185 355M305 291L327 357M197 351H321" fill="none" stroke="#603f2c" stroke-width="12"/><path d="M186 255L194 312Q246 352 313 311L321 254Z" fill="url(#${k}-drum)"/><path d="M207 271L211 322M231 277L233 331M265 278L265 333M294 272L292 326" stroke="#e6a16a" stroke-width="2"/><ellipse cx="254" cy="257" rx="68" ry="29" fill="#f8e5b3"/><ellipse cx="254" cy="257" rx="57" ry="22" fill="#fff2ce" stroke="#bd945e" stroke-width="1.5"/>${Array.from({length:12},(_,i)=>{const a=i*Math.PI/6;return `<circle cx="${254+63*Math.cos(a)}" cy="${257+26*Math.sin(a)}" r="2.3" fill="#4e3829" stroke="none"/>`;}).join('')}<path d="M196 308Q251 342 311 308" fill="none" stroke="#f4cd89" stroke-width="6"/></g>`:''}</svg>`;}
+
+export function characterSvg(drum = true): string {
+ return `<svg class="chacha chacha-anime" viewBox="0 0 400 420" role="img" aria-label="ひまわりと緑の唐草スカーフをつけた赤柴のちゃちゃまる">
+ <ellipse cx="207" cy="399" rx="138" ry="11" fill="#392c22" opacity=".18"/>
+ <g class="dog-body">
+  <g class="dog-tail">${sprite('tail', 267, 206, 111)}</g>
+  <g class="dog-leg back-left">${sprite('footLeft', 90, 297, 85)}</g>
+  <g class="dog-leg back-right">${sprite('footRight', 249, 297, 85)}</g>
+  ${sprite('torso', 123, 191, 182)}
+  <g class="dog-scarf">${sprite('scarf', 254, 202, 95)}</g>
+  ${sprite('band', 123, 183, 179)}
+  <g class="dog-head">
+   <g class="dog-ear left">${sprite('earLeft', 113, 6, 75)}</g>
+   <g class="dog-ear right">${sprite('earRight', 243, 16, 83)}</g>
+   <g class="dog-eyes"><g class="eyes-open">${sprite('head', 97, 41, 225)}</g><g class="eyes-closed">${sprite('blink', 97, 41, 225)}</g></g>
+  </g>
+  <g class="dog-flower">${sprite('flower', 260, 209, 67)}</g>
+ </g>
+ ${drum ? `<g class="dog-drum">${sprite('drum', 128, 267, 178)}</g>` : ''}
+ <g class="dog-paws">
+  <g class="dog-arm arm-left">${drum ? sprite('armRight', 103, 223, 109) : sprite('pawRight', 95, 257, 109)}</g>
+  <g class="dog-arm arm-right">${drum ? sprite('armLeft', 226, 223, 109) : sprite('pawLeft', 237, 257, 109)}</g>
+ </g>
+ </svg>`;
+}
+
+const selectors = ['.dog-body', '.dog-paws', '.dog-tail', '.dog-head', '.arm-left', '.arm-right', '.back-left', '.back-right', '.dog-scarf', '.dog-ear.left', '.dog-ear.right', '.dog-eyes'] as const;
+type Part = typeof selectors[number];
+
 export class Character {
- private root:HTMLElement;private lastHit=-1000;private hitColor='don';private comboAt=-1000;private happyAt=-1000;private missAt=-1000;
- constructor(root:HTMLElement){this.root=root;root.innerHTML=characterSvg();}
- hit(color:string,time:number){this.lastHit=time;this.hitColor=color;}
- jump(time:number){this.comboAt=time;}
- react(kind:'happy'|'miss',time:number){if(kind==='happy')this.happyAt=time;else this.missAt=time;}
- update(time:number,beat:number,state:string){const q=<T extends SVGElement>(s:string)=>this.root.querySelector<T>(s)!;const phase=beat*Math.PI*2,bounce=Math.sin(phase)*3;const jump=time>=this.comboAt?Math.max(0,1-(time-this.comboAt)/350):0;const strike=time>=this.lastHit?Math.max(0,1-(time-this.lastHit)/130):0;const chorus=state==='chorusDance',win=state==='resultWin';const missed=time>=this.missAt&&time-this.missAt<120,happy=time>=this.happyAt&&time-this.happyAt<220;this.root.dataset.state=strike>0?this.hitColor:jump>0?'comboJump':missed?'miss':happy?'happy':state;q('.dog-body').style.transform=`translateY(${bounce-Math.sin(jump*Math.PI)*24}px) scaleY(${1-strike*.03})`;q('.dog-tail').style.transform=`rotate(${Math.sin(phase)*8+(chorus?8:0)+(happy?12:0)}deg)`;q('.dog-head').style.transform=`rotate(${Math.sin(phase/2)*(chorus?7:2)+(missed?-8:0)}deg)`;q('.arm-left').style.transform=`rotate(${strike*(this.hitColor==='don'?40:-5)+(chorus?Math.sin(phase/2)*18:0)+(win?-20:0)}deg)`;q('.arm-right').style.transform=`rotate(${-strike*(this.hitColor==='ka'?40:5)+(chorus?Math.cos(phase/2)*18:0)+(win?-40:0)}deg)`;q('.back-left').style.transform=`translateY(${chorus?Math.max(0,Math.sin(phase))*-8:jump*4}px)`;q('.back-right').style.transform=`translateY(${chorus?Math.max(0,-Math.sin(phase))*-8:0}px)`;q('.dog-scarf').style.transform=`rotate(${Math.sin(phase+.4)*(chorus?6:2)}deg)`;q('.dog-ear.left').style.transform=`rotate(${Math.sin(phase/2)*2+(missed?-12:0)}deg)`;q('.dog-ear.right').style.transform=`rotate(${-Math.sin(phase/2)*2+(missed?-12:0)}deg)`;q('.dog-eyes').style.transform=`scaleY(${time%4100>3970?.1:1})`;}
+ private readonly parts: Record<Part, SVGElement>;
+ private lastHit = -1000;
+ private hitColor = 'don';
+ private comboAt = -1000;
+ private happyAt = -1000;
+ private missAt = -1000;
+
+ constructor(private root: HTMLElement) {
+  root.innerHTML = characterSvg();
+  this.parts = Object.fromEntries(selectors.map(s => [s, root.querySelector<SVGElement>(s)!])) as Record<Part, SVGElement>;
+ }
+
+ hit(color: string, time: number): void { this.lastHit = time; this.hitColor = color; }
+ jump(time: number): void { this.comboAt = time; }
+ react(kind: 'happy' | 'miss', time: number): void { if (kind === 'happy') this.happyAt = time; else this.missAt = time; }
+
+ update(time: number, beat: number, state: string): void {
+  const q = (s: Part) => this.parts[s];
+  const phase = beat * Math.PI * 2, bounce = Math.sin(phase) * 3;
+  const jump = time >= this.comboAt ? Math.max(0, 1 - (time - this.comboAt) / 350) : 0;
+  // Reach the drum in 40 ms and return over 90 ms. Repeated inputs replace
+  // the current stroke; there is no animation queue to fall behind the song.
+  const age = time - this.lastHit;
+  const strike = age >= 0 && age < 130 ? age < 40 ? age / 40 : (130 - age) / 90 : 0;
+  const chorus = state === 'chorusDance', win = state === 'resultWin';
+  const missed = time >= this.missAt && time - this.missAt < 120;
+  const happy = time >= this.happyAt && time - this.happyAt < 220;
+  this.root.dataset.state = strike > 0 ? this.hitColor : jump > 0 ? 'comboJump' : missed ? 'miss' : happy ? 'happy' : state;
+  q('.dog-body').style.transform = `translateY(${bounce - Math.sin(jump * Math.PI) * 24}px) scaleY(${1 - strike * .03})`;
+  q('.dog-paws').style.transform = q('.dog-body').style.transform;
+  q('.dog-tail').style.transform = `rotate(${Math.sin(phase) * 8 + (chorus ? 8 : 0) + (happy ? 12 : 0)}deg)`;
+  q('.dog-head').style.transform = `rotate(${Math.sin(phase / 2) * (chorus ? 5 : 2) + (missed ? -8 : 0)}deg)`;
+  q('.arm-left').style.transform = `rotate(${strike * (this.hitColor === 'don' ? 42 : 0) + (chorus ? Math.sin(phase / 2) * 12 : 0) + (win ? -30 : 0)}deg)`;
+  q('.arm-right').style.transform = `rotate(${-strike * (this.hitColor === 'ka' ? 42 : 0) + (chorus ? Math.cos(phase / 2) * 12 : 0) + (win ? 30 : 0)}deg)`;
+  q('.back-left').style.transform = `translateY(${chorus ? Math.max(0, Math.sin(phase)) * -8 : jump * 4}px)`;
+  q('.back-right').style.transform = `translateY(${chorus ? Math.max(0, -Math.sin(phase)) * -8 : 0}px)`;
+  q('.dog-scarf').style.transform = `rotate(${Math.sin(phase + .4) * (chorus ? 6 : 2)}deg)`;
+  q('.dog-ear.left').style.transform = `rotate(${Math.sin(phase / 2) * 2 + (missed ? -10 : 0)}deg)`;
+  q('.dog-ear.right').style.transform = `rotate(${-Math.sin(phase / 2) * 2 + (missed ? -10 : 0)}deg)`;
+  q('.dog-eyes').classList.toggle('is-blinking', time % 4100 > 3970 || happy);
+ }
 }
