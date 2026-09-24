@@ -61,3 +61,20 @@ Row 4 left to right:
 
 Exactly 16 isolated parts, true transparent background, keep every component inside its own invisible equal cell. No duplicate complete characters or miniature assembly example. This is faithful production asset separation of the chosen character, not a new design.
 ```
+
+
+## 順手と腕の接続修正（2026-09-24）
+
+組み込みimage_genで生成。参照は公開済みの `web/public/original-assets/chachamaru-anime-v1.png` のみ。ユーザーの画面キャプチャや私用画像は送信していない。顔・体・耳・尾・スカーフ・花・太鼓は従来の画像をそのまま使用し、上腕と手首／バチを `web/public/original-assets/chachamaru-overhand-v1.png` へ分離。出力の透過PNGを加工せず保存し、SVG viewBoxで使用範囲を指定する。最終プロンプト:
+
+```text
+Use case: precise-object-edit.
+Asset type: transparent 2D cutout arm-and-hand sprite sheet for an existing cute Japanese Shiba taiko drummer.
+Input image: visual style and color reference only. Keep exactly its hand-drawn anime linework, orange-red fur, warm ivory paw fur, gentle watercolor/cel shading. This is a small replacement for the arm pieces only; no face, body, ears, scarf, flowers or drum in this output.
+Primary request: create FOUR isolated separate pieces on a genuine transparent alpha background, square sheet in a spacious 2 by 2 grid. No labels, no text, no scene. All pieces same scale. Large transparent gutters. The pieces will be connected at shoulder and wrist joints in code.
+TOP LEFT: viewer-left short plump upper-arm/forearm, orange fur with a little cream fur, bent gently downward and inward to the viewer-right. Shoulder root is at the upper left, and wrist attachment is at the lower right. Cute rounded fur silhouette. NO paw and NO stick. Rounded overlapping ends with fur, no visible flesh cross section.
+TOP RIGHT: mirrored counterpart, viewer-right upper-arm/forearm. Shoulder upper right, wrist lower left. NO paw and NO stick.
+BOTTOM LEFT: viewer-left cream furry dog paw gripping one straight light-brown wooden taiko bachi in a NORMAL OVERHAND MATCHED GRIP (順手), NOT underhand, NOT reversed grip. The back of the curled paw and rounded knuckles face the viewer, palm faces DOWN toward an implied drum. Thumb curls around the SIDE. The bachi's LONG playing end emerges from the thumb/index-finger side and points upward with a slight inward lean to the viewer-right. Only a SHORT butt below the fist. Wrist/root is just below and left of the paw, with a small orange fur cuff to overlap the forearm. Paw not an open hand, no pink pads or visible palm. There is only one stick.
+BOTTOM RIGHT: anatomical mirror of bottom left for viewer-right paw, SAME overhand grip, palm down, back of knuckles visible, long bachi playing end upward with slight inward lean to viewer-left. Wrist root below and right, small orange fur cuff.
+Both sticks should be nearly upright, 3 to 4 paw lengths long above the grip, enabling wrist rotation to hit the drum. The wrists and the stick grips must be clear and natural. Forearms about two paw diameters long and one paw diameter thick. Avoid a clasped/praying pose, crossed sticks, human fingers, tiny detached fingers, extra limbs, photorealism, 3D/plush fur. Keep the illustration style and warm colors of the supplied approved atlas. Output transparent PNG, no checkerboard pixels, no shadows on a background.
+```

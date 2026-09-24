@@ -2,6 +2,8 @@
 
 ひまわりをつけた赤柴ちゃちゃまると遊ぶ、2色・1レーンのリズムゲームです。右から流れる音符に合わせてドンとカッを叩きます。
 
+**アプリを改善するAI・開発者へ:** [引き継ぎガイド](docs/AI_HANDOFF.md) に、目的・構成・コードの案内・起動方法・変更時の注意点をまとめています。まず [AGENTS.md](AGENTS.md) と合わせて読んでください。
+
 ## ブラウザで遊ぶ
 
 [ゲームを開く](https://kochamari.github.io/chachamaru-rhythm/#/songs) · [GitHub](https://github.com/kochamari/chachamaru-rhythm)
@@ -77,7 +79,7 @@ GitHub Pagesのリポジトリ配下には `BASE_PATH=/repository-name/ npm run 
 
 `.github/workflows/pages.yml` は `main` のアプリ更新で自動実行します。型・lint・unit・Python・Chromium/WebKitのE2E・公開素材検査が成功したビルドを配信します。Actionsから手動でも実行できます。文書だけの変更では再配信しません。
 
-CIはChromiumをUbuntu、WebKitをmacOSで実行します。WebKitはOSの音声処理に依存するため、Safariを対象とする検証にはmacOSを使用します。全28件のブラウザ試験が配信の必須条件です。
+CIはChromiumをUbuntu、WebKitをmacOSで実行します。WebKitはOSの音声処理に依存するため、Safariを対象とする検証にはmacOSを使用します。両ブラウザの全試験が配信の必須条件です。
 
 サイトとリポジトリは公開です。URLを共有した相手はログインせずに遊べますが、URLを知っている人だけに閲覧を制限する仕組みはありません。
 
