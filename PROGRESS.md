@@ -11,3 +11,5 @@ CP6: Unit98件、Python26件、E2E28件が全件成功（skip0/flaky0）。npm r
 CP7: Home、Library、Playing、サビ100combo、MIDI、縦画面、全良、Studioと複数アニメーション時刻を保存して目視。reports/acceptance.json と DELIVERY.md に証拠を記録。ローカル初版完成。DEVICE=NOT_RUN、DEPLOYMENT=PENDING。
 
 CP8: ユーザーがGitHub管理とPages公開を依頼。公開先を kochamari/chachamaru-rhythm とし、main更新時の検証・自動配信を準備。ゲーム本体と自作デモ曲が対象。私用音源・ZIP・参考資料・ローカル診断記録はGitと配信物から除外。
+
+CP9: GitHub Pages公開成功。https://kochamari.github.io/chachamaru-rhythm/ はログイン不要で応答200。Actions run 35947393755 でUbuntu/Chromium 14件・Apple Silicon macOS/WebKit 14件、型・lint・Unit98件・Python26件・公開素材検査が成功。公開URLの新規Chromeでデモ64秒を停止なし・166良・100万点で完走。通常Chromeの時計警告後も再開して完走。私用ZIPの取込・再読み込み保存・演奏開始、440×956表示を確認。DEVICE=NOT_RUN、DEPLOYMENT=PASS。
