@@ -49,7 +49,7 @@
 
 ## 開発環境
 
-Node 24以降の互換版、Python 3.12以降、npm。
+Node 24以降の互換版、Python 3.12以降、npm。Mac版の固定解析ライブラリはApple Siliconを対象にしています。
 
 ```sh
 npm ci

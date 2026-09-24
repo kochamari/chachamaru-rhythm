@@ -16,7 +16,7 @@ jobs:
         include:
           - os: ubuntu-latest
             browser: chromium
-          - os: macos-15-intel
+          - os: macos-15
             browser: webkit
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -30,6 +30,9 @@ jobs:
         with:
           python-version: '3.13'
       - run: npm ci
+      - name: Ensure native ffprobe on Apple Silicon
+        if: runner.os == 'macOS'
+        run: command -v ffprobe || brew install ffmpeg
       - run: python -m venv .venv
       - run: .venv/bin/python -m pip install -r studio/requirements.lock
       - run: npx playwright install --with-deps ${{ matrix.browser }}

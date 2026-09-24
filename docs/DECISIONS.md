@@ -12,3 +12,4 @@
 - 譜面再生成も子プロセスの非同期jobとする。候補生成後にrevisionを再照合してから確定し、途中の別編集があれば上書きせずエラーにする。取消・失敗時は保存済み版を保持する。
 - 音符表示の進み補正はレーン座標にだけ適用し、犬・背景・サビの時刻は音源時計に従う。音声時計が取得できなくなった場合も、最後の安全な位置で一時停止する。
 - GitHub初回CIではUbuntuのChromium 14件は通過し、WebKitは音声再生に関わる8件で停止した。Safari向けメディア検証はmacOSが近いというPlaywright公式の推奨に従い、CIをUbuntu/Chromium 14件とmacOS/WebKit 14件に分ける。テスト条件・判定窓は変更しない。Linux版WebKitの音声互換性を確認済みとは扱わない。参照: https://playwright.dev/docs/browsers#webkit
+- 固定したNumba/llvmliteはIntel macOS向けバイナリを配布していない。CIのMacは手元と同じApple Silicon（macos-15）を使い、ffprobeもネイティブ版を用意する。依存を無断で下げたり、試験を省いたりしない。
