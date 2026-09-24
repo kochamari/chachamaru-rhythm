@@ -77,7 +77,7 @@ GitHub Pagesは静的配信で、Python解析APIをホストしていません�
 - `BASE_PATH` とService Workerのscopeを合わせる。先頭 `/assets` の決め打ちを避ける。保存曲を残したまま更新できるよう、見た目の更新確認のためにIndexedDBを消さない。
 - `__TEST__` や `web/src/testing/showcase.ts` はテスト／開発用。公開ビルドへ診断hookや固定結果を混ぜない。
 - E2Eの実行中に `web/src` を編集しないこと。Viteの自動再読込みで試験中のページが読み直され、無関係な失敗になる。
-- CIのUbuntuにはGPUがなく、WebGLも画面合成もSwiftShader（CPU）で動く。マスク、`backdrop-filter`、動く要素への `filter`、終わらないCSSアニメは毎フレームCPUで描き直しになり、E2Eが時間切れになる。演出を足したらSwiftShaderで計測する（`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` でChromiumを起動し、rAF間隔の中央値を見る）。CPU描画の判定と軽量化は `app/gpu.ts` と `html[data-render="software"]`。
+- CIのUbuntuにはGPUがなく、WebGLも画面合成もSwiftShader（CPU）で動く。macOSのWebKitもGPUが弱い。マスク、`backdrop-filter`、動く要素への `filter`（タイトルの影で実際に起動が20秒遅れた）、終わらないCSSアニメは毎フレーム描き直しになり、E2Eが時間切れになる。演出を足したらSwiftShaderで計測する（`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` でChromiumを起動し、rAF間隔の中央値を見る）。CPU描画の判定と軽量化は `app/gpu.ts` と `html[data-render="software"]`。
 - 起動後の裏の作業（同梱曲の導入、ローカルStudio同期）は `main.ts` の `leaving` シグナルで、ページを離れ始めたら止める。WebKitは打ち切られた読み込みをエラーとして記録し、E2Eが失敗する。裏で読み込む処理を足すときはシグナルを渡し、Blobの読み戻しを避ける。
 
 ## cloneから起動・検証
@@ -119,6 +119,6 @@ npm run audit:public
 
 ### 直近の検証で残した観察
 
-全面改修の公開run [35976493358](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35976493358) は両ブラウザの全30試験と配信が成功。ただしCIのmacOS WebKitでは、各試験の起動（`boot()`：タイトル表示と同梱4曲の導入完了まで）が約20秒かかる（ローカルは1秒未満、CIのChromiumは約3秒、本番ビルドを使うE08はローカルの約4倍で収まる）。このためE01が上限100秒に対し97秒と余裕が小さい。開発サーバーでの起動に特有と見られるが原因は未確定。E01が時間切れになったら、まず `boot()` の内訳（読み込みのタイミング）を記録して原因を特定する。判定窓や確認項目を緩めて通さないこと。
+全面改修の公開run [35976493358](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35976493358) は両ブラウザの全30試験と配信が成功。その後、CIのmacOS WebKitで各試験の起動が約20秒かかる原因を一時ブランチの計測で特定した：タイトルのキャラクターに付けていた `filter: drop-shadow` が、骨の動きに合わせて毎フレーム描き直され、GPUの弱い環境でページ全体（IndexedDBの書込みまで）が止まっていた。静的な影に置き換えて解消（[DECISIONS.md](DECISIONS.md)）。WebKitのStudio試聴（M01の「停止」表示）は、CP11に続き改修後も1回失敗した。音声出力のないCIのVMで `<audio>` の再生が始まらないことがあると見ているが、原因は未確定。
 
 関節修正commit `311eb58` は [再検証・公開run](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35955687869) で両ブラウザの全30試験と配信が成功しました。[先行run](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35955076260) ではWebKitの既存Studio試聴テスト1件で「試聴」から「停止」へ切り替わらず失敗。音源取得はHTTP 200で、同一コード・同一条件の再実行では成功しています。原因は未確定です。再発時は `tests/e2e/studio.spec.ts` の試聴開始と `web/src/screens/Studio.ts` のHTMLAudioElementの状態を調べ、合格条件を緩めないでください。
