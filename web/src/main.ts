@@ -15,6 +15,7 @@ import {studioScreen} from './screens/Studio';
 import {settingsScreen,diagnosticsScreen} from './screens/Settings';
 import {showcaseScreen} from './testing/showcase';
 import {flowerSvg} from './render/Character';
+import {markRenderer} from './app/gpu';
 
 declare const __TEST__:boolean;
 document.documentElement.style.setProperty('--festival',`url("${import.meta.env.BASE_URL}original-assets/festival.webp")`);
@@ -71,7 +72,19 @@ async function bundledCatalog(){
  try{const r=await fetch(base+'catalog.json',{cache:'no-cache'});if(r.ok){const c=await r.json() as {packId:string;file:string;revision:number}[];if(Array.isArray(c)&&c.length)return c;}}catch{/* offline: keep what is installed */}
  return [{packId:'himawari-demo',file:'himawari.zip',revision:1}];
 }
-async function installBundled(entries:{packId:string;file:string;revision:number}[]){
+/**
+ * Background work (bundled songs, local Studio sync) is cancelled as soon as
+ * the page starts to leave. WebKit reports every load that a navigation cuts
+ * off or that starts while the page unloads ("…due to access control checks"),
+ * so the loads are aborted first, from beforeunload (pagehide where that
+ * event does not exist, as on iOS).
+ */
+let leaving=new AbortController();
+addEventListener('beforeunload',()=>leaving.abort());
+addEventListener('pagehide',()=>leaving.abort());
+addEventListener('pageshow',e=>{if(e.persisted)leaving=new AbortController();});
+
+async function installBundled(entries:{packId:string;file:string;revision:number}[],signal:AbortSignal){
  const d=await db();
  const base=import.meta.env.BASE_URL+'original-demo/';
  const songs=new Map((await listSongs()).map(m=>[m.packId,m]));
@@ -80,10 +93,12 @@ async function installBundled(entries:{packId:string;file:string;revision:number
   const installed=songs.get(entry.packId);
   const mark=await d.get('settings','bundled-'+entry.packId);
   if(installed&&(installed.revision>=entry.revision||mark===entry.revision))continue;
+  if(signal.aborted)return changed;
   try{
-   const response=await fetch(base+entry.file);
+   const response=await fetch(base+entry.file,{signal});
    if(!response.ok)throw Error('曲を読み込めませんでした');
-   const pack=await importZip(await response.blob());pack.source='demo';
+   const pack=await importZip(await response.arrayBuffer(),signal);pack.source='demo';
+   if(signal.aborted)return changed;
    await saveSong(pack,installed?'replace':'check');
    await d.put('settings',entry.revision,'bundled-'+entry.packId);
    changed=true;
@@ -93,20 +108,24 @@ async function installBundled(entries:{packId:string;file:string;revision:number
  return changed;
 }
 /** Songs saved in the local Mac Studio appear automatically when it runs. */
-async function syncLocalStudio(){
- if(!await localAvailable())return;
+async function syncLocalStudio(signal:AbortSignal){
+ if(!await localAvailable()||signal.aborted)return;
  const projects=await(await api('projects')).json() as {projectId:string;title:string;revision:number}[];
  for(const p of projects){
   const mark='local-import-'+p.projectId;
   if(await(await db()).get('settings',mark)===p.revision)continue;
-  const er=await(await api(`projects/${p.projectId}/export`,{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}})).json();
-  const pack=await importZip(await(await api(`exports/${er.exportId}`)).blob());pack.source='studio';
+  if(signal.aborted)return;
+  const er=await(await api(`projects/${p.projectId}/export`,{method:'POST',body:'{}',headers:{'Content-Type':'application/json'},signal})).json();
+  if(signal.aborted)return;
+  const pack=await importZip(await(await api(`exports/${er.exportId}`,{signal})).arrayBuffer(),signal);pack.source='studio';
+  if(signal.aborted)return;
   await saveSong(pack,'replace');
   await(await db()).put('settings',p.revision,mark);
  }
 }
 
 async function boot(){
+ markRenderer();
  app.innerHTML=`<section class="boot-screen">${flowerSvg()}<strong>お祭りの準備中…</strong><small>音源と保存データを読み込んでいます</small></section>`;
  let rest:{packId:string;file:string;revision:number}[]=[];
  try{
@@ -114,14 +133,14 @@ async function boot(){
   if(validSettings(settings))Object.assign(state.settings,settings);
   else{if(navigator.maxTouchPoints>0)state.settings.inputMode='touch';await saveSettings(state.settings);}
   const catalog=await bundledCatalog();
-  await installBundled(catalog.slice(0,1));
+  await installBundled(catalog.slice(0,1),leaving.signal);
   rest=catalog.slice(1);
  }catch(e){fail(app,e);return;}
  await route();
  // The remaining bundled songs arrive in the background; refresh the list if it is open.
- void installBundled(rest).then(changed=>{if(changed&&location.hash.startsWith('#/songs')&&!session)void route();}).catch(()=>{}).finally(()=>{bundledReady=true;document.documentElement.dataset.bundled='ready';});
+ void installBundled(rest,leaving.signal).then(changed=>{if(changed&&location.hash.startsWith('#/songs')&&!session)void route();}).catch(()=>{}).finally(()=>{bundledReady=true;document.documentElement.dataset.bundled='ready';});
  // Optional: never block or break start-up if the local Studio is absent or refuses.
- try{await syncLocalStudio();}catch(e){console.warn('local studio sync skipped',e);}
+ try{await syncLocalStudio(leaving.signal);}catch(e){if(!leaving.signal.aborted)console.warn('local studio sync skipped',e);}
  if('serviceWorker'in navigator&&import.meta.env.PROD){
   void navigator.serviceWorker.register(import.meta.env.BASE_URL+'sw.js',{scope:import.meta.env.BASE_URL}).then(watchUpdates).catch(()=>toast('オフライン起動は利用できません。起動時はネット接続が必要です'));
  }

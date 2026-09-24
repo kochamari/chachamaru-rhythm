@@ -4,6 +4,7 @@
 import {Application,Container,Sprite,Graphics,Text,Texture,TilingSprite,BitmapFont,BitmapText,Assets,Rectangle,FillGradient,type Renderer} from 'pixi.js';
 import type {Chart,Manifest,Settings,GameSnapshot,EffectEvent,Note,Tap,Roll,Difficulty,Color} from '../../../contracts/public-types';
 import {computeLayout,logicalSize,noteX,TRAVEL_MS,type PlayLayout} from './layout';
+import {softwareRendering} from '../app/gpu';
 import {noteSyllables} from './syllables';
 import {beatPhase,downbeatTimes,inSection,friendsForGauge} from './timing';
 import {DRUMMER,DANCER,DrummerState,drummerPose,dancerPose,ATLAS_FILES,type Side} from './rig';
@@ -28,7 +29,7 @@ const PARTICLE_CAP={standard:160,reduced:40,off:0} as const;
 
 export class PlayRenderer {
  readonly app=new Application();
- readonly metrics={p95:0,quality:'standard'};
+ readonly metrics={p50:0,p95:0,quality:'standard' as 'standard'|'reduced',resolution:1};
  layout!:PlayLayout;
  private scale=1;private alive=true;private initialized=false;
  private readonly world=new Container();
@@ -65,7 +66,7 @@ export class PlayRenderer {
  private judgement!:Record<'great'|'ok'|'miss',Sprite>;private judgeAt=-1e9;private judgeKind:'great'|'ok'|'miss'='great';
  private fastLate!:Text;private fastLateAt=-1e9;
  private judgeGlow!:Sprite;private judgeFire!:Sprite;private flames:Sprite[]=[];private goRed=new Graphics();
- private stageBg=new Sprite();private stageMask=new Graphics();private nightTint=new Graphics();private sunburst=new Graphics();
+ private stageBg=new Sprite();private stageBgTexture:Texture|null=null;private nightTint=new Graphics();private sunburst=new Graphics();
  private themeTint=new Graphics();private stars:{s:Sprite;phase:number}[]=[];private lastFirework=-1;
  private lanterns:{s:Sprite;glow:Sprite;x:number;y:number;phase:number}[]=[];
  private balloon=new Container();private balloonAt=-1e9;private balloonText!:Text;
@@ -92,9 +93,18 @@ export class PlayRenderer {
  }
 
  get settings(){return this.opts.settings;}
+ /** Effects level for this session: the player's choice, lowered (never
+  *  raised, never saved) when this device cannot keep up. */
+ private get effects(){const chosen=this.settings.effects;return this.metrics.quality==='reduced'&&chosen==='standard'?'reduced':chosen;}
 
  async init(){
-  await this.app.init({backgroundAlpha:0,antialias:true,resolution:Math.min(devicePixelRatio||1,2),autoDensity:true,preference:'webgl',width:this.host.clientWidth||1280,height:this.host.clientHeight||720});
+  // CPU-rendered WebGL pays for every pixel and every MSAA sample: start
+  // lighter there. Everyone else starts sharp and adapts in trackFrames().
+  const soft=softwareRendering();
+  if(soft)this.metrics.quality='reduced';
+  const resolution=soft?.75:Math.min(devicePixelRatio||1,2);
+  this.metrics.resolution=resolution;
+  await this.app.init({backgroundAlpha:0,antialias:!soft,resolution,autoDensity:true,preference:'webgl',width:this.host.clientWidth||1280,height:this.host.clientHeight||720});
   if(!this.alive){this.app.destroy(true,{children:true});return;}
   this.app.ticker.stop();
   this.app.canvas.className='game-canvas';
@@ -107,10 +117,10 @@ export class PlayRenderer {
   this.atlas={character,arms};this.festival=festival;
   this.bakeTextures();
   this.installFonts();
-  this.world.addChild(this.stageRoot,this.bandRoot,this.laneRoot,this.hud,this.topFx);
+  // Hit effects sit above the HUD so rings are not cut by the left panel.
+  this.world.addChild(this.stageRoot,this.bandRoot,this.laneRoot,this.hud,this.laneFx,this.topFx);
   this.stageRoot.addChild(this.stageBack,this.stageChars,this.stageFx);
-  this.stageRoot.mask=this.stageMask;this.world.addChild(this.stageMask);
-  this.laneRoot.addChild(this.laneStatic,this.barLayer,this.noteLayer,this.syllableLayer,this.laneFx);
+  this.laneRoot.addChild(this.laneStatic,this.barLayer,this.noteLayer,this.syllableLayer);
   this.app.stage.addChild(this.world);
   this.drummer=new PixiCharacter(DRUMMER,this.atlas);
   this.stageChars.addChild(this.drummer.view);
@@ -160,7 +170,7 @@ export class PlayRenderer {
   this.judgement={great:this.sprite('great'),ok:this.sprite('ok'),miss:this.sprite('miss')};
   for(const s of Object.values(this.judgement)){s.visible=false;this.laneFx.addChild(s);}
   this.fastLate=new Text({text:'',style:{fontFamily:art.FONT,fontSize:15,fontWeight:'800',fill:0xfff2ce,stroke:{color:C.ink,width:4}}});this.fastLate.anchor.set(.5);this.laneFx.addChild(this.fastLate);
-  const cap=PARTICLE_CAP[this.settings.effects];
+  const cap=PARTICLE_CAP[this.effects];
   for(let i=0;i<Math.max(cap,24)+24;i++){const s=new Sprite();s.anchor.set(.5);s.visible=false;this.spare.push(s);}
  }
 
@@ -215,20 +225,27 @@ export class PlayRenderer {
   this.lanterns=[];
   // Stage background: cover the stage rectangle with the festival scene.
   const st=L.stage;
-  this.stageMask.clear().rect(st.x,st.y,st.w,st.h).fill(0xffffff);
-  this.stageBg.texture=this.festival;
-  const cover=Math.max(st.w/this.festival.width,st.h/this.festival.height);
-  this.stageBg.scale.set(cover);this.stageBg.anchor.set(.5,.62);
-  this.stageBg.position.set(st.x+st.w/2,st.y+st.h*.62);
+  // Crop the festival picture to the stage instead of masking (masks are
+  // expensive, especially with software WebGL).
+  const tw=this.festival.width,th=this.festival.height;
+  const cover=Math.max(st.w/tw,st.h/th);
+  let sw=st.w/cover,sh=st.h/cover,sx=tw*.5-sw/2,sy=th*.62-sh*.62;
+  sx=Math.max(0,Math.min(tw-sw,sx));sy=Math.max(0,Math.min(th-sh,sy));sw=Math.min(sw,tw);sh=Math.min(sh,th);
+  this.stageBgTexture?.destroy(false);
+  this.stageBgTexture=new Texture({source:this.festival.source,frame:new Rectangle(sx,sy,sw,sh)});
+  this.stageBg.texture=this.stageBgTexture;this.stageBg.anchor.set(0);
+  this.stageBg.position.set(st.x,st.y);this.stageBg.width=st.w;this.stageBg.height=st.h;
   this.stageBack.addChild(this.stageBg);
   // Chorus: an evening-festival sky and warm rays that fade with distance.
   this.nightTint.clear().rect(st.x,st.y,st.w,st.h).fill(new FillGradient({type:'linear',start:{x:0,y:st.y},end:{x:0,y:st.y+st.h},textureSpace:'global',colorStops:[{offset:0,color:'rgba(52,18,86,0.72)'},{offset:.45,color:'rgba(150,40,70,0.34)'},{offset:1,color:'rgba(255,120,60,0.06)'}]}));
-  this.nightTint.alpha=0;
+  this.nightTint.alpha=0;this.nightTint.visible=false;
   this.sunburst.clear();
   const rays=24,R=Math.hypot(st.w,st.h)*.75;
   const rayFill=new FillGradient({type:'radial',center:{x:0,y:0},innerRadius:0,outerCenter:{x:0,y:0},outerRadius:R,textureSpace:'global',colorStops:[{offset:0,color:'rgba(255,230,140,0.75)'},{offset:.35,color:'rgba(255,170,70,0.32)'},{offset:1,color:'rgba(255,120,60,0)'}]});
-  for(let i=0;i<rays;i++){const a0=i/rays*Math.PI*2,a1=(i+.5)/rays*Math.PI*2;this.sunburst.poly([0,0,Math.cos(a0)*R,Math.sin(a0)*R,Math.cos(a1)*R,Math.sin(a1)*R]).fill(rayFill);}
-  this.sunburst.position.set(L.character.x,L.character.y-L.character.height*.62);this.sunburst.alpha=0;this.sunburst.blendMode='add';
+  const cx=L.character.x,cy=L.character.y-L.character.height*.62;
+  const box={x0:st.x-cx,y0:st.y-cy,x1:st.x+st.w-cx,y1:st.y+st.h-cy};
+  for(let i=0;i<rays;i++){const a0=i/rays*Math.PI*2,a1=(i+.5)/rays*Math.PI*2;const poly=clipToBox([0,0,Math.cos(a0)*R,Math.sin(a0)*R,Math.cos(a1)*R,Math.sin(a1)*R],box);if(poly.length>=6)this.sunburst.poly(poly).fill(rayFill);}
+  this.sunburst.position.set(cx,cy);this.sunburst.alpha=0;this.sunburst.visible=false;this.sunburst.blendMode='add';
   const shade=new Graphics().rect(st.x,st.y,st.w,28).fill({color:0x140c14,alpha:.45}).rect(st.x,st.y+28,st.w,24).fill({color:0x140c14,alpha:.18});
   // Per-song time of day.
   const theme=this.opts.theme??'day';
@@ -236,7 +253,7 @@ export class PlayRenderer {
   const t=tints[theme];
   this.themeTint.clear().rect(st.x,st.y,st.w,st.h).fill(new FillGradient({type:'linear',start:{x:0,y:st.y},end:{x:0,y:st.y+st.h},textureSpace:'global',colorStops:[{offset:0,color:t[0]},{offset:.5,color:t[1]},{offset:1,color:t[2]}]}));
   for(const star of this.stars)star.s.destroy();this.stars=[];
-  this.stageBack.addChild(this.themeTint);
+  if(theme!=='day')this.stageBack.addChild(this.themeTint);
   if(theme==='night'){
    let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
    for(let i=0;i<46;i++){const star=this.sprite('dot');star.position.set(st.x+rnd()*st.w,st.y+rnd()*st.h*.42);star.scale.set(.25+rnd()*.45);star.tint=rnd()>.8?0xffe9a8:0xffffff;this.stars.push({s:star,phase:rnd()*6.28});this.stageBack.addChild(star);}
@@ -312,10 +329,14 @@ export class PlayRenderer {
  private buildLane(){
   const L=this.layout,{lane,panel,gauge}=L;
   const g=new Graphics();
-  // Left panel: red lacquer with a gold frame.
-  g.roundRect(panel.x-20,panel.y,panel.w+(L.portrait?40:20),panel.h,18).fill(C.lacquer).stroke({color:C.gold,width:3});
-  for(let i=0;i<Math.ceil(panel.h/28)+1;i++)g.moveTo(panel.x,panel.y+20+i*28).lineTo(panel.x+panel.w,panel.y+6+i*28).stroke({color:0xffffff,width:1,alpha:.06});
-  g.roundRect(L.scoreBox.x,L.scoreBox.y,L.scoreBox.w,L.scoreBox.h,12).fill({color:0x2a0d0d,alpha:.45});
+  // Left panel: red lacquer with a gold frame. In landscape it is drawn in
+  // front of the notes, which slide under it (no masks); in portrait it sits
+  // above a full-width lane and carries the gauge, so it stays behind.
+  const pg=new Graphics();
+  pg.roundRect(panel.x-20,panel.y,panel.w+(L.portrait?40:20),panel.h,18).fill(C.lacquer).stroke({color:C.gold,width:3});
+  for(let i=0;i<Math.ceil(panel.h/28)+1;i++)pg.moveTo(panel.x,panel.y+20+i*28).lineTo(panel.x+panel.w,panel.y+6+i*28).stroke({color:0xffffff,width:1,alpha:.06});
+  pg.roundRect(L.scoreBox.x,L.scoreBox.y,L.scoreBox.w,L.scoreBox.h,12).fill({color:0x2a0d0d,alpha:.45});
+  if(L.portrait)this.laneStatic.addChild(pg);else this.hud.addChild(pg);
   // Lane body.
   g.rect(lane.x,lane.y,lane.w,lane.h).fill(C.lane);
   g.rect(lane.x,lane.y,lane.w,lane.h*.5).fill({color:0xffffff,alpha:.025});
@@ -349,13 +370,7 @@ export class PlayRenderer {
   this.progressFill.clear().rect(L.progress.x,L.progress.y,L.progress.w,L.progress.h).fill({color:0x1a1418,alpha:.85});
   this.progressBar=new Sprite(Texture.WHITE);this.progressBar.tint=C.gold;this.progressBar.position.set(L.progress.x,L.progress.y+1);this.progressBar.height=L.progress.h-2;this.progressBar.width=0;
   this.laneStatic.addChild(this.progressFill,this.progressBar);
-  // Notes are clipped to the lane (they vanish under the panel).
-  const clip=new Graphics().rect(lane.x,lane.y-50,lane.w,lane.h+100).fill(0xffffff);
-  this.laneStatic.addChild(clip);this.noteLayer.mask=clip;
-  const sylClip=new Graphics().rect(L.syllables.x,L.syllables.y,L.syllables.w,L.syllables.h).fill(0xffffff);
-  this.laneStatic.addChild(sylClip);this.syllableLayer.mask=sylClip;
-  const barClip=new Graphics().rect(lane.x,lane.y,lane.w,lane.h).fill(0xffffff);
-  this.laneStatic.addChild(barClip);this.barLayer.mask=barClip;
+  // Notes slide under the panel, which is drawn above them (no masks).
   for(const s of this.barPool){s.width=2;s.height=lane.h;}
   // Gauge frame.
   const gf=new Graphics();
@@ -488,8 +503,8 @@ export class PlayRenderer {
 
  private drawStage(now:number,time:number,beat:number,s:GameSnapshot){
   const L=this.layout,mix=this.chorusMix;
-  this.nightTint.alpha=mix;
-  this.sunburst.alpha=mix*.85;this.sunburst.rotation=now*.00006;
+  this.nightTint.alpha=mix;this.nightTint.visible=mix>.01;
+  this.sunburst.alpha=mix*.85;this.sunburst.visible=mix>.01;this.sunburst.rotation=now*.00006;
   const theme=this.opts.theme??'day';
   const lit=theme==='night'||theme==='evening'?.55:0;
   for(const l of this.lanterns){
@@ -501,7 +516,7 @@ export class PlayRenderer {
   }
   for(const star of this.stars)star.s.alpha=.45+.55*Math.abs(Math.sin(now*.0012+star.phase));
   // Night songs: fireworks every two bars (every bar in the chorus).
-  if(theme==='night'&&this.settings.effects!=='off'&&time>0){
+  if(theme==='night'&&this.effects!=='off'&&time>0){
    const every=this.chorus?4:8,slot=Math.floor(beat/every);
    if(slot!==this.lastFirework&&beat>=0){this.lastFirework=slot;const st=L.stage;const r=((slot*9301+49297)%233280)/233280;this.firework(st.x+st.w*(.45+.5*r),st.y+st.h*(.14+.2*((slot*7)%5)/5));}
   }
@@ -554,7 +569,7 @@ export class PlayRenderer {
   // Faster scroll spreads dense notes further apart; judgement is unchanged.
   const travel=TRAVEL_MS/(this.settings.scrollSpeed??1);
   const mix=this.chorusMix;
-  this.goRed.alpha=mix;
+  this.goRed.alpha=mix;this.goRed.visible=mix>.01;
   // Festival flames rise from the judge circle during the chorus.
   this.flames.forEach((f,i)=>{
    const n=this.flames.length,u=i/(n-1);
@@ -564,9 +579,9 @@ export class PlayRenderer {
    f.rotation=(u-.5)*.7+Math.sin(now*.006+i)*.08;
    const tall=1-Math.abs(u-.5)*.9;
    f.scale.set(.62*flick,(.55+.75*tall)*flick);
-   f.alpha=mix*.95;
+   f.alpha=mix*.95;f.visible=mix>.01;
   });
-  this.judgeFire.alpha=mix*(.55+.15*Math.sin(now*.012));
+  this.judgeFire.alpha=mix*(.55+.15*Math.sin(now*.012));this.judgeFire.visible=mix>.01;
   // Walk back if time moved backwards (retry, seek).
   if(visible<this.lastSongTime)this.upcoming=0;
   this.lastSongTime=visible;
@@ -595,6 +610,7 @@ export class PlayRenderer {
   const labels:{x:number;text:string}[]=[];
   for(let k=shown.length-1;k>=0;k--){
    const {n,x}=shown[k];
+   if(n.kind==='tap'&&x<L.lane.x-L.largeR&&!L.portrait)continue;
    if(n.kind==='roll'){
     const end=noteX(L,n.endMs+offset,visible,travel);
     const body=this.rollBodies[ri],tail=this.rollTails[ri];ri++;
@@ -682,7 +698,7 @@ export class PlayRenderer {
 
  // --------------------------------------------------------------- events --
  private onEvent(e:EffectEvent,time:number,now:number,s:GameSnapshot){
-  const L=this.layout,cap=PARTICLE_CAP[this.settings.effects];
+  const L=this.layout,cap=PARTICLE_CAP[this.effects];
   if(e.kind==='great'||e.kind==='ok'){
    this.judgeKind=e.kind;this.judgeAt=now;
    this.judgeGlow.alpha=e.kind==='great'?.9:.5;this.judgeGlow.tint=e.color==='ka'?0x7fe8ff:0xffc27a;
@@ -691,7 +707,7 @@ export class PlayRenderer {
    this.ring(L.hitX,L.laneY,'ring',now,e.kind==='great'?220:140,1,large?2.1:1.7,.85,e.kind==='great'?0xffd86b:0xffffff);
    const count=cap===0?0:e.kind==='great'?10:4;
    for(let i=0;i<count;i++){const a=i/count*Math.PI*2+Math.random()*.3;this.particle('spark',L.hitX,L.laneY,Math.cos(a)*(3+Math.random()*2),Math.sin(a)*(3+Math.random()*2),260,e.kind==='great'?0xffd86b:0xffffff,{gravity:.05,spin:.2});}
-   if(this.settings.effects!=='off')this.fly(e.color==='ka'?(large?'kaL':'ka'):(large?'donL':'don'),now,L.noteR/30);
+   if(this.effects!=='off')this.fly(e.color==='ka'?(large?'kaL':'ka'):(large?'donL':'don'),now,L.noteR/30);
    if(this.settings.fastLate&&e.delta!==undefined&&(e.kind==='ok'||Math.abs(e.delta)>=25)){this.fastLate.text=e.delta<0?'はやい':'おそい';this.fastLate.style.fill=e.delta<0?0x8fe3ff:0xffb38a;this.fastLateAt=now;}
   }else if(e.kind==='miss'){
    this.judgeKind='miss';this.judgeAt=now;
@@ -704,7 +720,7 @@ export class PlayRenderer {
    this.rollCount++;this.rollAt=now;
    this.labels.roll=this.rollText.text=`${this.rollCount}\n連打！`;
    this.ring(L.hitX,L.laneY,'glowGold',now,120,.7,1.3,.7);
-   if(this.settings.effects!=='off')this.fly(e.color==='ka'?'ka':'don',now,.7*L.noteR/30);
+   if(this.effects!=='off')this.fly(e.color==='ka'?'ka':'don',now,.7*L.noteR/30);
   }else if(e.kind==='combo'){
    const v=e.value??0;
    this.labels.balloon=this.balloonText.text=`${v} コンボ！`;this.balloonAt=now;
@@ -716,15 +732,15 @@ export class PlayRenderer {
  }
 
  private onChorusStart(){
-  if(this.settings.effects==='off')return;
+  if(this.effects==='off')return;
   const L=this.layout,st=L.stage;
-  const burst=(x:number,y:number,delay:number)=>window.setTimeout(()=>{if(!this.alive)return;const colors=[0xffd86b,0xff6b5a,0x6ee7ff,0xffffff];const n=this.settings.effects==='reduced'?14:36;for(let i=0;i<n;i++){const a=i/n*Math.PI*2;const v=2.5+Math.random()*1.5;this.particle('dot',x,y,Math.cos(a)*v,Math.sin(a)*v,900,colors[i%colors.length],{gravity:.035,fade:true,grow:-.0006});}this.ring(x,y,'glowGold',performance.now(),500,.5,2.6,.8);},delay);
+  const burst=(x:number,y:number,delay:number)=>window.setTimeout(()=>{if(!this.alive)return;const colors=[0xffd86b,0xff6b5a,0x6ee7ff,0xffffff];const n=this.effects==='reduced'?14:36;for(let i=0;i<n;i++){const a=i/n*Math.PI*2;const v=2.5+Math.random()*1.5;this.particle('dot',x,y,Math.cos(a)*v,Math.sin(a)*v,900,colors[i%colors.length],{gravity:.035,fade:true,grow:-.0006});}this.ring(x,y,'glowGold',performance.now(),500,.5,2.6,.8);},delay);
   burst(st.x+st.w*.72,st.y+st.h*.32,0);
   burst(st.x+st.w*.86,st.y+st.h*.22,360);
  }
  /** One firework burst (night stage). */
  private firework(x:number,y:number){
-  const colors=[0xffd86b,0xff6b5a,0x6ee7ff,0xb58cff,0xffffff];const n=this.settings.effects==='reduced'?10:26;
+  const colors=[0xffd86b,0xff6b5a,0x6ee7ff,0xb58cff,0xffffff];const n=this.effects==='reduced'?10:26;
   const base=Math.floor(Math.random()*colors.length);
   for(let i=0;i<n;i++){const a=i/n*Math.PI*2;const v=2+Math.random()*1.2;this.particle('dot',x,y,Math.cos(a)*v,Math.sin(a)*v,850,colors[(base+i%2)%colors.length],{gravity:.03,fade:true,grow:-.0005});}
   this.ring(x,y,'glowGold',performance.now(),420,.4,2,.6);
@@ -744,7 +760,7 @@ export class PlayRenderer {
   this.rings.push({s,t0:now,dur,scale0,scale1,alpha});this.laneFx.addChild(s);
  }
  private particle(key:string,x:number,y:number,vx:number,vy:number,life:number,tint:number,o:{gravity?:number;spin?:number;fade?:boolean;grow?:number}={}){
-  if(this.particles.length>=PARTICLE_CAP[this.settings.effects])return;
+  if(this.particles.length>=PARTICLE_CAP[this.effects])return;
   const s=this.take(key);if(!s)return;
   s.position.set(x,y);s.tint=tint;s.alpha=1;s.scale.set(1);s.rotation=Math.random()*Math.PI;s.blendMode='normal';
   this.particles.push({s,vx,vy,life,max:life,spin:o.spin??0,gravity:o.gravity??0,grow:o.grow??0,fade:o.fade??true});
@@ -794,9 +810,9 @@ export class PlayRenderer {
   this.celebration=kind;
   this.drawBanner(kind);
   this.bannerAt=performance.now();
-  if(this.settings.effects!=='off'&&kind!=='finish'){
+  if(this.effects!=='off'&&kind!=='finish'){
    const colors=[0xff6b5a,0xffd86b,0x6ee7ff,0x7ed36f,0xffffff];
-   for(let i=0;i<(this.settings.effects==='reduced'?30:90);i++)window.setTimeout(()=>{if(!this.alive)return;this.particle('confetti',Math.random()*L.W,L.stage.y-10,(Math.random()-.5)*2,1+Math.random()*2,2400,colors[i%colors.length],{gravity:.02,spin:.12,fade:true});},i*18);
+   for(let i=0;i<(this.effects==='reduced'?30:90);i++)window.setTimeout(()=>{if(!this.alive)return;this.particle('confetti',Math.random()*L.W,L.stage.y-10,(Math.random()-.5)*2,1+Math.random()*2,2400,colors[i%colors.length],{gravity:.02,spin:.12,fade:true});},i*18);
   }
  }
  private drawBanner(kind:'allGreat'|'fullCombo'|'clear'|'finish'){
@@ -815,15 +831,23 @@ export class PlayRenderer {
   this.banner.position.set(L.portrait?L.W/2:L.W*.62,L.stage.y+L.stage.h*(L.portrait?.22:.3));
  }
 
+ /**
+  * Adaptive quality. Only a device that is really struggling (median frame
+  * slower than 25 fps for two 3-second windows) is stepped down, so a 30 Hz
+  * cap such as iOS Low Power Mode keeps full sharpness.
+  */
  private trackFrames(now:number){
   if(this.frameWindowAt)this.frameSamples.push(now-this.frameWindowAt);
   this.frameWindowAt=now;if(!this.frameWindowStarted)this.frameWindowStarted=now;
-  if(now-this.frameWindowStarted>=5000){
-   const a=[...this.frameSamples].sort((a,b)=>a-b);this.metrics.p95=a[Math.floor(a.length*.95)]??0;
-   this.slowWindows=this.metrics.p95>25?this.slowWindows+1:0;
-   if(this.slowWindows>=3&&this.settings.effects==='standard'){this.settings.effects='reduced';this.metrics.quality='reduced';this.app.renderer.resolution=Math.min(devicePixelRatio||1,1.5);this.resize();}
-   this.frameSamples=[];this.frameWindowStarted=now;
-  }
+  if(now-this.frameWindowStarted<3000)return;
+  const a=[...this.frameSamples].sort((a,b)=>a-b);
+  this.metrics.p50=a[Math.floor(a.length*.5)]??0;this.metrics.p95=a[Math.floor(a.length*.95)]??0;
+  this.frameSamples=[];this.frameWindowStarted=now;
+  this.slowWindows=this.metrics.p50>40?this.slowWindows+1:0;
+  if(this.slowWindows<2)return;
+  this.slowWindows=0;this.metrics.quality='reduced';
+  const next=Math.max(.5,Math.round(this.app.renderer.resolution*.75*100)/100);
+  if(next<this.app.renderer.resolution){this.app.renderer.resolution=next;this.metrics.resolution=next;this.resize();}
  }
 
  /** Snapshot of renderer state for tests and diagnostics. */
@@ -838,9 +862,26 @@ export class PlayRenderer {
   this.alive=false;this.resizeObserver.disconnect();
   if(this.initialized){this.app.destroy(true,{children:true});for(const name of ['ChachaScore','ChachaCombo'])try{BitmapFont.uninstall(name);}catch{/* not installed */}}
   for(const t of Object.values(this.tex??{}))t.texture.destroy(true);
+  this.stageBgTexture?.destroy(false);
  }
 }
 
+/** Sutherland–Hodgman clip of a convex polygon (flat x,y list) to a box. */
+function clipToBox(points:number[],box:{x0:number;y0:number;x1:number;y1:number}){
+ let pts:[number,number][]=[];for(let i=0;i<points.length;i+=2)pts.push([points[i],points[i+1]]);
+ const edges:[(p:[number,number])=>boolean,(a:[number,number],b:[number,number])=>[number,number]][]=[
+  [p=>p[0]>=box.x0,(a,b)=>{const t=(box.x0-a[0])/(b[0]-a[0]);return [box.x0,a[1]+t*(b[1]-a[1])];}],
+  [p=>p[0]<=box.x1,(a,b)=>{const t=(box.x1-a[0])/(b[0]-a[0]);return [box.x1,a[1]+t*(b[1]-a[1])];}],
+  [p=>p[1]>=box.y0,(a,b)=>{const t=(box.y0-a[1])/(b[1]-a[1]);return [a[0]+t*(b[0]-a[0]),box.y0];}],
+  [p=>p[1]<=box.y1,(a,b)=>{const t=(box.y1-a[1])/(b[1]-a[1]);return [a[0]+t*(b[0]-a[0]),box.y1];}],
+ ];
+ for(const [inside,cross] of edges){
+  const out:[number,number][]=[];
+  for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];const ia=inside(a),ib=inside(b);if(ia&&ib)out.push(b);else if(ia&&!ib)out.push(cross(a,b));else if(!ia&&ib){out.push(cross(a,b));out.push(b);}}
+  pts=out;if(!pts.length)break;
+ }
+ return pts.flat();
+}
 function easeOut(k:number){return 1-(1-k)*(1-k);}
 function easeOutBack(k:number){const c=1.70158;return 1+(c+1)*Math.pow(k-1,3)+c*Math.pow(k-1,2);}
 function rainbow(now:number){const h=(now*.2)%360;const f=(n:number)=>{const k=(n+h/60)%6;return Math.round(255*(1-.45*Math.max(0,Math.min(k,4-k,1))));};return (f(5)<<16)|(f(3)<<8)|f(1);}

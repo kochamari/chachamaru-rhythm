@@ -314,3 +314,12 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none}
  .result-stats{margin:6px 0}.result-stats strong{font-size:20px}
  .result-detail{display:none}
 }
+
+/* WebGL on the CPU (see app/gpu.ts): filters and endless decorations would be
+   re-rasterised every frame by the processor, so they are dropped. */
+html[data-render="software"] .title-character .chacha,
+html[data-render="software"] .brand svg,
+html[data-render="software"] .difficulty-cards .crown{filter:none}
+html[data-render="software"] .drum-start::before{animation:none;opacity:.6}
+html[data-render="software"] .confetti{display:none}
+html[data-render="software"] .new-best{animation:none}

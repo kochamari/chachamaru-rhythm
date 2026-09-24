@@ -77,6 +77,8 @@ GitHub Pagesは静的配信で、Python解析APIをホストしていません�
 - `BASE_PATH` とService Workerのscopeを合わせる。先頭 `/assets` の決め打ちを避ける。保存曲を残したまま更新できるよう、見た目の更新確認のためにIndexedDBを消さない。
 - `__TEST__` や `web/src/testing/showcase.ts` はテスト／開発用。公開ビルドへ診断hookや固定結果を混ぜない。
 - E2Eの実行中に `web/src` を編集しないこと。Viteの自動再読込みで試験中のページが読み直され、無関係な失敗になる。
+- CIのUbuntuにはGPUがなく、WebGLも画面合成もSwiftShader（CPU）で動く。マスク、`backdrop-filter`、動く要素への `filter`、終わらないCSSアニメは毎フレームCPUで描き直しになり、E2Eが時間切れになる。演出を足したらSwiftShaderで計測する（`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` でChromiumを起動し、rAF間隔の中央値を見る）。CPU描画の判定と軽量化は `app/gpu.ts` と `html[data-render="software"]`。
+- 起動後の裏の作業（同梱曲の導入、ローカルStudio同期）は `main.ts` の `leaving` シグナルで、ページを離れ始めたら止める。WebKitは打ち切られた読み込みをエラーとして記録し、E2Eが失敗する。裏で読み込む処理を足すときはシグナルを渡し、Blobの読み戻しを避ける。
 
 ## cloneから起動・検証
 

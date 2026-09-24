@@ -51,7 +51,9 @@
 .game-scene .pad.don.pressed span{text-shadow:0 2px 0 #0005}
 .game-scene .pad.ka.pressed{background:radial-gradient(ellipse at 50% 40%,#b5f3ff 0%,#2cbbd5 60%,#1b7f98 100%)}
 
-.game-scene .play-overlay{position:absolute;inset:0;z-index:10;display:grid;place-items:center;background:#140c1899;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+/* No backdrop blur: the canvas behind keeps animating, so a blur would be
+   recomputed every frame. A slightly darker veil reads the same. */
+.game-scene .play-overlay{position:absolute;inset:0;z-index:10;display:grid;place-items:center;background:#140c18a8}
 .game-scene .play-overlay[hidden]{display:none}
 .play-dialog{
  width:min(460px,calc(100% - 32px));max-height:calc(100% - 24px);overflow:auto;

@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {db,saveSong,getSong,deleteSong,listSongs,saveRun,recordEligible,backup,restore,saveSettings} from '../../web/src/storage/Database';
 import {defaults} from '../../web/src/app/store';
 import {unpack,readFiles} from '../../web/src/packs/zip';
+import {blobWithBytes,blobBytes} from '../../web/src/packs/bytes';
 import {Commands,snapTime,moveNotes,addNote} from '../../web/src/studio/Commands';
 import type {Project,RunResult,SongPackage} from '../../contracts/public-types';
 import {Engine} from '../../web/src/game/Engine';
@@ -20,3 +21,13 @@ it('P10 malformed backup is rejected atomically',async()=>{await saveSettings(de
 it.each(['gauge','title','counts','deltas'])('P10 malformed %s cannot enter stored results',async(field)=>{await saveSettings(defaults);await saveRun(await result());const b=await backup();if(field==='gauge')b.runs[0].stats.gauge='invalid';if(field==='title')b.runs[0].title={};if(field==='counts')b.runs[0].stats.resolved=99999;if(field==='deltas')b.runs[0].stats.deltas=[NaN];b.settings.audioDelayMs=99;await expect(restore(b)).rejects.toThrow();expect((await(await db()).get('settings','main')).audioDelayMs).toBe(0);});
 it('M07 editor retains 100 operations and supports color, size, offset, move, undo/redo',()=>{const p=JSON.parse(readFileSync('fixtures/demo-project.json','utf8')) as Project;const c=new Commands(p);const id=c.project.charts[0].notes[0].id,original=c.project.charts[0].notes[0].timeMs;for(let i=0;i<100;i++)c.apply(p=>moveNotes(p.charts[0],new Set([id]),1));expect(c.project.charts[0].notes[0].timeMs).toBe(original+100);for(let i=0;i<100;i++)c.undo();expect(c.project.charts[0].notes[0].timeMs).toBe(original);for(let i=0;i<100;i++)c.redo();expect(c.project.charts[0].notes[0].timeMs).toBe(original+100);c.apply(p=>{p.charts[0].notes=p.charts[0].notes.filter(n=>n.id!==id);addNote(p.charts[0],{id:'new',kind:'tap',timeMs:800,color:'ka',size:'large'});p.charts[0].offsetMs=5;});expect(c.project.charts[0].notes[0]).toMatchObject({color:'ka',size:'large'});c.undo();expect(c.project.charts[0].notes.some(n=>n.id===id)).toBe(true);});
 it('M08 snap subdivides actual changing beat intervals',()=>{const beats=[0,500,1100,1550];expect(snapTime(788,beats,'8')).toBe(800);expect(snapTime(788,beats,'4')).toBe(500);expect(snapTime(789.3,beats,'off')).toBe(789);expect(snapTime(1380,beats,'16')).toBe(1325);});
+
+it('saves imported audio from the bytes it already has, and stores the same content',async()=>{
+ const bytes=new Uint8Array([1,2,3,250]).buffer;
+ const blob=blobWithBytes(bytes,'audio/mp4');
+ expect(blob.type).toBe('audio/mp4');
+ expect(await blobBytes(blob)).toBe(bytes);
+ expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual([1,2,3,250]);
+ const plain=new Blob([new Uint8Array([9,8])]);
+ expect([...new Uint8Array(await blobBytes(plain))]).toEqual([9,8]);
+});

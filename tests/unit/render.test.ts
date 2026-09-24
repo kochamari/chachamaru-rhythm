@@ -6,6 +6,7 @@ import {DrummerState,drummerPose,dancerPose,strikeEnvelope,stickTip,drumHeadDist
 import {classify,recolorPixels,FRIEND_VARIANTS,rgbToHsv,hsvToRgb} from '../../web/src/render/recolor';
 import {chartLevel,songColor} from '../../web/src/app/songinfo';
 import {crownOf} from '../../web/src/app/records';
+import {isSoftwareRenderer} from '../../web/src/app/gpu';
 import type {Chart,Note} from '../../contracts/public-types';
 
 const tap=(id:string,timeMs:number,color:'don'|'ka'='don',size:'normal'|'large'='normal'):Note=>({id,kind:'tap',timeMs,color,size});
@@ -143,5 +144,12 @@ describe('song info',()=>{
   expect(crownOf(r({fullCombo:true,gauge:90}))).toBe('fc');
   expect(crownOf(r({gauge:70}))).toBe('clear');
   expect(crownOf(r({gauge:69.9}))).toBe('none');
+ });
+});
+
+describe('software WebGL detection',()=>{
+ it('recognises CPU renderers and leaves real GPUs alone',()=>{
+  for(const name of ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)','llvmpipe (LLVM 15.0.7, 256 bits)','Microsoft Basic Render Driver','Google SwiftShader'])expect(isSoftwareRenderer(name)).toBe(true);
+  for(const name of ['Apple GPU','ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)','Adreno (TM) 740','Mali-G78','ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)'])expect(isSoftwareRenderer(name)).toBe(false);
  });
 });
