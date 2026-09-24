@@ -10,4 +10,6 @@ Use TypeScript strict, preserve the pure engine boundary, and run `npm run verif
 
 Don't delete failing tests or relax the fixed judgment windows to obtain a pass. Update PROGRESS.md and DELIVERY.md when completing work.
 
-Preserve the user-selected hand-drawn anime character and overhand drumstick grip. Character joints use local SVG coordinates, not competing CSS transforms. For art/rig changes inspect actual poses and continuous motion, including shoulders, wrists, drum contact and responsive layouts; changing transform values alone is not visual acceptance.
+Preserve the user-selected hand-drawn anime character and overhand drumstick grip. One rig definition (`web/src/render/rig.ts`) drives both the SVG puppet on menus and the WebGL puppet in play; joints rotate in local coordinates, never with competing CSS transforms. For art/rig changes inspect actual poses and continuous motion, including shoulders, wrists, drum contact and responsive layouts; changing transform values alone is not visual acceptance.
+
+Bundled songs are composed in `scripts/compose/` with their charts; the ensemble drums play the normal chart, so change a chart and rebuild the song together. Don't edit `web/src` while E2E runs (Vite reloads the pages under test).

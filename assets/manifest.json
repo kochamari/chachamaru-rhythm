@@ -8,12 +8,6 @@
       "permission": "Created for this project; included in public build; no user-provided private media"
     },
     {
-      "path": "web/public/original-demo/himawari.zip",
-      "sha256": "6394fff44d2ff88e0b6928506171a4ff8c035b888ab09f1abe65fb394d3af409",
-      "provenance": "Original composition and charts generated locally by scripts/create-demo.py",
-      "permission": "Created for this project; included in public build; no user-provided private media"
-    },
-    {
       "path": "web/public/original-assets/chachamaru-anime-v1.png",
       "sha256": "559ddcde47ce34ca2f3164bbc370ed78ecf22b581599503200bec1715e66ffe4",
       "provenance": "Original user-selected 2D anime mascot, built-in image_gen key art and transparent puppet atlas; prompts in docs/ASSET_PROMPTS.md",
@@ -24,6 +18,66 @@
       "sha256": "6e2479765ad599a42e37371daca10dee95372d4e6877aa3c6216b10e47d4bb20",
       "provenance": "Original overhand-grip forearm/wrist replacement generated with built-in image_gen from the approved public character atlas; exact prompt in docs/ASSET_PROMPTS.md",
       "permission": "Created for this project at the user request to correct the grip; public game asset; no private user media"
+    },
+    {
+      "path": "web/public/original-demo/himawari.zip",
+      "sha256": "73ece23cddc6493a64f52f474f9f561640aaf56f099be19817e19eace8bea2ee",
+      "provenance": "Original composition and hand-authored charts rendered locally by scripts/compose (himawari.py); synthesised instruments, no samples",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/original-demo/ondo.zip",
+      "sha256": "4ea0dd4026461b95b83aaf60744457db9c638fcab31aea5818eec6bdd94c69cb",
+      "provenance": "Original composition and hand-authored charts rendered locally by scripts/compose (ondo.py); synthesised instruments, no samples",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/original-demo/yuuyake.zip",
+      "sha256": "03c7f976198b55e5ae66329b4ce860ee9db9999e038a7b5b60813dde27ca8b75",
+      "provenance": "Original composition and hand-authored charts rendered locally by scripts/compose (yuuyake.py); synthesised instruments, no samples",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/original-demo/hanabi.zip",
+      "sha256": "07d8bfce7bd49d213e8c7d7e2990e1d991c086ae631675cb75a2688ddf7670ce",
+      "provenance": "Original composition and hand-authored charts rendered locally by scripts/compose (hanabi.py); synthesised instruments, no samples",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/original-demo/catalog.json",
+      "sha256": "d5c63da4b4182b717db4192ba3a1b3559c0586baef3611bf576e573aee5c5e72",
+      "provenance": "Generated list of bundled original songs",
+      "permission": "Created for this project; included in public build"
+    },
+    {
+      "path": "web/public/icon-192.png",
+      "sha256": "bd2ce8a302ee04853ed114df1cbf03510620b5a0738ebc471fe12594b746f11d",
+      "provenance": "Home-screen icon composed locally (scripts) from the approved Chachamaru head/ear crops of chachamaru-anime-v1.png over an original sunflower and sunburst drawing",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/icon-512.png",
+      "sha256": "bf0accf2eb923988ffc5f6c2129e17cd5c3158d4be520e1f57ea8088d0af8127",
+      "provenance": "Home-screen icon composed locally from the approved Chachamaru atlas over an original sunflower and sunburst drawing",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/icon-maskable-512.png",
+      "sha256": "312ea0761b9ca339343da82eecc119ff774f13b39d5439c24cb18f45651be845",
+      "provenance": "Maskable home-screen icon composed locally from the approved Chachamaru atlas",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/apple-touch-icon.png",
+      "sha256": "2ba0c26d801ec4c82800459e0beafa584d4f9e9b40c54f671773bfc3e1e16556",
+      "provenance": "iOS home-screen icon composed locally from the approved Chachamaru atlas",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/manifest.webmanifest",
+      "sha256": "580f4b570236ae20879297567e4b0bf2b75c217b814e7946f3ddf0e86437640c",
+      "provenance": "Web app manifest written for this project",
+      "permission": "Created for this project; included in public build; no user-provided private media"
     }
   ],
   "codeAssets": [

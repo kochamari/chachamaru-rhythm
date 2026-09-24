@@ -5,7 +5,7 @@
 - 公開ゲーム: <https://kochamari.github.io/chachamaru-rhythm/>
 - リポジトリ: <https://github.com/kochamari/chachamaru-rhythm>
 - 現在の構成: 静的Webプレイヤー ＋ Macで動かすローカル譜面工房（Studio）。
-- 公開版には自作の64秒デモ「ひまわり囃子」と3難易度を同梱。ユーザーの曲は手元のZIPを読み込む。
+- 公開版には自作のオリジナル曲4曲（ひまわり囃子・ちゃちゃまる音頭・夕焼けしっぽ・花火ラッシュ、各3難易度）を同梱。ユーザーの曲は手元のZIPを読み込む。
 - このガイドの更新日: 2026-09-24。最新の差分はGit履歴、検証結果はGitHub Actionsも確認する。
 
 ## 最初に読むもの
@@ -20,7 +20,7 @@
 
 ## どんなアプリか
 
-Home → 曲一覧 → 難易度・操作方法 → 演奏 → 結果 → 再挑戦、という流れです。音符は右から左へ流れ、左の判定位置で赤の「ドン」・青の「カッ」を叩きます。F/Jがドン、D/Kがカッ。タッチは4打面、MIDIはスネアとフロアタムをLearnで登録します。
+タイトル → 曲一覧（試聴・難易度★・王冠） → 演奏 → 結果 → 再挑戦、という流れです。メニューは太鼓（カッ＝移動、ドン＝決定）でも操作できます。音符は右から左へ流れ、左の判定位置で赤の「ドン」・青の「カッ」を叩きます。F/Jがドン、D/Kがカッ。タッチは4打面、MIDIはスネアとフロアタムをLearnで登録します。
 
 大小の音符、黄色い連打、良・可・不可、コンボ、ゲージ、全良／フルコンボ、AUTO、練習、一時停止と再開、遅延設定、曲パック取込・書出し、設定と記録のバックアップがあります。途中の操作方式変更・AUTO・練習・配送遅延のある結果は通常ベストと分離します。
 
@@ -44,32 +44,39 @@ GitHub Pagesは静的配信で、Python解析APIをホストしていません�
 
 | 変更したいこと | 主なファイル |
 | --- | --- |
-| Home・曲一覧・結果・hash routing | `web/src/main.ts`, `web/src/styles.css` |
+| 起動・hash routing・同梱曲の導入 | `web/src/main.ts`, `web/public/original-demo/catalog.json` |
+| 画面（タイトル・選曲・曲追加・結果） | `web/src/screens/Home.ts`, `Library.ts`, `Import.ts`, `Result.ts`, `web/src/styles.css` |
+| 太鼓でのメニュー操作（カッ＝移動、ドン＝決定） | `web/src/app/nav.ts`, `web/src/app/context.ts` |
 | 色・タイトル・共通UI | `web/src/app/brand.ts`, `web/src/app/ui.ts`, `web/src/app/store.ts` |
+| 難易度★・曲の色・王冠 | `web/src/app/songinfo.ts`, `web/src/app/records.ts` |
 | 演奏の状態遷移・開始／停止／終了 | `web/src/game/Session.ts` |
 | 判定・得点・コンボ・ゲージ | `web/src/game/Engine.ts`, `tests/unit/engine.test.ts`, [判定仕様](02_ENGINE.md) |
-| 音源時計・補正・打音 | `web/src/audio/AudioEngine.ts`, `ClockBridge.ts`, `tests/unit/audio.test.ts` |
+| 音源時計・補正・打音・効果音・試聴 | `web/src/audio/AudioEngine.ts`, `ClockBridge.ts`, `synth.ts`, `Preview.ts` |
 | キー・タッチ・MIDI入力 | `web/src/input/InputRouter.ts`, `web/src/screens/Settings.ts` |
-| レーン・音符・演出 | `web/src/render/Renderer.ts`（PixiJS） |
-| キャラクター・接続位置・アニメ | `web/src/render/Character.ts`, `character-rig.ts`, `character.css`（DOM SVG） |
+| 演奏画面の描画（レーン・音符・ゲージ・演出・ステージ） | `web/src/render/PlayRenderer.ts`, `layout.ts`, `art.ts`, `syllables.ts`, `timing.ts`, `web/src/play.css` |
+| キャラクター（骨格・ポーズ・毛色違いの仲間） | `web/src/render/rig.ts`（共通データ）, `Character.ts`（メニュー用SVG）, `PixiCharacter.ts`（演奏用WebGL）, `recolor.ts` |
+| 同梱曲の作曲・譜面 | `scripts/compose/`（`songs/*.py` に譜面と楽曲、`build.py` で書き出し） |
 | 曲ZIPの検証・取込 | `web/src/packs/`, `web/src/workers/zip.worker.ts`, [保存仕様](03_PACK_STORAGE.md) |
 | ブラウザ保存・ベスト記録 | `web/src/storage/Database.ts`, `tests/unit/storage-editor.test.ts` |
 | Studioの画面・編集履歴 | `web/src/screens/Studio.ts`, `web/src/studio/` |
-| 解析・API・ZIP生成 | `studio/chacha_studio/`, `tests/python/`, [Studio仕様](04_STUDIO.md) |
+| 解析・自動下書き・API・ZIP生成 | `studio/chacha_studio/core.py`, `generator.py`, `server.py`, `tests/python/`, [Studio仕様](04_STUDIO.md) |
 | 型とファイル形式 | `contracts/public-types.ts`, `schemas/manifest.schema.json`, `schemas/chart.schema.json` |
-| 公開・キャッシュ・CI | `web/vite.config.ts`, `scripts/service-worker.mjs`, `.github/workflows/` |
+| 公開・キャッシュ・CI | `web/vite.config.ts`, `scripts/service-worker.mjs`, `.github/workflows/`, `web/public/manifest.webmanifest` |
 
-`Engine` はDOM・音声・描画を持たない純粋な判定層です。入力と音源時計を `Session` が結び、結果を `Renderer` とUIへ渡します。UIの修正のために判定処理を描画側へ移さないでください。
+`Engine` はDOM・音声・描画を持たない純粋な判定層です。入力と音源時計を `Session` が結び、結果を `PlayRenderer` とUIへ渡します。UIの修正のために判定処理を描画側へ移さないでください。演奏画面はPixiの1枚のcanvasで描き、DOMに残すのは一時停止ボタン・タッチ打面・ダイアログだけです。
 
 ## 壊しやすい点
 
-- 時刻は整数msを基本にし、AudioContextの秒とは明示変換する。rAFの積算を曲時計にしない。
+- 時刻は整数msを基本にし、AudioContextの秒とは明示変換する。rAFの積算を曲時計にしない。`ClockBridge` は時計の揺れを平滑化しつつ、30ms（レンダー時計は80ms）を超える跳びには即追従する。
 - 良は±45ms、可は±90ms。80msの配送猶予は入力到着の救済で、判定窓を±170msにするものではない。既存テストを消したり数値を緩めて通さない。ルールを変える依頼があればrulesetと記録の互換性も扱う。
 - 大音符は正しい色の1打で完了。1打でtapとrollの両方を加点しない。重複イベント、古いrun、遅延確定順は既存テストで保護している。
 - ZIPは型／パス／サイズ／SHAを検証してから保存する。保存形式変更では既存IndexedDBを壊さず、旧データの読込み・移行を考える。WebKit対策で音源をArrayBuffer＋MIME保存する理由は [DECISIONS.md](DECISIONS.md) にある。
-- キャラの顔と体は `chachamaru-anime-v1.png`、順手の腕は `chachamaru-overhand-v1.png`。SVGのローカル関節座標で回転し、部位へCSS transformを重ねない。全身が同じbody変換に追従し、太鼓は逆変換で接地する。腕の元画像上の肩・手首位置を接続する。手首の位置、描画順、バチの長い側が面に届くことを連続コマと実画面で確認する。transform値が変わるだけでは見た目の合格にしない。
+- キャラの顔と体は `chachamaru-anime-v1.png`、順手の腕は `chachamaru-overhand-v1.png`。骨格は `render/rig.ts` の1か所で定義し、SVG版とPixi版が同じ関節座標を使う。肩・手首の登録点を変えるときは `tests/e2e/visual.spec.ts`（V03）と `tests/unit/render.test.ts` の到達試験も確認する。見た目は連続コマと実画面で確認し、数値の一致だけで合格にしない。
+- 仲間の柴犬は同じアトラスを実行時に毛色変換している（`recolor.ts`）。橙の毛と緑のスカーフだけを変え、線画・目・クリーム色は変えない。
+- 同梱曲の譜面は `scripts/compose/songs/*.py` の文字列が正本。合奏の太鼓が「ふつう」譜面を演奏しているので、譜面を変えたら曲も作り直す（`build.py`）。ZIPを手で編集しない。
 - `BASE_PATH` とService Workerのscopeを合わせる。先頭 `/assets` の決め打ちを避ける。保存曲を残したまま更新できるよう、見た目の更新確認のためにIndexedDBを消さない。
 - `__TEST__` や `web/src/testing/showcase.ts` はテスト／開発用。公開ビルドへ診断hookや固定結果を混ぜない。
+- E2Eの実行中に `web/src` を編集しないこと。Viteの自動再読込みで試験中のページが読み直され、無関係な失敗になる。
 
 ## cloneから起動・検証
 

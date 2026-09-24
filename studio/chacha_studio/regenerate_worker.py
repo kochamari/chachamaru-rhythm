@@ -2,12 +2,14 @@
 import json
 import sys
 from pathlib import Path
-from .core import generate,validate,write_json
+from .core import generate,validate,write_json,load_features
 
 work=Path(sys.argv[1]);difficulty=sys.argv[2]
 try:
     p=json.loads((work/'input.json').read_text());m=p['manifest']
-    c=generate(m['beatTimesMs'],m['durationMs'],difficulty,m['audio']['sha256'],m['sections'])
+    # The project directory holds the analysis features (work = <project>/jobs/<id>).
+    features=load_features(work.parent.parent,compute=True) if p.get('confidence')!='low' else None
+    c=generate(m['beatTimesMs'],m['durationMs'],difficulty,m['audio']['sha256'],m['sections'],features,m['downbeatIndices'])
     p['charts']=[c if x['difficulty']==difficulty else x for x in p['charts']]
     p['revision']+=1;m['revision']+=1;validate(p)
     write_json(work/'candidate.json',p)

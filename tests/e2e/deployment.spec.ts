@@ -6,10 +6,13 @@ test('E08 production root and repository subpath load scoped assets and survive 
   await context.addCookies([{name:'chacha-network',value:'online',url:'http://127.0.0.1:8792'}]);
   await page.goto('http://127.0.0.1:8792'+base);
   await expect(page.getByRole('link',{name:/はじめる/})).toBeVisible();
+  // Bundled songs finish downloading in the background before the network is cut.
+  await expect(page.locator('html[data-bundled="ready"]')).toHaveCount(1,{timeout:30000});
   expect(await page.evaluate(()=>typeof (window as unknown as {__chacha?:unknown}).__chacha)).toBe('undefined');
   await expect.poll(()=>page.evaluate(async base=>{const r=await navigator.serviceWorker.getRegistration(base);return r?.active?.scriptURL;},base)).toBe('http://127.0.0.1:8792'+base+'sw.js');
   await page.reload();
   await expect(page.getByRole('link',{name:/はじめる/})).toBeVisible();
+  await expect(page.locator('html[data-bundled="ready"]')).toHaveCount(1,{timeout:30000});
   expect(await page.evaluate(()=>navigator.serviceWorker.controller?.scriptURL)).toBe('http://127.0.0.1:8792'+base+'sw.js');
   // The test server closes sockets for this context's cookie, proving a
   // real network failure without Web Inspector's pre-SW interception.

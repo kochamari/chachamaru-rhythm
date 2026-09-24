@@ -1,42 +1,152 @@
 import './styles.css';
-import type {Chart,SongPackage,Manifest,RunResult,Difficulty,InputMode} from '../../contracts/public-types';
-import {BRAND} from './app/brand';
-import {state,defaults,difficultyNames,validSettings} from './app/store';
-import {header,escape,toast,download,duration,fail} from './app/ui';
-import {characterSvg,flowerSvg,crownSvg,Character} from './render/Character';
-import {db,listSongs,getSong,saveSong,deleteSong,saveSettings,backup,restore} from './storage/Database';
+import type {RunResult} from '../../contracts/public-types';
+import {state,defaults,validSettings} from './app/store';
+import {fail,toast} from './app/ui';
+import {app,input,midi,uiAudio,preview,nav,memory,armAudioUnlock} from './app/context';
+import {db,listSongs,getSong,saveSong,saveSettings,backup,restore} from './storage/Database';
 import {importZip,exportPack} from './packs/zip';
-import {validatePackage} from './packs/validators';
-import {InputRouter,MidiAdapter} from './input/InputRouter';
-import {AudioEngine} from './audio/AudioEngine';
 import {Session} from './game/Session';
 import {localAvailable,api} from './studio/ApiClient';
+import {homeScreen} from './screens/Home';
+import {libraryScreen} from './screens/Library';
+import {importScreen} from './screens/Import';
+import {resultScreen} from './screens/Result';
 import {studioScreen} from './screens/Studio';
 import {settingsScreen,diagnosticsScreen} from './screens/Settings';
 import {showcaseScreen} from './testing/showcase';
+import {flowerSvg} from './render/Character';
+
 declare const __TEST__:boolean;
-const app=document.querySelector<HTMLElement>('#app')!;
 document.documentElement.style.setProperty('--festival',`url("${import.meta.env.BASE_URL}original-assets/festival.webp")`);
-const input=new InputRouter(app),midi=new MidiAdapter(input,state.settings);
-let cleanup=()=>{},session:Session|null=null,navGeneration=0,lastResult:RunResult|null=null,selected:string|null=null,difficulty:Difficulty='normal';
-const uiAudio=new AudioEngine(state.settings);
+let cleanup=()=>{},session:Session|null=null,navGeneration=0,bundledReady=false;
 midi.onDisconnect=()=>session?.pause('電子ドラムの接続が切れました。ポートを選び直してください。');
 window.addEventListener('error',e=>{console.error('アプリエラー',e.message);});
 window.addEventListener('unhandledrejection',e=>{console.error(e.reason);toast(e.reason instanceof Error?e.reason.message:'処理に失敗しました。もう一度お試しください');});
-function home(){app.innerHTML=`${header()}<section class="home"><div class="home-inner"><div class="home-copy"><span class="festival-tag">ひまわりの里の、小さな音楽祭</span><h1>${BRAND.short}<small>太鼓の達人</small></h1><p>${BRAND.tagline}<br>大好きな曲を、ちゃちゃまるといっしょに。</p><div class="home-actions"><a class="button primary" href="#/songs">はじめる <span style="margin-left:25px">→</span></a><a class="button" href="#/import">＋ 曲を追加</a></div><div class="home-meta"><span>ドン・カッの2つで遊ぼう</span><span>タッチ / キーボード / 電子ドラム</span></div></div><div class="hero-character">${characterSvg()}</div></div><footer class="home-footer"><strong>好きな音楽と、いつでもお祭り気分。</strong><span>CHACHAMARU RHYTHM FESTIVAL　／　ひまわりの里</span><div class="pills"><span>オリジナルデモ収録</span><span>プライベート曲対応</span></div></footer></section>`;cleanup=new Character(app.querySelector('.hero-character')!).animate('idle');}
-async function library(generation:number){const songs=await listSongs();if(generation!==navGeneration)return;songs.sort((a,b)=>Number(a.packId==='himawari-demo')-Number(b.packId==='himawari-demo'));if(!songs.some(m=>m.packId===selected))selected=songs[0]?.packId??null;app.innerHTML=`${header('songs')}<section class="page"><div class="page-heading"><div><span class="eyebrow">えらぶ時間も、お祭りのうち。</span><h1>今日は、どの曲で遊ぶ？</h1><p>お気に入りの一曲を、きみのリズムで。</p></div><a class="button" href="#/import">＋ 曲を追加</a></div><div class="library-layout"><div><input class="search" type="search" placeholder="曲名・アーティストでさがす" aria-label="曲を検索"><div class="song-list"></div><p class="library-footnote">自分の曲はこのブラウザに保存されます。<br>元のZIPは、ファイルやiCloudにも大切に保管してください。</p></div><div id="selection"></div></div></section>`;
-const renderList=(query='')=>{app.querySelector('.song-list')!.innerHTML=songs.filter(m=>(m.title+m.artist).toLowerCase().includes(query.toLowerCase())).map(m=>`<button class="song-card ${selected===m.packId?'selected':''}" data-song="${escape(m.packId)}"><div class="album-icon ${m.packId==='himawari-demo'?'':'private'}">${flowerSvg()}</div><div class="song-info"><strong>${escape(m.title)}</strong><small>${escape(m.artist)} · ${duration(m.durationMs)}</small><span>${m.packId==='himawari-demo'?'オリジナル曲　／　DEMO':'マイソング　／　このブラウザに保存'}</span></div><span class="song-arrow">›</span></button>`).join('')||'<div class="empty">曲が見つかりませんでした</div>';app.querySelectorAll<HTMLElement>('[data-song]').forEach(b=>b.onclick=()=>{selected=b.dataset.song!;renderList(query);void renderSelection();});};
-const renderSelection=async()=>{const m=songs.find(m=>m.packId===selected);if(!m)return;const pack=await getSong(m.packId);if(!pack||generation!==navGeneration||m.packId!==selected)return;const c=pack.charts.find(c=>c.difficulty===difficulty)??pack.charts[0];difficulty=c.difficulty;const records=await (await db()).getAll('records');const best=records.filter((r:RunResult)=>r.packId===m.packId&&r.chartId===c.chartId&&r.audioHash===m.audio.sha256&&r.chartHash===m.charts.find(x=>x.chartId===c.chartId)?.sha256&&r.inputMode===state.settings.inputMode).sort((a:RunResult,b:RunResult)=>b.stats.score-a.stats.score)[0];app.querySelector('#selection')!.innerHTML=`<section class="selection"><div class="selection-art"><span class="art-label">${m.packId==='himawari-demo'?'ひまわりの<br>音楽祭':'好きな曲で、<br>お祭りしよう。'}</span>${characterSvg()}</div><div class="selection-content"><span class="eyebrow">${m.packId==='himawari-demo'?'ORIGINAL DEMO':'MY FAVORITE SONG'}</span><h2>${escape(m.title)}</h2><p>${escape(m.artist)}　／　${duration(m.durationMs)}</p><div class="difficulty-tabs">${(['easy','normal','hard'] as Difficulty[]).filter(d=>pack.charts.some(c=>c.difficulty===d)).map(d=>`<button data-difficulty="${d}" class="${difficulty===d?'active':''}">${difficultyNames[d]}<small>${d==='easy'?'● ● ○ ○ ○':d==='normal'?'● ● ● ○ ○':'● ● ● ● ●'}</small></button>`).join('')}</div><div class="chart-meta"><span>${c.notes.filter(n=>n.kind==='tap').length} 音符</span><span>${best?`ベスト ${best.stats.score.toLocaleString()}`:'まだプレイしていません'}</span></div><label class="input-choice">操作方法 <select id="input-mode"><option value="keyboard">キーボード　D / F / J / K</option><option value="touch">タッチ　4つの打面</option><option value="midi">電子ドラム　MIDI</option></select></label><div class="start-row"><button class="primary" id="play-song">この曲であそぶ　→</button><button class="auto" id="auto-song">AUTO<br><small>お手本</small></button></div><div class="small-actions"><button id="export-song">曲パックを保存</button><button id="delete-song">この曲を削除</button></div><p class="library-footnote">${m.generator?.startsWith('chacha-generator')?'自動下書きの譜面です。譜面工房でリズムを調整できます。':'大音符アシストON：大きい音符も1回でOK。'}</p></div></section>`;
-app.querySelectorAll<HTMLElement>('[data-difficulty]').forEach(b=>b.onclick=()=>{difficulty=b.dataset.difficulty as Difficulty;void renderSelection();});const mode=app.querySelector<HTMLSelectElement>('#input-mode')!;mode.value=state.settings.inputMode==='mixed'?'keyboard':state.settings.inputMode;mode.onchange=()=>{state.settings.inputMode=mode.value as InputMode;void saveSettings(state.settings);void renderSelection();};const play=(auto=false)=>{location.hash=`/play/${m.packId}/${c.chartId}${auto?'?auto=1':''}`;};app.querySelector<HTMLElement>('#play-song')!.onclick=()=>play();app.querySelector<HTMLElement>('#auto-song')!.onclick=()=>play(true);app.querySelector<HTMLElement>('#export-song')!.onclick=async()=>download(await exportPack(pack),`${m.title}.zip`);app.querySelector<HTMLElement>('#delete-song')!.onclick=async()=>{if(confirm(`「${m.title}」をこのブラウザから削除しますか？ 元のZIPは削除されません。`)){await deleteSong(m.packId);void route();}};};
-app.querySelector<HTMLInputElement>('.search')!.oninput=e=>renderList((e.target as HTMLInputElement).value);renderList();await renderSelection();const key=(e:KeyboardEvent)=>{if(e.code==='Enter'&&!(e.target instanceof HTMLInputElement))app.querySelector<HTMLButtonElement>('#play-song')?.click();};window.addEventListener('keydown',key);cleanup=()=>window.removeEventListener('keydown',key);}
-function importScreen(){const abort=new AbortController();app.innerHTML=`${header()}<section class="page"><div class="page-heading"><div><span class="eyebrow">自分だけのセットリストを</span><h1>曲を追加する</h1></div><a href="#/songs" class="button">曲一覧へ</a></div><div class="import-box">${flowerSvg()}<h2>曲パックを、ここへ。</h2><p>譜面工房で作ったZIPファイルを選んでください。<br>音源と譜面を確認して、このブラウザに保存します。</p><input id="pack-file" type="file" accept=".zip,application/zip" aria-label="曲パックを選ぶ"><div id="import-status" role="status"></div><button id="cancel-import" hidden>取込を取り消す</button></div><p class="library-footnote" style="text-align:center">音源から譜面を作る場合は、Macの<a class="text-link" href="#/studio">譜面工房</a>を開いてください。</p></section>`;const field=app.querySelector<HTMLInputElement>('#pack-file')!,status=app.querySelector<HTMLElement>('#import-status')!,cancel=app.querySelector<HTMLButtonElement>('#cancel-import')!;cancel.onclick=()=>abort.abort();async function process(file:File){field.disabled=true;cancel.hidden=false;status.textContent='音源・譜面・SHA-256を確認しています…';try{const pack=await importZip(file,abort.signal);await validatePackage(pack);if(abort.signal.aborted)return;let result=await saveSong(pack);if(result==='conflict'){status.innerHTML='同じ曲の別バージョンがあります。<div class="inline-actions"><button id="replace">置換する</button><button id="copy">別曲として追加</button><button id="dismiss">取消</button></div>';const choice=await new Promise<'replace'|'copy'|null>(resolve=>{status.querySelector('#replace')!.addEventListener('click',()=>resolve('replace'));status.querySelector('#copy')!.addEventListener('click',()=>resolve('copy'));status.querySelector('#dismiss')!.addEventListener('click',()=>resolve(null));abort.signal.addEventListener('abort',()=>resolve(null),{once:true});});if(!choice)return;result=await saveSong(pack,choice);}if(abort.signal.aborted)return;toast(result==='duplicate'?'この曲はすでに保存されています':'曲を追加しました');selected=pack.manifest.packId;location.hash='/songs';}catch(e){if(!abort.signal.aborted)status.textContent=(e instanceof Error?e.message:String(e))+' 元のZIPを保管して、空き容量を確認してください。';else status.textContent='取り消しました。';}finally{field.disabled=false;cancel.hidden=true;}}field.onchange=()=>{if(field.files?.[0])void process(field.files[0]);};const box=app.querySelector<HTMLElement>('.import-box')!;box.ondragover=e=>{e.preventDefault();};box.ondrop=e=>{e.preventDefault();if(e.dataTransfer?.files[0])void process(e.dataTransfer.files[0]);};cleanup=()=>abort.abort();}
-function resultScreen(r:RunResult){const s=r.stats;const great=s.allGreat,fc=s.fullCombo,clear=s.gauge>=70;const label=great?'全 良！':fc?'フルコンボ！':clear?'クリア！':'おつかれさま！';app.innerHTML=`${header()}<section class="result-page"><div class="confetti">${fc?Array.from({length:26},(_,i)=>`<i style="left:${i*4}%;animation-delay:${-(i%7)*.6}s;animation-duration:${3+i%3}s"></i>`).join(''):''}</div><div class="result-dog"><span class="eyebrow" style="color:#e9cb88">${great?'ひまわりの里の、名人！':'ちゃちゃまるも、にっこり。'}</span><h1>${label}</h1><div class="result-character ${fc?'sunflower-win':''}">${great?'<div class="winner-crown" aria-label="全良の王冠">'+crownSvg()+'</div>':''}${fc?'<div class="sunflower-wreath">'+Array.from({length:8},(_,i)=>`<span style="--i:${i}">${flowerSvg()}</span>`).join('')+'</div>':''}<div class="result-rig">${characterSvg()}</div></div><p class="celebration">${fc?'見事なリズム！ お祭りは大盛り上がり。':'いっしょに叩いてくれて、ありがとう。'}</p></div><div class="result-card"><span class="eyebrow">演奏結果　／　${difficultyNames[r.difficulty]}</span><h2>${escape(r.title)}</h2><span class="tag">${r.autoplay?'AUTO · 参考記録':r.practice?'練習 · 参考記録':r.inputMode==='mixed'?'MIXED · 参考記録':r.timingUnstable?'配送遅延あり · 参考記録':'通常プレイ'}</span><div class="result-score">${s.score.toLocaleString()}<small>SCORE　／　基本点 ${s.baseScore.toLocaleString()} ＋ 連打 ${s.rollBonus.toLocaleString()}</small></div><div class="result-stats"><div><span>良</span><strong>${s.great}</strong></div><div><span>可</span><strong>${s.ok}</strong></div><div><span>不可</span><strong>${s.miss}</strong></div></div><div class="result-sub"><span>最大 <b>${s.maxCombo}</b> コンボ</span><span>精度 <b>${(s.accuracy*100).toFixed(1)}%</b></span><span>ゲージ <b>${s.gauge.toFixed(0)}%</b></span></div><div class="result-actions"><button class="primary" id="retry">もう一度あそぶ　↻</button><a class="button" href="#/songs">曲一覧へ</a></div><details class="result-detail"><summary>タイミングの詳細</summary><p>${timingSummary(s.deltas)}<br>打撃の判定差であり、機器の物理遅延測定ではありません。<br>入力: ${r.inputMode} ／ ルール: ${r.ruleset}<br>${r.timingUnstable?'80msを超える配送遅延を検知しました。通常記録は更新していません。':''}</p></details></div></section>`;app.querySelector<HTMLElement>('#retry')!.onclick=()=>location.hash=`/play/${r.packId}/${r.chartId}${r.autoplay?'?auto=1':r.practice?'?practice=1':''}`;const key=(e:KeyboardEvent)=>{if(e.code==='Enter')app.querySelector<HTMLButtonElement>('#retry')?.click();};window.addEventListener('keydown',key);const character=new Character(app.querySelector('.result-rig')!);const stopAnimation=character.animate('resultWin');void uiAudio.unlock().then(()=>uiAudio.chime(great?3:fc?2:1)).catch(()=>{});cleanup=()=>{stopAnimation();window.removeEventListener('keydown',key);};}
-function timingSummary(values:readonly number[]){if(!values.length)return '命中した音符のタイミングデータがありません。';const a=[...values].sort((a,b)=>a-b);const median=a[Math.floor(a.length/2)];return `中央値 ${median<0?'EARLY':'LATE'} ${Math.abs(median).toFixed(1)}ms ／ ${a.length}打`;}
-async function route(){const generation=++navGeneration;cleanup();cleanup=()=>{};session?.dispose();session=null;input.onHit=()=>{};input.onPause=()=>{};const [path,query]=(location.hash.slice(1)||'/').split('?'),parts=path.split('/').filter(Boolean),params=new URLSearchParams(query);window.scrollTo(0,0);try{if(parts.length===0)home();else if(parts[0]==='songs')await library(generation);else if(parts[0]==='import')importScreen();else if(parts[0]==='settings')cleanup=await settingsScreen(app,midi,uiAudio,()=>void route());else if(parts[0]==='diagnostics')cleanup=await diagnosticsScreen(app,input,midi,uiAudio);else if(parts[0]==='studio')cleanup=await studioScreen(app);else if(parts[0]==='play'){const pack=await getSong(parts[1]);if(generation!==navGeneration)return;const chart=pack?.charts.find(c=>c.chartId===parts[2]);if(!pack||!chart)throw Error('データがありません。曲を選び直してください');session=new Session(app,pack,chart,input,{autoplay:params.get('auto')==='1',practice:params.get('practice')==='1',startMs:Number(params.get('start')??0)});session.onResult=r=>{lastResult=r;location.hash=`/result/${r.runId}`;};await session.init();}else if(parts[0]==='result'){const r=lastResult?.runId===parts[1]?lastResult:await(await db()).get('runs',parts[1]);if(!r)throw Error('データがありません。曲を選び直してください');resultScreen(r);}else if(parts[0]==='showcase'&&import.meta.env.DEV)cleanup=await showcaseScreen(app,params.get('scene')??'normal');else throw Error('このページはありません。曲一覧から始めてください');}catch(e){if(generation===navGeneration)fail(app,e);}}
+armAudioUnlock();
+
+async function route(){
+ const generation=++navGeneration;
+ cleanup();cleanup=()=>{};
+ session?.dispose();session=null;
+ nav.reset();
+ input.onHit=i=>nav.input(i);input.onPause=()=>{};
+ const [path,query]=(location.hash.slice(1)||'/').split('?'),parts=path.split('/').filter(Boolean),params=new URLSearchParams(query);
+ const current=()=>generation===navGeneration;
+ window.scrollTo(0,0);
+ if(parts[0]!=='songs'&&parts[0]!=='play')preview.stop();
+ try{
+  if(parts.length===0)cleanup=homeScreen(app);
+  else if(parts[0]==='songs')cleanup=await libraryScreen(app,current);
+  else if(parts[0]==='import')cleanup=importScreen(app);
+  else if(parts[0]==='settings')cleanup=await settingsScreen(app,midi,uiAudio,()=>void route());
+  else if(parts[0]==='diagnostics')cleanup=await diagnosticsScreen(app,input,midi,uiAudio);
+  else if(parts[0]==='studio')cleanup=await studioScreen(app);
+  else if(parts[0]==='play'){
+   const pack=await getSong(parts[1]);
+   if(!current())return;
+   const chart=pack?.charts.find(c=>c.chartId===parts[2]);
+   if(!pack||!chart)throw Error('データがありません。曲を選び直してください');
+   session=new Session(app,pack,chart,input,{autoplay:params.get('auto')==='1',practice:params.get('practice')==='1',startMs:Number(params.get('start')??0),decoded:preview.take(pack.manifest.packId)});
+   session.onResult=r=>{memory.lastResult=r;location.hash=`/result/${r.runId}`;};
+   await session.init();
+  }else if(parts[0]==='result'){
+   const r=memory.lastResult?.runId===parts[1]?memory.lastResult:await(await db()).get('runs',parts[1]) as RunResult|undefined;
+   if(!r)throw Error('データがありません。曲を選び直してください');
+   if(!current())return;
+   cleanup=await resultScreen(app,r);
+  }else if(parts[0]==='showcase'&&import.meta.env.DEV)cleanup=await showcaseScreen(app,params.get('scene')??'normal');
+  else throw Error('このページはありません。曲一覧から始めてください');
+  if(!current())cleanup();
+ }catch(e){if(current())fail(app,e);}
+}
 window.addEventListener('hashchange',()=>void route());
-async function ensureDemo(){const d=await db(),loaded=await d.get('settings','demo-installed');if(loaded)return;const response=await fetch(import.meta.env.BASE_URL+'original-demo/himawari.zip');if(!response.ok)throw Error('デモ曲を読み込めませんでした');const pack=await importZip(await response.blob());pack.source='demo';await saveSong(pack);await d.put('settings',true,'demo-installed');}
-async function ensureLocal(){if(!await localAvailable())return;const projects=await(await api('projects')).json() as {projectId:string;title:string;revision:number}[];for(const p of projects){const mark='local-import-'+p.projectId;if(await(await db()).get('settings',mark)===p.revision)continue;const er=await(await api(`projects/${p.projectId}/export`,{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}})).json();const pack=await importZip(await(await api(`exports/${er.exportId}`)).blob());pack.source='studio';await saveSong(pack,'replace');await(await db()).put('settings',p.revision,mark);}}
-async function boot(){app.innerHTML='<section class="error-screen"><span class="eyebrow">CHACHAMARU RHYTHM FESTIVAL</span><h1>お祭りの準備中…</h1><p>音源と保存データを読み込んでいます。</p></section>';try{const settings=await(await db()).get('settings','main');if(validSettings(settings))Object.assign(state.settings,settings);else{if(navigator.maxTouchPoints>0)state.settings.inputMode='touch';await saveSettings(state.settings);}await ensureDemo();await ensureLocal();await route();}catch(e){fail(app,e);}if('serviceWorker'in navigator&&import.meta.env.PROD){void navigator.serviceWorker.register(import.meta.env.BASE_URL+'sw.js',{scope:import.meta.env.BASE_URL}).catch(()=>toast('オフライン起動は利用できません。起動時はネット接続が必要です'));}}
-if(__TEST__){Object.assign(window,{__chacha:{get session(){return session;},input,midi,db,backup,restore,defaults,settings:state.settings,saveSong,getSong,listSongs,exportPack,readChart:(id:string)=>getSong(id).then(p=>p?.charts),get status(){return session?.status;}}});}
+
+/**
+ * Bundled original songs from the public catalog. The first song is installed
+ * before the first screen; the others follow in the background so the first
+ * visit starts quickly. Installed copies update when the catalog revision rises.
+ */
+async function bundledCatalog(){
+ const base=import.meta.env.BASE_URL+'original-demo/';
+ try{const r=await fetch(base+'catalog.json',{cache:'no-cache'});if(r.ok){const c=await r.json() as {packId:string;file:string;revision:number}[];if(Array.isArray(c)&&c.length)return c;}}catch{/* offline: keep what is installed */}
+ return [{packId:'himawari-demo',file:'himawari.zip',revision:1}];
+}
+async function installBundled(entries:{packId:string;file:string;revision:number}[]){
+ const d=await db();
+ const base=import.meta.env.BASE_URL+'original-demo/';
+ const songs=new Map((await listSongs()).map(m=>[m.packId,m]));
+ let changed=false;
+ for(const entry of entries){
+  const installed=songs.get(entry.packId);
+  const mark=await d.get('settings','bundled-'+entry.packId);
+  if(installed&&(installed.revision>=entry.revision||mark===entry.revision))continue;
+  try{
+   const response=await fetch(base+entry.file);
+   if(!response.ok)throw Error('曲を読み込めませんでした');
+   const pack=await importZip(await response.blob());pack.source='demo';
+   await saveSong(pack,installed?'replace':'check');
+   await d.put('settings',entry.revision,'bundled-'+entry.packId);
+   changed=true;
+  }catch(e){if(!installed)console.warn('bundled song',entry.packId,e);}
+ }
+ await d.put('settings',true,'demo-installed');
+ return changed;
+}
+/** Songs saved in the local Mac Studio appear automatically when it runs. */
+async function syncLocalStudio(){
+ if(!await localAvailable())return;
+ const projects=await(await api('projects')).json() as {projectId:string;title:string;revision:number}[];
+ for(const p of projects){
+  const mark='local-import-'+p.projectId;
+  if(await(await db()).get('settings',mark)===p.revision)continue;
+  const er=await(await api(`projects/${p.projectId}/export`,{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}})).json();
+  const pack=await importZip(await(await api(`exports/${er.exportId}`)).blob());pack.source='studio';
+  await saveSong(pack,'replace');
+  await(await db()).put('settings',p.revision,mark);
+ }
+}
+
+async function boot(){
+ app.innerHTML=`<section class="boot-screen">${flowerSvg()}<strong>お祭りの準備中…</strong><small>音源と保存データを読み込んでいます</small></section>`;
+ let rest:{packId:string;file:string;revision:number}[]=[];
+ try{
+  const settings=await(await db()).get('settings','main');
+  if(validSettings(settings))Object.assign(state.settings,settings);
+  else{if(navigator.maxTouchPoints>0)state.settings.inputMode='touch';await saveSettings(state.settings);}
+  const catalog=await bundledCatalog();
+  await installBundled(catalog.slice(0,1));
+  rest=catalog.slice(1);
+ }catch(e){fail(app,e);return;}
+ await route();
+ // The remaining bundled songs arrive in the background; refresh the list if it is open.
+ void installBundled(rest).then(changed=>{if(changed&&location.hash.startsWith('#/songs')&&!session)void route();}).catch(()=>{}).finally(()=>{bundledReady=true;document.documentElement.dataset.bundled='ready';});
+ // Optional: never block or break start-up if the local Studio is absent or refuses.
+ try{await syncLocalStudio();}catch(e){console.warn('local studio sync skipped',e);}
+ if('serviceWorker'in navigator&&import.meta.env.PROD){
+  void navigator.serviceWorker.register(import.meta.env.BASE_URL+'sw.js',{scope:import.meta.env.BASE_URL}).then(watchUpdates).catch(()=>toast('オフライン起動は利用できません。起動時はネット接続が必要です'));
+ }
+}
+/**
+ * A new version downloaded by the service worker waits until the player
+ * chooses to update. Never during a song: the offer appears on menus only.
+ */
+function watchUpdates(reg:ServiceWorkerRegistration){
+ let reloading=false;
+ const offer=(worker:ServiceWorker)=>{
+  const show=()=>{
+   if(session){window.setTimeout(show,3000);return;}
+   if(document.querySelector('.update-banner'))return;
+   const bar=document.createElement('div');bar.className='update-banner';bar.setAttribute('role','status');
+   bar.innerHTML='<span>新しいバージョンがあります</span><button class="primary">更新する</button><button class="later" aria-label="あとで">×</button>';
+   bar.querySelector('.primary')!.addEventListener('click',()=>{reloading=true;worker.postMessage('skipWaiting');});
+   bar.querySelector('.later')!.addEventListener('click',()=>bar.remove());
+   document.body.append(bar);
+  };
+  show();
+ };
+ if(reg.waiting&&navigator.serviceWorker.controller)offer(reg.waiting);
+ reg.addEventListener('updatefound',()=>{const w=reg.installing;w?.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)offer(w);});});
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloading)location.reload();});
+}
+if(__TEST__){Object.assign(window,{__chacha:{get session(){return session;},input,midi,db,backup,restore,defaults,settings:state.settings,saveSong,getSong,listSongs,exportPack,readChart:(id:string)=>getSong(id).then(p=>p?.charts),get status(){return session?.status;},get bundledReady(){return bundledReady;}}});}
 void boot();
-export type {Chart,SongPackage,Manifest};

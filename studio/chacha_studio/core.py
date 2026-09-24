@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get('CHACHA_DATA', str(ROOT / '_private' / 'studio')))
-VERSION = 'chacha-generator-v1'
+VERSION = 'chacha-generator-v2'
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -44,52 +44,36 @@ def probe(path):
         raise ValueError('音源は480秒・2チャンネルまでです')
     return {'durationMs': round(duration * 1000), 'channels': int(a['channels']), 'sampleRate': int(a['sample_rate'])}
 
-def generate(beats, duration, difficulty, audio_hash, sections=None):
-    limit = {'easy': 180, 'normal': 105, 'hard': 75}[difficulty]
-    notes = []
-    fast = 0
-    phase = int(audio_hash[:8], 16) % 4
-    for i, beat in enumerate(beats[:-1]):
-        gap = beats[i+1] - beat
-        if gap <= 0:
-            raise ValueError('拍の時刻順が不正です')
-        if difficulty == 'easy':
-            fractions = [0] if i % 2 == 0 else []
-        elif difficulty == 'normal':
-            fractions = [0, .5] if i % 8 in [2, 6, 7] else [0]
-        else:
-            fractions = [0, .5] if i % 8 < 6 else [0, .25, .5, .75]
-            if gap < 450 and i % 8 in [0, 4]:
-                fractions = [0]
-        for j, fraction in enumerate(fractions):
-            t = round(beat + gap * fraction)
-            if t < 800 or t > duration - 300:
-                continue
-            if notes and t - notes[-1]['timeMs'] < limit:
-                continue
-            max_fast = {'easy': 3, 'normal': 5, 'hard': 8}[difficulty]
-            if notes and t-notes[-1]['timeMs'] < gap*.5:
-                fast += 1
-            else:
-                fast = 0
-            if fast >= max_fast:
-                continue
-            ka = ((i // 2 + phase) % 8 == 3) if difficulty == 'easy' else ((i + phase) % 4 == 3 and j == 0) if difficulty == 'normal' else ((i + phase) % 4 in [2, 3] and j == 0)
-            notes.append({'id': f'n{len(notes)}', 'kind': 'tap', 'timeMs': t, 'color': 'ka' if ka else 'don', 'size': 'large' if i % 32 == 0 and j == 0 else 'normal'})
-    if not notes:
-        notes = [{'id': 'n0', 'kind': 'tap', 'timeMs': max(0, min(1000, duration-300)), 'color': 'don', 'size': 'normal'}]
-    if duration > 12000 and len(beats) > 24:
-        a = int(beats[max(8, len(beats)//2)])
-        b = min(duration-600, a+int((beats[1]-beats[0])*4))
-        if b > a:
-            notes = [n for n in notes if not a-90 <= n['timeMs'] <= b+90]
-            notes.append({'id': 'roll0', 'kind': 'roll', 'timeMs': a, 'endMs': b})
-    notes.sort(key=lambda n: n['timeMs'])
-    taps = [n for n in notes if n['kind']=='tap']
-    large = [n for n in taps if n['size']=='large']
-    for n in large[int(len(taps)*.1):]:
-        n['size']='normal'
-    return {'schemaVersion': 1, 'chartId': difficulty, 'difficulty': difficulty, 'offsetMs': 0, 'notes': notes}
+def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None):
+    """Draft chart for one difficulty. Deterministic for the same inputs."""
+    from .generator import generate as draft
+    return draft(beats, duration, difficulty, audio_hash, sections, features, downbeats)
+
+
+def load_features(directory, compute=False):
+    """Onset features saved by the analysis. Projects made before v2 have
+    none: with compute=True they are derived from the project's final audio."""
+    f = Path(directory) / 'features.json'
+    if f.exists():
+        try:
+            return json.loads(f.read_text())
+        except ValueError:
+            pass
+    audio = Path(directory) / 'song.m4a'
+    if not compute or not audio.exists():
+        return None
+    import soundfile as sf
+    from .generator import onset_features
+    pcm = Path(directory) / 'features.wav'
+    try:
+        subprocess.run([ffmpeg(), '-nostdin', '-v', 'error', '-y', '-i', str(audio), '-vn', '-ar', '22050', '-ac', '1', '-c:a', 'pcm_s16le', str(pcm)], check=True, timeout=120)
+        y, sr = sf.read(pcm, dtype='float32')
+        features = onset_features(y, sr)
+        write_json(f, features)
+        return features
+    finally:
+        pcm.unlink(missing_ok=True)
+
 
 def validate(project):
     import jsonschema
@@ -144,6 +128,36 @@ def export_project(project, directory, target):
         for name,b in files.items():z.writestr(name,b)
     return m
 
+def chorus_candidates(y, sr, duration, beats, window_ms=16000, count=3):
+    """Loudest 16 s stretches (at most three), separated so they are distinct
+    parts of the song, snapped to beats. Energy candidates only: they are
+    marked unconfirmed for the user to check."""
+    import numpy as np
+    if duration < window_ms + 8000:
+        return []
+    step = 1000
+    frames = np.array([float(np.mean(y[int(t / 1000 * sr):int((t + step) / 1000 * sr)] ** 2)) for t in range(0, duration - step, step)])
+    k = window_ms // step
+    scores = np.convolve(frames, np.ones(k) / k, mode='valid')
+    order = np.argsort(-scores)
+    chosen = []
+    for i in order:
+        start = int(i) * step
+        if start < 4000 or start + window_ms > duration - 2000:
+            continue
+        if any(abs(start - c) < window_ms + 8000 for c in chosen):
+            continue
+        chosen.append(start)
+        if len(chosen) == count:
+            break
+    out = []
+    for start in sorted(chosen):
+        if beats:
+            start = min(beats, key=lambda b: abs(b - start))
+        out.append((int(start), int(min(duration, start + window_ms))))
+    return out
+
+
 def analyze(source, directory, title, artist, progress=lambda *args:None):
     import numpy as np
     import librosa
@@ -164,6 +178,8 @@ def analyze(source, directory, title, artist, progress=lambda *args:None):
     tempo,frames=librosa.beat.beat_track(onset_envelope=onset,sr=sr,hop_length=256)
     bpm=float(np.asarray(tempo).ravel()[0]) if np.asarray(tempo).size else 120
     beats=[round(float(t)*1000) for t in librosa.frames_to_time(frames,sr=sr,hop_length=256)]
+    from .generator import onset_features,downbeat_phase_chroma,refine_beats
+    beats,bpm,beat_shift=refine_beats(y,sr,beats,bpm)
     beats=sorted(set(t for t in beats if 0<=t<duration))
     warnings=[]
     confidence='high'
@@ -171,22 +187,20 @@ def analyze(source, directory, title, artist, progress=lambda *args:None):
         bpm=120.;beats=list(range(0,duration,500));confidence='low';warnings.append('拍候補が少ないため仮の120 BPMです。先頭拍・BPMを手動調整してください。')
     elif np.std(np.diff(beats))/np.mean(np.diff(beats))>.15:
         confidence='medium';warnings.append('拍間隔が変化しています。先頭・中盤・末尾を試聴してください。')
+    features=onset_features(y,sr)
+    write_json(directory/'features.json',features)
+    phase=downbeat_phase_chroma(y,sr,beats,np.asarray(features['low'],dtype=float)/255,features['rate']) if confidence!='low' else 0
     rms=np.sqrt(np.mean(np.square(y.reshape(-1,1))))
     if rms<.005:
         confidence='low';warnings.append('静かな音源です。自動下書きを確認してください。')
     peaks=[round(float(np.max(np.abs(a))),4) for a in np.array_split(y,min(1400,len(y)))]
-    energies=[]
-    for start in range(8000,max(8001,duration-8000),16000):
-        end=min(start+16000,duration)
-        segment=y[int(start/1000*sr):int(end/1000*sr)]
-        if len(segment):energies.append((float(np.mean(segment**2)),start,end))
-    sections=[{'kind':'chorus','startMs':a,'endMs':b,'confirmed':False} for _,a,b in sorted(energies,reverse=True)[:3]]
-    sections.sort(key=lambda s:s['startMs'])
+    sections=[{'kind':'chorus','startMs':a,'endMs':b,'confirmed':False} for a,b in chorus_candidates(y,sr,duration,beats)]
     h=sha(audio)
     progress('GENERATING',80,'3つの難易度の譜面を作っています')
-    charts=[generate(beats,duration,d,h,sections) for d in ['easy','normal','hard']]
-    m={'schemaVersion':1,'packId':'song-'+h[:16],'revision':1,'title':title[:200] or '新しい曲','artist':artist[:200] or 'アーティスト未設定','durationMs':duration,'audio':{'path':'audio/song.m4a','sha256':h},'charts':[{'chartId':c['chartId'],'difficulty':c['difficulty'],'path':f"charts/{c['difficulty']}.json",'sha256':hashlib.sha256(json.dumps(c,separators=(',', ':')).encode()).hexdigest()} for c in charts],'beatTimesMs':beats,'downbeatIndices':list(range(0,len(beats),4)),'sections':sections,'generator':VERSION}
-    p={'projectId':directory.name,'revision':1,'manifest':m,'charts':charts,'waveform':peaks,'bpm':round(bpm,2),'confidence':confidence,'warnings':warnings+['自動下書き・要試聴。盛り上がりは音量からの候補で、歌詞のサビ判定ではありません。'],'analysis':{'sampleRate':sr,'hopLength':256,'audioSha256':h},'originalHash':sha(source),'decodedDurationMs':duration,'containerDurationMs':final_info['durationMs']}
+    downbeats=list(range(phase,len(beats),4))
+    charts=[generate(beats,duration,d,h,sections,features if confidence!='low' else None,downbeats) for d in ['easy','normal','hard']]
+    m={'schemaVersion':1,'packId':'song-'+h[:16],'revision':1,'title':title[:200] or '新しい曲','artist':artist[:200] or 'アーティスト未設定','durationMs':duration,'audio':{'path':'audio/song.m4a','sha256':h},'charts':[{'chartId':c['chartId'],'difficulty':c['difficulty'],'path':f"charts/{c['difficulty']}.json",'sha256':hashlib.sha256(json.dumps(c,separators=(',', ':')).encode()).hexdigest()} for c in charts],'beatTimesMs':beats,'downbeatIndices':downbeats,'sections':sections,'generator':VERSION}
+    p={'projectId':directory.name,'revision':1,'manifest':m,'charts':charts,'waveform':peaks,'bpm':round(bpm,2),'confidence':confidence,'warnings':warnings+['自動下書き・要試聴。盛り上がりは音量からの候補で、歌詞のサビ判定ではありません。'],'analysis':{'sampleRate':sr,'hopLength':256,'audioSha256':h,'beatShiftMs':round(beat_shift,1)},'originalHash':sha(source),'decodedDurationMs':duration,'containerDurationMs':final_info['durationMs']}
     validate(p)
     write_json(directory/'project.json',p)
     pcm.unlink(missing_ok=True)

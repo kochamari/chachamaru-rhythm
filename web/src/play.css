@@ -1,0 +1,83 @@
+/* Play screen. The canvas draws everything except the pause button, the
+   touch drum and dialogs, which stay in the DOM for input and accessibility. */
+.game-scene{
+ position:fixed;inset:0;
+ padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+ background:#1d1420;overflow:hidden;isolation:isolate;
+ touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+ z-index:20;
+}
+.game-scene .game-canvas{position:absolute;inset:0;width:100%!important;height:100%!important;display:block;z-index:1;pointer-events:none}
+
+.game-scene .pause-button{
+ position:absolute;z-index:6;
+ top:calc(var(--play-top,0px) + 9px * var(--play-scale,1));
+ right:calc(var(--play-right,0px) + 16px * var(--play-scale,1));
+ width:max(44px,calc(60px * var(--play-scale,1)));height:max(44px,calc(60px * var(--play-scale,1)));min-height:44px;padding:0;border-radius:50%;
+ display:flex;align-items:center;justify-content:center;gap:5px;
+ background:#1c1420d9;border:2.5px solid #ffd86b;box-shadow:0 3px 0 #0006;
+}
+.game-scene .pause-button span{display:block;width:5px;height:17px;border-radius:2px;background:#fff2ce}
+.game-scene .pause-button:hover{transform:none;filter:brightness(1.15)}
+
+/* Touch drum: rim (カッ) on both ends, skin (ドン) in the middle. */
+.game-scene .pads{
+ display:none;position:absolute;z-index:5;
+ left:calc(var(--play-left,0px) + var(--pads-x,16px));top:calc(var(--play-top,0px) + var(--pads-y,70%));
+ width:var(--pads-w,96%);height:var(--pads-h,22%);
+ grid-template-columns:1fr 1.25fr 1.25fr 1fr;gap:0;
+ border-radius:999px;padding:6px;
+ background:linear-gradient(#6b3f24,#3d2416);
+ box-shadow:0 6px 0 #1e1726,inset 0 0 0 3px #1e1726,inset 0 4px 0 #9a5a3288;
+}
+.game-scene.mode-touch .pads{display:grid}
+.game-scene .pad{
+ position:relative;min-height:44px;height:100%;padding:0;border:0;border-radius:0;
+ touch-action:none;user-select:none;-webkit-user-select:none;
+ display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+ color:#fff7e0;font-weight:900;transition:none;
+}
+.game-scene .pad:hover{transform:none;filter:none}
+.game-scene .pad span{font-size:clamp(18px,3.4vh,34px);letter-spacing:.06em;text-shadow:0 2px 0 #0007}
+.game-scene .pad small{font-size:11px;font-weight:800;opacity:.7}
+.game-scene .pad.ka{background:radial-gradient(ellipse at 50% 40%,#2a7f95 0%,#16505e 70%,#10323c 100%)}
+.game-scene .pad.rim-left{border-radius:999px 0 0 999px;box-shadow:inset -3px 0 0 #1e1726}
+.game-scene .pad.rim-right{border-radius:0 999px 999px 0;box-shadow:inset 3px 0 0 #1e1726}
+.game-scene .pad.don{background:radial-gradient(ellipse at 50% 35%,#fffaf0 0%,#f6e6c0 62%,#dcc28d 100%);color:#8e2a22}
+.game-scene .pad.don span{text-shadow:0 1px 0 #fff}
+.game-scene .pad.skin-left{border-radius:120px 0 0 120px / 999px 0 0 999px}
+.game-scene .pad.skin-right{border-radius:0 120px 120px 0 / 0 999px 999px 0;box-shadow:inset 2px 0 0 #b8966066}
+.game-scene .pad.don.pressed{background:radial-gradient(ellipse at 50% 40%,#ffb08a 0%,#f35a43 60%,#b8322a 100%);color:#fff}
+.game-scene .pad.don.pressed span{text-shadow:0 2px 0 #0005}
+.game-scene .pad.ka.pressed{background:radial-gradient(ellipse at 50% 40%,#b5f3ff 0%,#2cbbd5 60%,#1b7f98 100%)}
+
+.game-scene .play-overlay{position:absolute;inset:0;z-index:10;display:grid;place-items:center;background:#140c1899;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.game-scene .play-overlay[hidden]{display:none}
+.play-dialog{
+ width:min(460px,calc(100% - 32px));max-height:calc(100% - 24px);overflow:auto;
+ background:#fff6df;border:3px solid #1e1726;border-radius:22px;padding:24px 26px 18px;text-align:center;
+ box-shadow:0 0 0 5px #ffd86b,0 16px 50px #0008;color:#1e1726;
+}
+.play-dialog .eyebrow{color:#b8322a}
+.play-dialog h2{font-size:clamp(24px,4.4vh,34px);margin:6px 0 8px;font-family:var(--round)}
+.play-dialog p{font-size:14px;color:#5a4a3a;margin:0 0 6px;line-height:1.7}
+.play-dialog .primary{display:block;width:100%;margin:14px 0 8px;font-size:19px}
+.play-dialog .dialog-hint{font-size:12px;color:#8a7658;min-height:1em}
+.play-dialog .text-link{font-size:13px;color:#6b5a44}
+.pause-options{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0 14px;font-size:13px;flex-wrap:wrap}
+.pause-options select{min-height:40px;border-radius:10px;border:2px solid #d9c9a6;background:#fff;padding:0 8px}
+
+.game-scene .rotate-hint{
+ display:none;position:absolute;z-index:7;left:50%;transform:translateX(-50%);top:calc(var(--play-top,0px) + 330px * var(--play-scale,1));
+ animation:rotate-hint-out .6s 6s forwards;
+ background:#1c1420e6;color:#fff2ce;border:2px solid #ffd86b;border-radius:999px;font-size:13px;padding:8px 16px;min-height:40px;white-space:nowrap
+}
+@media (orientation:portrait) and (max-width:700px){.game-scene .rotate-hint{display:block}}
+@keyframes rotate-hint-out{to{opacity:0;visibility:hidden}}
+body:has(.game-scene){overflow:hidden;overscroll-behavior:none}
+.note-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 14px;margin:10px 0 2px;font-size:13px;font-weight:800;color:#3b2f2a}
+.note-legend span{display:inline-flex;align-items:center;gap:6px}
+.note-legend .n{display:inline-block;width:22px;height:22px;border-radius:50%;border:3px solid #fff2ce;box-shadow:0 0 0 2px #1e1726}
+.note-legend .n.don{background:#f35a43}.note-legend .n.ka{background:#2cbbd5}
+.note-legend .n.big{width:30px;height:30px}
+.note-legend .n.roll{width:40px;border-radius:12px;background:#ffc93c}

@@ -13,3 +13,4 @@ playwright-report/
 output/
 reports/
 DELIVERY.md
+.claude/

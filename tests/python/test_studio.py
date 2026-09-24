@@ -188,3 +188,16 @@ def test_transcode_failure_preserves_source(tmp_path,monkeypatch):
     monkeypatch.setattr(core,'ffmpeg',lambda:'/not-an-executable')
     with pytest.raises((OSError,subprocess.CalledProcessError)):core.analyze(source,tmp_path/'failed','fail','test')
     assert core.sha(source)==before
+
+
+def test_old_projects_get_features_for_regeneration(analyzed):
+    p, d = analyzed
+    saved = d / 'features.json'
+    assert saved.exists()
+    original = json.loads(saved.read_text())
+    saved.unlink()
+    assert core.load_features(d) is None
+    again = core.load_features(d, compute=True)
+    assert saved.exists() and again['rate'] == original['rate'] and len(again['full']) == len(original['full'])
+    chart = core.generate(p['manifest']['beatTimesMs'], p['manifest']['durationMs'], 'normal', p['manifest']['audio']['sha256'], p['manifest']['sections'], again, p['manifest']['downbeatIndices'])
+    assert any(n['kind'] == 'tap' for n in chart['notes'])
