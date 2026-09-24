@@ -31,3 +31,7 @@
 .quick-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .quick-actions button{min-height:40px;padding:8px 14px;font-size:13px}
 @media(max-width:700px){.quick-item{grid-template-columns:1fr}.quick-actions{justify-content:flex-start}}
+.mac-studio-callout{display:grid;justify-items:center;gap:8px;max-width:640px;margin:8px auto 14px;padding:18px 20px;border:2.5px solid var(--ink);border-radius:16px;background:#fff1c9;color:var(--ink);box-shadow:0 4px 0 var(--ink)}
+.mac-studio-callout strong{font-size:17px;font-weight:900}
+.mac-studio-callout span{font-size:14px;color:#5b4a38}
+.mac-studio-callout small{font-size:12px;color:#8c7b5e}
