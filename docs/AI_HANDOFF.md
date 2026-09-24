@@ -119,4 +119,6 @@ npm run audit:public
 
 ### 直近の検証で残した観察
 
+全面改修の公開run [35976493358](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35976493358) は両ブラウザの全30試験と配信が成功。ただしCIのmacOS WebKitでは、各試験の起動（`boot()`：タイトル表示と同梱4曲の導入完了まで）が約20秒かかる（ローカルは1秒未満、CIのChromiumは約3秒、本番ビルドを使うE08はローカルの約4倍で収まる）。このためE01が上限100秒に対し97秒と余裕が小さい。開発サーバーでの起動に特有と見られるが原因は未確定。E01が時間切れになったら、まず `boot()` の内訳（読み込みのタイミング）を記録して原因を特定する。判定窓や確認項目を緩めて通さないこと。
+
 関節修正commit `311eb58` は [再検証・公開run](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35955687869) で両ブラウザの全30試験と配信が成功しました。[先行run](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35955076260) ではWebKitの既存Studio試聴テスト1件で「試聴」から「停止」へ切り替わらず失敗。音源取得はHTTP 200で、同一コード・同一条件の再実行では成功しています。原因は未確定です。再発時は `tests/e2e/studio.spec.ts` の試聴開始と `web/src/screens/Studio.ts` のHTMLAudioElementの状態を調べ、合格条件を緩めないでください。

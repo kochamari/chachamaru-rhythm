@@ -1,12 +1,14 @@
 // Writes reports/acceptance.json from docs/06_ACCEPTANCE.md and the latest
 // local evidence. Device gates stay NOT_RUN until tested on real hardware;
-// deployment gates stay PENDING until the user publishes.
+// deployment gates stay PENDING until the user publishes; after a publish,
+// reports/deployment.json holds the permission, the Actions run and the
+// checks made on the public URL.
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 
 const doc=readFileSync('docs/06_ACCEPTANCE.md','utf8');
 const rows=[...doc.matchAll(/^\| ([UPMEVHD]\d\d) \| (\w+) \| ([^|]+) \| ([^|]+) \|$/gm)];
 const json=p=>{try{return JSON.parse(readFileSync(p,'utf8'));}catch{return null;}};
-const verify=json('reports/verify.json'),e2e=json('reports/e2e.json'),audit=json('reports/public-audit.json');
+const verify=json('reports/verify.json'),e2e=json('reports/e2e.json'),audit=json('reports/public-audit.json'),deployment=json('reports/deployment.json');
 const verifyPass=!!verify&&verify.results.every(r=>r.status==='PASS')&&verify.results.length===6;
 const e2eStats=e2e?.stats??{};
 const e2ePass=!!e2e&&(e2eStats.unexpected??1)===0&&(e2eStats.skipped??0)===0&&(e2eStats.expected??0)>=30;
@@ -33,7 +35,9 @@ const out=rows.map(([,id,category,condition,verification])=>{
  const kind=id[0];let status='PASS',ev=evidence[kind]??[],note;
  if(kind==='H'){status='NOT_RUN';ev=['docs/08_DEVICE_CHECK.md'];note='iPhone・TD-17の実機が未接続のため未実施。';}
  else if(kind==='D'){
+  const gate=deployment?.gates?.[id];
   if(id==='D02'){status=auditPass?'PASS':'FAIL';ev=['reports/public-audit.json'];}
+  else if(gate){status=gate.status;ev=['reports/deployment.json',...(gate.evidence??[])];note=gate.note;}
   else{status='PENDING';ev=[];note='公開（mainへの反映とGitHub Pages配信）はユーザーの確認後に行う。';}
  }else if(kind==='V'){note=visualNotes[id];}
  else if(!(verifyPass&&e2ePass))status='FAIL';
