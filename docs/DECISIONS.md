@@ -11,3 +11,4 @@
 - Service Workerは自身のbaseのindexだけをナビゲーションに返す。ルート用キャッシュが別の/test-repo/のHTMLを取り込まないようにし、両方のscopeで検証する。WebKitの検査APIによるオフライン指定はService Workerより前にナビゲーションを遮断したため、両ブラウザでテストサーバーの接続を実際に切る方法でも確認した。iOSでの完全終了後のオフライン起動は別途DEVICE確認。
 - 譜面再生成も子プロセスの非同期jobとする。候補生成後にrevisionを再照合してから確定し、途中の別編集があれば上書きせずエラーにする。取消・失敗時は保存済み版を保持する。
 - 音符表示の進み補正はレーン座標にだけ適用し、犬・背景・サビの時刻は音源時計に従う。音声時計が取得できなくなった場合も、最後の安全な位置で一時停止する。
+- GitHub初回CIではUbuntuのChromium 14件は通過し、WebKitは音声再生に関わる8件で停止した。Safari向けメディア検証はmacOSが近いというPlaywright公式の推奨に従い、CIをUbuntu/Chromium 14件とmacOS/WebKit 14件に分ける。テスト条件・判定窓は変更しない。Linux版WebKitの音声互換性を確認済みとは扱わない。参照: https://playwright.dev/docs/browsers#webkit

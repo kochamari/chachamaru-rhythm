@@ -12,7 +12,10 @@ concurrency:
   group: pages
   cancel-in-progress: false
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
   build:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -20,15 +23,7 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.13'
       - run: npm ci
-      - run: python -m venv .venv
-      - run: .venv/bin/python -m pip install -r studio/requirements.lock
-      - run: npx playwright install --with-deps chromium webkit
-      - run: npm run verify
-      - run: npm run test:e2e
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
