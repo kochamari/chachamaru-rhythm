@@ -14,4 +14,4 @@ CP8: ユーザーがGitHub管理とPages公開を依頼。公開先を kochamari
 
 CP9: GitHub Pages公開成功。https://kochamari.github.io/chachamaru-rhythm/ はログイン不要で応答200。Actions run 35947393755 でUbuntu/Chromium 14件・Apple Silicon macOS/WebKit 14件、型・lint・Unit98件・Python26件・公開素材検査が成功。公開URLの新規Chromeでデモ64秒を停止なし・166良・100万点で完走。通常Chromeの時計警告後も再開して完走。私用ZIPの取込・再読み込み保存・演奏開始、440×956表示を確認。DEVICE=NOT_RUN、DEPLOYMENT=PASS。
 
-CP10: ユーザーが4候補から選んだ手描きアニメ調にちゃちゃまるを更新。組み込みimage_genで同じ顔・色の透過パーツを作り、ホーム・選曲・演奏・仲間・結果へ統一して反映。頭・耳・前後脚・尾・スカーフの独立動作と瞬き、ドン／カッ別のバチ振りを維持。スマホ縦画面の余白も調整。npm run verifyとChromium/WebKitの全28件が成功（skip 0、flaky 0）。画像・生成プロンプト・公開許可とSHAを記録。公開更新前の確認を完了。
+CP10: ユーザーが4候補から選んだ手描きアニメ調にちゃちゃまるを更新。組み込みimage_genで同じ顔・色の透過パーツを作り、ホーム・選曲・演奏・仲間・結果へ統一して反映。頭・耳・前後脚・尾・スカーフの独立動作と瞬き、ドン／カッ別のバチ振りを維持。スマホ縦画面の余白も調整。npm run verifyとChromium/WebKitの全28件が成功（skip 0、flaky 0）。画像・生成プロンプト・公開許可とSHAを記録。GitHub Actions run 35951712507でも両ブラウザの検証・素材検査・Pages配信が成功。公開画像のSHA-256がローカルの採用素材と一致。通常Chromeの公開ホーム・選曲画面でも新しい絵柄を目視し、既存の私用パックが残っていることを確認。
