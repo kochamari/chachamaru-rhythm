@@ -33,10 +33,10 @@ Home → 曲一覧 → 難易度・操作方法 → 演奏 → 結果 → 再挑
 | 対象 | 実行場所 | 役割・データ |
 | --- | --- | --- |
 | Webプレイヤー | GitHub Pages／ローカルのブラウザ | 曲ZIPを読み込み、演奏する。曲・設定・結果をそのブラウザのIndexedDBに保存。ログイン不要 |
-| Studio UI | ローカルWeb画面 `#/studio` | 波形・拍・譜面・サビ区間を編集。自動保存、undo/redo、ZIP書出し |
+| Studio UI | `#/studio`（ローカル／公開版） | 波形・拍・譜面・サビ区間を編集。自動保存、undo/redo、ZIP書出し。公開版では既存ZIPを読み込んでブラウザ内で編集 |
 | Studio API | Macのloopback FastAPI | 音源をAAC-LC化し、最終音源をlibrosaで解析、3難易度の下書きを作る |
 
-GitHub Pagesは静的配信で、Python解析APIをホストしていません。公開サイトだけで元音源から解析できるとは案内しないでください。Studioで作ったZIPを自分の端末へ移し、公開プレイヤーへ取り込む構成です。自動生成譜面は編集前提の下書きで、原曲の演奏を完全に採譜したものではありません。
+GitHub Pagesは静的配信で、Python解析APIをホストしていません。公開サイトだけで元音源から解析できるとは案内しないでください。ローカルStudioで作ったZIPを自分の端末へ移し、公開プレイヤーへ取り込む構成です。公開版Studioでは既存ZIPの編集をブラウザ内に保存できます。自動生成譜面は編集前提の下書きで、原曲の演奏を完全に採譜したものではありません。
 
 市販曲・私用音源・参考動画や画像・Studioプロジェクトは `_private/` に置き、Git・`web/public/`・`dist/`・外部AIサービスへ送信しません。公開配信は自作／公開用素材だけです。`assets/manifest.json` が素材の出所・SHA-256の許可リストで、`npm run audit:public` が配信物全体を検査します。新しい公開素材は出所とハッシュも追加してください。
 
@@ -106,3 +106,8 @@ npm run audit:public
 完了時は [PROGRESS.md](../PROGRESS.md) を更新し、ローカルの `DELIVERY.md` に詳細を記録します。新しい環境では作成して構いません。`reports/`、`output/`、`DELIVERY.md` は通常Git対象外です。公開する引き継ぎ情報はこのガイド・README・docsへ記載し、私用ファイル名や端末の個人情報を含めないでください。
 
 現在の未確認項目は実機iPhone／TD-17と無線音声の打感です。WebKitの音声系CIはmacOSで実行しており、Linux WebKitで同じ音声動作を確認したとは扱いません。詳しい実装判断は [DECISIONS.md](DECISIONS.md)、素材の生成方法は [ASSET_PROMPTS.md](ASSET_PROMPTS.md) を参照してください。
+
+
+### 直近の検証で残した観察
+
+関節修正commit `311eb58` は [再検証・公開run](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35955687869) で両ブラウザの全30試験と配信が成功しました。[先行run](https://github.com/kochamari/chachamaru-rhythm/actions/runs/35955076260) ではWebKitの既存Studio試聴テスト1件で「試聴」から「停止」へ切り替わらず失敗。音源取得はHTTP 200で、同一コード・同一条件の再実行では成功しています。原因は未確定です。再発時は `tests/e2e/studio.spec.ts` の試聴開始と `web/src/screens/Studio.ts` のHTMLAudioElementの状態を調べ、合格条件を緩めないでください。
