@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -8,6 +9,7 @@ import signal
 import subprocess
 import sys
 import threading
+import unicodedata
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
@@ -48,8 +50,11 @@ async def guard(request:Request,call_next):
     response.headers['Cache-Control']='no-store' if request.url.path.startswith('/api/') else 'no-cache'
     return response
 
+# Identifies the folder this Studio runs from (the launcher reuses only its own).
+INSTANCE=hashlib.sha256(unicodedata.normalize('NFC',str(ROOT)).encode()).hexdigest()[:16]
+
 @app.get('/api/health')
-def health():return {'ok':True,'app':'chachamaru-studio','apiVersion':1,'ffmpeg':Path(ffmpeg()).exists(),'analysisAvailable':Path(ffprobe()).exists()}
+def health():return {'ok':True,'app':'chachamaru-studio','apiVersion':1,'studio':INSTANCE,'features':['quickPack'],'ffmpeg':Path(ffmpeg()).exists(),'analysisAvailable':Path(ffprobe()).exists()}
 
 @app.get('/api/session')
 def session():return {'csrfToken':TOKEN}
@@ -65,7 +70,7 @@ def projects():
     return result
 
 @app.post('/api/jobs',status_code=202)
-async def create_job(audio:UploadFile=File(...),title:str=Form('新しい曲'),artist:str=Form('アーティスト未設定')):
+async def create_job(audio:UploadFile=File(...),title:str=Form(''),artist:str=Form(''),filename:str=Form('')):
     global STAGING
     with LOCK:
         if STAGING or any(j['process'].poll() is None for j in JOBS.values()):raise HTTPException(409,'別の解析が進行中です')
@@ -83,7 +88,9 @@ async def create_job(audio:UploadFile=File(...),title:str=Form('新しい曲'),a
             write_json(d/'status.json',{'status':'STAGED','progress':1,'message':'音源を確認しています'})
             log=(d/'worker.log').open('w')
             env={**os.environ,'PYTHONPATH':str(ROOT/'studio'),'NUMBA_CACHE_DIR':str(ROOT/'_private'/'numba-cache')}
-            process=subprocess.Popen([sys.executable,'-m','chacha_studio.worker',str(source),str(d),title[:200],artist[:200]],stdout=log,stderr=log,start_new_session=True,env=env)
+            # Blank title/artist: the worker reads the file's tags, then its name.
+            name=Path(filename.replace('\\','/')).stem[:200] if filename else ''
+            process=subprocess.Popen([sys.executable,'-m','chacha_studio.worker',str(source),str(d),title[:200],artist[:200],'--name='+name],stdout=log,stderr=log,start_new_session=True,env=env)
             log.close();JOBS[jobid]={'process':process,'directory':d}
         except BaseException:
             shutil.rmtree(d,ignore_errors=True);raise

@@ -42,7 +42,20 @@ def probe(path):
     duration = float(data['format']['duration'])
     if duration <= 0 or duration > 480 or int(a['channels']) > 2:
         raise ValueError('音源は480秒・2チャンネルまでです')
-    return {'durationMs': round(duration * 1000), 'channels': int(a['channels']), 'sampleRate': int(a['sample_rate'])}
+    # Title and artist tags (ID3 in MP3, iTunes atoms in M4A, INFO in WAV).
+    tags = {}
+    for source in [a.get('tags') or {}, data['format'].get('tags') or {}]:
+        for k, v in source.items():
+            tags[k.lower()] = str(v).strip()
+    return {'durationMs': round(duration * 1000), 'channels': int(a['channels']), 'sampleRate': int(a['sample_rate']),
+            'title': tags.get('title', ''), 'artist': tags.get('artist') or tags.get('album_artist') or ''}
+
+def song_labels(title, artist, info, name=''):
+    """Title and artist for a new song: what the user typed, else the file's
+    tags, else the file name (title only)."""
+    title = (title or '').strip() or info.get('title', '') or (name or '').strip() or '新しい曲'
+    artist = (artist or '').strip() or info.get('artist', '') or 'アーティスト未設定'
+    return title[:200], artist[:200]
 
 def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None):
     """Draft chart for one difficulty. Deterministic for the same inputs."""
@@ -158,13 +171,14 @@ def chorus_candidates(y, sr, duration, beats, window_ms=16000, count=3):
     return out
 
 
-def analyze(source, directory, title, artist, progress=lambda *args:None):
+def analyze(source, directory, title, artist, progress=lambda *args:None, name=''):
     import numpy as np
     import librosa
     import soundfile as sf
     directory=Path(directory)
     directory.mkdir(parents=True,exist_ok=True)
     info=probe(source)
+    title,artist=song_labels(title,artist,info,name)
     progress('TRANSCODING',15,'iPhone用の音源を作成しています')
     audio=directory/'song.m4a'
     subprocess.run([ffmpeg(),'-nostdin','-v','error','-y','-i',str(source),'-map','0:a:0','-vn','-c:a','aac','-profile:a','aac_low','-b:a','192k','-ar','44100','-ac',str(info['channels']),str(audio)],check=True,timeout=180)
@@ -199,7 +213,7 @@ def analyze(source, directory, title, artist, progress=lambda *args:None):
     progress('GENERATING',80,'3つの難易度の譜面を作っています')
     downbeats=list(range(phase,len(beats),4))
     charts=[generate(beats,duration,d,h,sections,features if confidence!='low' else None,downbeats) for d in ['easy','normal','hard']]
-    m={'schemaVersion':1,'packId':'song-'+h[:16],'revision':1,'title':title[:200] or '新しい曲','artist':artist[:200] or 'アーティスト未設定','durationMs':duration,'audio':{'path':'audio/song.m4a','sha256':h},'charts':[{'chartId':c['chartId'],'difficulty':c['difficulty'],'path':f"charts/{c['difficulty']}.json",'sha256':hashlib.sha256(json.dumps(c,separators=(',', ':')).encode()).hexdigest()} for c in charts],'beatTimesMs':beats,'downbeatIndices':downbeats,'sections':sections,'generator':VERSION}
+    m={'schemaVersion':1,'packId':'song-'+h[:16],'revision':1,'title':title,'artist':artist,'durationMs':duration,'audio':{'path':'audio/song.m4a','sha256':h},'charts':[{'chartId':c['chartId'],'difficulty':c['difficulty'],'path':f"charts/{c['difficulty']}.json",'sha256':hashlib.sha256(json.dumps(c,separators=(',', ':')).encode()).hexdigest()} for c in charts],'beatTimesMs':beats,'downbeatIndices':downbeats,'sections':sections,'generator':VERSION}
     p={'projectId':directory.name,'revision':1,'manifest':m,'charts':charts,'waveform':peaks,'bpm':round(bpm,2),'confidence':confidence,'warnings':warnings+['自動下書き・要試聴。盛り上がりは音量からの候補で、歌詞のサビ判定ではありません。'],'analysis':{'sampleRate':sr,'hopLength':256,'audioSha256':h,'beatShiftMs':round(beat_shift,1)},'originalHash':sha(source),'decodedDurationMs':duration,'containerDurationMs':final_info['durationMs']}
     validate(p)
     write_json(directory/'project.json',p)

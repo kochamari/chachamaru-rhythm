@@ -5,3 +5,29 @@
 .studio-heading .eyebrow{color:var(--gold)}
 .studio-heading .local-indicator{color:#cfe7c4}
 .studio-heading .button{background:#1e1726cc;color:#fff4d8;border-color:#ffd86b88}
+
+/* One-drop pack making */
+.quick-drop{display:grid;justify-items:center;gap:6px;margin:6px auto 10px;max-width:640px;padding:26px 22px 22px;border:3px dashed #d9a441;border-radius:20px;background:#fff6dc;color:var(--ink);cursor:pointer;transition:background .15s,border-color .15s,transform .15s}
+.quick-drop strong{font-size:22px;font-weight:900}
+.quick-drop span{font-size:14px;color:#6b5a48}
+.quick-drop em{font-style:normal;font-size:12px;color:#8c7b5e}
+.quick-drop .button{margin-top:8px}
+.quick-drop:hover,.dragging .quick-drop{background:#ffefc2;border-color:var(--don);transform:scale(1.01)}
+.studio-page.dragging,.dragging .studio-page{outline:4px dashed var(--gold);outline-offset:-10px}
+.quick-note{font-size:12px!important}
+.quick-list{display:grid;gap:10px;max-width:1000px;margin:0 auto 16px}
+.quick-list:empty{display:none}
+.quick-item{display:grid;grid-template-columns:1fr auto;gap:8px 16px;align-items:center;background:var(--cream);border:2.5px solid var(--ink);border-radius:14px;padding:12px 16px;box-shadow:0 4px 0 var(--ink);color:var(--ink)}
+.quick-main{display:grid;gap:3px;min-width:0}
+.quick-main strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quick-status{font-size:13px;color:#6b5a48}
+.quick-status b{font-size:16px;color:var(--ink)}
+.quick-bar{grid-column:1/-1;height:8px;border-radius:99px;background:#e8dcc2;overflow:hidden}
+.quick-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold-deep),var(--don));transition:width .4s}
+.quick-item.done .quick-bar,.quick-item.failed .quick-bar{display:none}
+.quick-item.done{border-color:#2f7d4a;box-shadow:0 4px 0 #2f7d4a}
+.quick-item.failed{border-color:var(--don-dark);box-shadow:0 4px 0 var(--don-dark)}
+.quick-item.failed .quick-status{color:var(--don-dark)}
+.quick-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.quick-actions button{min-height:40px;padding:8px 14px;font-size:13px}
+@media(max-width:700px){.quick-item{grid-template-columns:1fr}.quick-actions{justify-content:flex-start}}

@@ -1,11 +1,20 @@
 import {spawn,spawnSync} from 'node:child_process';
 import {createServer} from 'node:net';
+import {createHash} from 'node:crypto';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
 const root=path.resolve(import.meta.dirname,'..');process.chdir(root);
 const route=process.argv.includes('--game')?'songs':'studio';
 if(process.argv.includes('--reuse')){
- try{const r=await fetch('http://127.0.0.1:8787/api/health',{signal:AbortSignal.timeout(1500)});const data=await r.json();if(data.app==='chachamaru-studio'&&data.ok){if(!process.argv.includes('--no-open'))spawnSync('open',[`http://127.0.0.1:8787/#/${route}`],{stdio:'ignore'});console.log(`http://127.0.0.1:8787/#/${route}`);process.exit(0);}}catch{/* Start a new local instance below. */}
+ // Reuse only a Studio started from this folder. Another copy (an older
+ // version elsewhere) on the same port would silently open the old Studio.
+ const self=createHash('sha256').update(root.normalize('NFC')).digest('hex').slice(0,16);
+ let data=null;
+ try{const r=await fetch('http://127.0.0.1:8787/api/health',{signal:AbortSignal.timeout(1500)});data=await r.json();}catch{/* Nothing running: start below. */}
+ if(data?.app==='chachamaru-studio'&&data.ok){
+  if(data.studio!==self){console.error('ポート8787で、別のフォルダ（以前の版など）の譜面工房が動いています。\nそちらのターミナルで Control+C を押して終了してから、もう一度開いてください。\n（同じ8787で開くと、ゲームの保存データもそのまま使えます）');process.exit(1);}
+  if(!process.argv.includes('--no-open'))spawnSync('open',[`http://127.0.0.1:8787/#/${route}`],{stdio:'ignore'});console.log(`http://127.0.0.1:8787/#/${route}`);process.exit(0);
+ }
 }
 if(!existsSync('.venv/bin/python')){console.error('初回セットアップ: python3 -m venv .venv && .venv/bin/python -m pip install -r studio/requirements.lock');process.exit(1);}
 if(!process.argv.includes('--no-build')){const build=spawnSync('npm',['run','build'],{stdio:'inherit'});if(build.status)process.exit(build.status);}

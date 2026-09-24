@@ -201,3 +201,40 @@ def test_old_projects_get_features_for_regeneration(analyzed):
     assert saved.exists() and again['rate'] == original['rate'] and len(again['full']) == len(original['full'])
     chart = core.generate(p['manifest']['beatTimesMs'], p['manifest']['durationMs'], 'normal', p['manifest']['audio']['sha256'], p['manifest']['sections'], again, p['manifest']['downbeatIndices'])
     assert any(n['kind'] == 'tap' for n in chart['notes'])
+
+def test_song_labels_prefer_typed_then_tags_then_file_name():
+    tags={'title':'タグの曲名','artist':'タグの歌手'}
+    assert core.song_labels('入力した曲','入力した歌手',tags,'file')==('入力した曲','入力した歌手')
+    assert core.song_labels('  ','',tags,'file')==('タグの曲名','タグの歌手')
+    assert core.song_labels('','',{'title':'','artist':''},'my-song')==('my-song','アーティスト未設定')
+    assert core.song_labels('','',{},'')==('新しい曲','アーティスト未設定')
+    assert len(core.song_labels('x'*300,'y'*300,{},'')[0])==200
+
+@pytest.mark.parametrize('ext',['mp3','m4a'])
+def test_probe_reads_title_and_artist_tags(tmp_path,ext):
+    target=tmp_path/f'tagged.{ext}'
+    subprocess.run([core.ffmpeg(),'-nostdin','-v','error','-y','-i',str(core.ROOT/'fixtures/diagnostic.wav'),'-t','3','-metadata','title=好きな曲','-metadata','artist=ちゃちゃまる楽団',str(target)],check=True,timeout=60)
+    info=core.probe(target)
+    assert (info['title'],info['artist'])==('好きな曲','ちゃちゃまる楽団')
+
+def test_drop_job_without_labels_names_the_song_from_tags(client,tmp_path):
+    c,h,_=client
+    tagged=tmp_path/'dropped-file.mp3'
+    subprocess.run([core.ffmpeg(),'-nostdin','-v','error','-y','-i',str(core.ROOT/'fixtures/diagnostic.wav'),'-metadata','title=タグの曲','-metadata','artist=タグの楽団',str(tagged)],check=True,timeout=60)
+    r=c.post('/api/jobs',headers=h,files={'audio':('dropped-file.mp3',tagged.read_bytes(),'audio/mpeg')},data={'title':'','artist':'','filename':'dropped-file.mp3'})
+    assert r.status_code==202
+    jid=r.json()['jobId'];deadline=time.time()+90
+    while time.time()<deadline:
+        data=c.get('/api/jobs/'+jid,headers=h).json()
+        if data['status'] in ['REVIEW_READY','ERROR']:break
+        time.sleep(.1)
+    assert data['status']=='REVIEW_READY',data
+    m=c.get('/api/projects/'+jid,headers=h).json()['manifest']
+    assert (m['title'],m['artist'])==('タグの曲','タグの楽団')
+    assert c.post(f'/api/projects/{jid}/export',headers=h,json={}).status_code==200
+
+def test_health_identifies_this_studio_for_the_launcher(client):
+    c,_,_=client
+    data=c.get('/api/health').json()
+    assert data['studio']==server.INSTANCE and len(data['studio'])==16
+    assert 'quickPack' in data['features']
