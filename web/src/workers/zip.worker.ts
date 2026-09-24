@@ -1,0 +1,2 @@
+import {unpack,readFiles} from '../packs/zip';
+self.onmessage=async e=>{try{const pack=await readFiles(unpack(new Uint8Array(e.data)));const audioBytes=await pack.audio.arrayBuffer(),coverBytes=await pack.cover?.arrayBuffer();self.postMessage({pack:{manifest:pack.manifest,charts:pack.charts,audioBytes,audioType:pack.audio.type,coverBytes,coverType:pack.cover?.type}}, {transfer:coverBytes?[audioBytes,coverBytes]:[audioBytes]});}catch(err){self.postMessage({error:err instanceof Error?err.message:String(err)});}};

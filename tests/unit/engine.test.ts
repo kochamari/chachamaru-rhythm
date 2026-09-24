@@ -1,0 +1,39 @@
+import {describe,it,expect} from 'vitest';
+import {Engine} from '../../web/src/game/Engine';
+import {ClockBridge,normalizeTimestamp} from '../../web/src/audio/ClockBridge';
+import {midiNote} from '../../web/src/input/InputRouter';
+import type {Chart,Note,Color} from '../../contracts/public-types';
+const tap=(id:string,timeMs:number,color:Color='don',large=false):Note=>({id,timeMs,kind:'tap',color,size:large?'large':'normal'});
+const chart=(notes:Note[],offsetMs=0):Chart=>({schemaVersion:1,chartId:'normal',difficulty:'normal',offsetMs,notes});
+const engine=(notes:Note[],offset=0)=>{const e=new Engine(chart(notes,offset),'run');e.active=true;return e;};
+const hit=(e:Engine,time:number,color:Color='don',id=String(Math.random()),receipt=time)=>e.hit({id,runId:'run',color,inputSongMs:time,receiptSongMs:receipt,source:'keyboard'});
+describe('chacha-v1 deterministic engine',()=>{
+ it.each([[-91,null],[-90,'ok'],[-46,'ok'],[-45,'great'],[0,'great'],[45,'great'],[46,'ok'],[90,'ok'],[91,null]])('U01 boundary %s', (delta,outcome)=>{const e=engine([tap('n',1000)]);expect(hit(e,1000+Number(delta))).toBe(outcome);});
+ it('U02 wrong color preserves note and permits correct hit',()=>{const e=engine([tap('n',1000)]);expect(hit(e,1000,'ka')).toBe(null);expect(e.snapshot().combo).toBe(0);expect(hit(e,1020)).toBe('great');expect(e.snapshot().score).toBe(1000000);});
+ it('U03 oldest same-color candidate wins',()=>{const e=engine([tap('a',1000),tap('b',1100)]);hit(e,1080);expect(e.outcomes.get('a')).toBe('ok');expect(e.outcomes.has('b')).toBe(false);});
+ it('U04 unique IDs deduplicate, identical payload does not',()=>{const e=engine([tap('a',1000),tap('b',1020)]);hit(e,1000,'don','x');hit(e,1000,'don','x');expect(e.snapshot().great).toBe(1);hit(e,1000,'don','y');expect(e.snapshot().great).toBe(2);});
+ it('U05 large single hit and no second-hit bonus',()=>{const e=engine([tap('a',1000,'don',true)]);hit(e,1000);hit(e,1000);expect(e.snapshot()).toMatchObject({score:1000000,great:1,combo:1});});
+ it('U06 rolls use half-open boundaries and one credit per event',()=>{const e=engine([tap('a',0),{id:'r',kind:'roll',timeMs:1000,endMs:2000}]);hit(e,0);expect(hit(e,999)).toBe(null);hit(e,1000,'don','start');hit(e,1000,'don','start');hit(e,1999,'ka');expect(hit(e,2000)).toBe(null);expect(e.snapshot()).toMatchObject({rollHits:2,rollBonus:200,combo:1,fullCombo:true});});
+ it('U07 exact integer million with mixed weights',()=>{const e=engine(Array.from({length:271},(_,i)=>tap(String(i),i*100,'don',i%7===0)));for(const n of e.taps)hit(e,n.timeMs);expect(e.snapshot().baseScore).toBe(1000000);expect(e.snapshot().gauge).toBe(100);});
+ it('U08 miss resets combo; gauge is clamped at each chronological commit',()=>{const e=engine([tap('a',0),tap('b',500),tap('c',1000),tap('d',1500)]);e.advance(171);hit(e,500);hit(e,1090);hit(e,1500);expect(e.snapshot()).toMatchObject({great:2,ok:1,miss:1,combo:3,maxCombo:3,gauge:75,accuracy:.625,baseScore:625000,fullCombo:false});});
+ it('U09 timely timestamp within 80ms grace succeeds; late strike does not',()=>{const e=engine([tap('a',1000)]);expect(hit(e,1090,'don','x',1170)).toBe('ok');const f=engine([tap('a',1000)]);expect(hit(f,1091,'don','x',1091)).toBe(null);f.advance(1170);expect(f.snapshot().miss).toBe(0);f.advance(1171);expect(f.snapshot().miss).toBe(1);});
+ it('U10 later result waits for earlier miss before committing',()=>{const e=engine([tap('a',1000),tap('b',1100,'ka')]);hit(e,1100,'ka');expect(e.snapshot().combo).toBe(0);e.advance(1171);expect(e.snapshot()).toMatchObject({combo:1,maxCombo:1,miss:1,great:1});});
+ it('U10 out-of-order delivery is chronological',()=>{const e=engine([tap('a',1000),tap('b',1060,'ka')]);hit(e,1060,'ka','b',1060);hit(e,1000,'don','a',1070);expect(e.snapshot()).toMatchObject({combo:2,great:2,allGreat:true});});
+ it('U11 expired delivery cannot change finalized outcomes',()=>{const e=engine([tap('a',1000)]);hit(e,1000,'don','x',1171);expect(e.snapshot()).toMatchObject({miss:1,great:0,timingUnstable:true});});
+ it('run IDs, nonfinite timestamps, paused and count-in are ignored',()=>{const e=engine([tap('a',0)]);e.active=false;hit(e,0);e.advance(10000);expect(e.snapshot().resolved).toBe(0);e.active=true;expect(hit(e,NaN)).toBe(null);expect(e.hit({id:'bad',runId:'old',color:'don',inputSongMs:0,receiptSongMs:0,source:'keyboard'})).toBe(null);hit(e,0);expect(e.snapshot().allGreat).toBe(true);});
+ it.each([30,60,120])('U20 renderer %i fps / dropped frames cannot change replay',fps=>{const notes=Array.from({length:200},(_,i)=>tap(String(i),500+i*200,i%3?'don':'ka'));const e=engine(notes);let last=0;for(const n of e.taps){for(let t=last;t<n.timeMs;t+=1000/fps)e.advance(t);hit(e,n.timeMs,n.color);last=n.timeMs;}e.advance(50000);expect(e.snapshot()).toMatchObject({baseScore:1000000,maxCombo:200,miss:0});});
+ it('U21 absolute clock has no accumulated 8 minute drift',()=>{const source={currentTime:0};let now=1000;const c=new ClockBridge(source,()=>now);for(const t of [0,1,120000,240000,479999]){source.currentTime=t/1000+2;now=t+3000;expect(c.songAt(now,2,0,0)).toBeCloseTo(t,6);}});
+ it('no taps is rejected',()=>expect(()=>engine([])).toThrow());
+ it('roll never steals a valid tap',()=>{const e=engine([tap('a',1000),{id:'r',kind:'roll',timeMs:900,endMs:1500}]);hit(e,1000);expect(e.snapshot()).toMatchObject({great:1,rollHits:0});});
+});
+describe('clock bridge',()=>{
+ it.each([[1000,1005,10000,'performance',1000],[1000000001000,1005,1000000000000,'epoch',1000],[0,1005,10000,'receipt',1005],[NaN,1005,10000,'receipt',1005],[9000,1005,10000,'receipt',1005],[-10000,1005,10000,'receipt',1005]])('U17 timestamp %s', (stamp,receipt,origin,mode,time)=>{expect(normalizeTimestamp(Number(stamp),Number(receipt),Number(origin))).toMatchObject({mode,time});});
+ it('U18 output clock does not add latency twice',()=>{const source={currentTime:10.3,baseLatency:.1,outputLatency:.2,getOutputTimestamp:()=>({contextTime:10,performanceTime:10000})};const c=new ClockBridge(source,()=>10000);expect(c.mode).toBe('output');expect(c.songAt(10000,9,0,0)).toBe(1000);});
+ it('U18 render fallback ignores advisory latency',()=>{const c=new ClockBridge({currentTime:10},()=>10000);expect(c.mode).toBe('render');expect(c.songAt(10000,9,0,0)).toBe(1000);});
+ it.each([-100,100])('U19 correction sign %i',offset=>{const c=new ClockBridge({currentTime:10},()=>10000);expect(c.songAt(10000,9,0,offset)).toBe(1000-offset);expect(c.songAt(10000-offset,9,0,0)).toBeCloseTo(1000-offset);const visual=c.songAt(10000,9,0,0)+offset;expect(visual).toBe(1000+offset);const e=engine([tap('a',1000)],offset);expect(hit(e,1000+offset)).toBe('great');});
+ it('invalid and nonmonotonic output timestamps are not accepted as current audio',()=>{let contextTime=10;const c=new ClockBridge({currentTime:11,getOutputTimestamp:()=>({contextTime,performanceTime:10000})},()=>10000);c.audioAt(10000);contextTime=9;expect(()=>c.audioAt(10000)).toThrow();});
+});
+describe('MIDI parsing',()=>{
+ it.each([[0x80,38,80],[0x90,38,0],[0xb0,7,127],[0xe0,127,127],[0xfe],[0x90,128,80],[0x90,38,128],[0x90,-1,80],[0x90,38,NaN]])('U12 rejects %j',(...data)=>expect(midiNote(data)).toBe(null));
+ it('U13 accepts repeated same-note events 20ms apart without a debounce',()=>{expect([1000,1020].map(()=>midiNote([0x99,38,1]))).toEqual([{channel:9,note:38,velocity:1},{channel:9,note:38,velocity:1}]);});
+});

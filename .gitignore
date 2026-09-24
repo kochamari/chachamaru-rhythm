@@ -1,0 +1,15 @@
+node_modules/
+.venv/
+_private/
+dist/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+.env*
+!.env.example
+test-results/
+playwright-report/
+output/
+reports/
+DELIVERY.md

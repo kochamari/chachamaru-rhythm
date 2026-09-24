@@ -1,0 +1,8 @@
+[project]
+name = "chachamaru-studio"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "uvicorn", "librosa", "numpy", "scipy", "soundfile", "imageio-ffmpeg", "python-multipart", "jsonschema"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "studio"]

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "path": "web/public/original-assets/festival.webp",
+      "sha256": "fa55bc92d26128406c415d978f5dedf51b46ca22a1ff05e2a09f6f0e2a37c47a",
+      "provenance": "Original image generated with built-in image_gen",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    },
+    {
+      "path": "web/public/original-demo/himawari.zip",
+      "sha256": "6394fff44d2ff88e0b6928506171a4ff8c035b888ab09f1abe65fb394d3af409",
+      "provenance": "Original composition and charts generated locally by scripts/create-demo.py",
+      "permission": "Created for this project; included in public build; no user-provided private media"
+    }
+  ],
+  "codeAssets": [
+    {
+      "path": "web/src/render/Character.ts",
+      "provenance": "Original SVG rig, 11 independent animated groups"
+    },
+    {
+      "path": "web/src/audio/AudioEngine.ts",
+      "provenance": "Original Web Audio synthesized percussion and event chimes"
+    }
+  ],
+  "developmentFixtures": [
+    {
+      "path": "fixtures/diagnostic.wav",
+      "sha256": "a0f71389ca2100d8caf72e4031c9ad9b2d9fbea19fe2821595f0dede1f7986b9",
+      "provenance": "Locally synthesized diagnostic rhythm; no user-provided media; not included in dist"
+    },
+    {
+      "path": "fixtures/diagnostic-pack.zip",
+      "sha256": "8888b7c783c61e99d02afd8487a1f7e5808de6e22d6e893ebc066864b22f2833",
+      "provenance": "Locally synthesized diagnostic rhythm; no user-provided media; not included in dist"
+    }
+  ]
+}

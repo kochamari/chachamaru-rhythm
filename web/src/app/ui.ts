@@ -1,0 +1,8 @@
+import {BRAND} from './brand';
+import {flowerSvg} from '../render/Character';
+export const escape=(v:unknown)=>String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]!));
+export function header(active=''){return `<header class="topbar"><a class="brand" href="#/">${flowerSvg()}<span>${BRAND.short}<small>太鼓の達人</small></span></a><nav aria-label="メインメニュー"><a href="#/songs" ${active==='songs'?'aria-current="page"':''}>曲をえらぶ</a><a href="#/studio" ${active==='studio'?'aria-current="page"':''}>譜面工房</a><a href="#/settings" ${active==='settings'?'aria-current="page"':''}>設定</a><a class="connection" href="#/diagnostics"><i></i> 接続診断</a></nav></header>`;}
+export function toast(message:string){const t=document.querySelector<HTMLElement>('#toast')!;t.textContent=message;t.classList.add('visible');window.setTimeout(()=>t.classList.remove('visible'),4000);}
+export function download(blob:Blob,name:string){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+export function duration(ms:number){return `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;}
+export function fail(root:HTMLElement,error:unknown){root.innerHTML=`${header()}<section class="error-screen"><span class="eyebrow">もう一度、ここから</span><h1>データを開けませんでした</h1><p>${escape(error instanceof Error?error.message:error)}</p><button class="primary" id="reload">再読み込み</button><a class="button" href="#/songs">曲一覧に戻る</a></section>`;root.querySelector('#reload')?.addEventListener('click',()=>location.reload());}

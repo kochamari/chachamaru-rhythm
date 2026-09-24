@@ -1,0 +1,5 @@
+import {getSong} from '../storage/Database';
+import {Session} from '../game/Session';
+import {InputRouter} from '../input/InputRouter';
+import {state} from '../app/store';
+export async function showcaseScreen(root:HTMLElement,scene:string){const pack=await getSong('himawari-demo');if(!pack)throw Error('デモがありません');const previous=state.settings.inputMode;if(scene==='midi')state.settings.inputMode='midi';const input=new InputRouter(root);const s=new Session(root,pack,pack.charts[1],input,{practice:true,autoplay:true});await s.init();const chorus=['chorus','midi'].includes(scene);s.showcaseSnapshot(chorus?51000:11000,chorus?100:0);const toolbar=document.createElement('div');toolbar.className='showcase-controls';toolbar.innerHTML=`<details><summary>合成場面 · 記録しません</summary><nav>${['normal','chorus','midi','portrait'].map(v=>`<a class="button" href="#/showcase?scene=${v}">${v}</a>`).join('')}</nav></details>`;root.append(toolbar);return ()=>{s.dispose();input.dispose();state.settings.inputMode=previous;};}

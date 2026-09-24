@@ -1,0 +1,5 @@
+import os from 'node:os';
+import {spawnSync} from 'node:child_process';
+import {writeFileSync,mkdirSync} from 'node:fs';
+const probe=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8'});return {ok:r.status===0,output:(r.stdout||r.stderr||r.error?.message||'').trim().slice(0,1600)};};
+const data={date:new Date().toISOString(),os:os.platform(),release:os.release(),cpu:os.arch(),ramGiB:Math.round(os.totalmem()/1024**3),node:process.version,npm:probe('npm',['--version']),python:probe('.venv/bin/python',['--version']),ffmpeg:probe('.venv/bin/python',['-c','import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe());print(imageio_ffmpeg.get_ffmpeg_version())']),analysis:probe('.venv/bin/python',['-c','import librosa,fastapi,numpy;print("librosa",librosa.__version__,"FastAPI",fastapi.__version__,"NumPy",numpy.__version__)']),browser:probe('npx',['playwright','--version']),device:'NOT_RUN',deployment:'PENDING'};mkdirSync('reports',{recursive:true});writeFileSync('reports/doctor.json',JSON.stringify(data,null,2));console.log(JSON.stringify(data,null,2));if(!data.python.ok||!data.ffmpeg.ok||!data.analysis.ok)process.exit(1);
