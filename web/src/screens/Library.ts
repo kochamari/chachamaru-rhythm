@@ -123,8 +123,8 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
    void renderDetail().then(focusDetail);return true;
   },
   decide:()=>{
-   const active=document.activeElement as HTMLElement|null;
-   if(active&&detail.contains(active)&&!active.dataset.difficulty)return false;
+   // With the drum, deciding in the detail panel always plays yourself: a
+   // focus left on AUTO (or export/delete) must not start those by accident.
    if(zone==='list'){zone='detail';focusDetail();return true;}
    play(false);return true;
   },

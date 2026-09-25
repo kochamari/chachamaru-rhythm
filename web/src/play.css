@@ -83,3 +83,13 @@ body:has(.game-scene){overflow:hidden;overscroll-behavior:none}
 .note-legend .n.don{background:#f35a43}.note-legend .n.ka{background:#2cbbd5}
 .note-legend .n.big{width:30px;height:30px}
 .note-legend .n.roll{width:40px;border-radius:12px;background:#ffc93c}
+/* iPhone haptics: an invisible switch over each pad, toggled by the finger. */
+.game-scene .pad{position:relative}
+.haptic-switch{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
+/* Example (AUTO) runs say so plainly: the player's hits are not judged. */
+.game-scene .auto-badge{position:absolute;left:50%;top:calc(var(--play-top,0px) + 70px * var(--play-scale,1));transform:translateX(-50%);z-index:4;display:grid;justify-items:center;gap:2px;padding:6px 16px;border-radius:14px;background:#1e1726e6;border:2px solid var(--gold);color:#fff;pointer-events:none;text-align:center;box-shadow:0 3px 0 #0006}
+.game-scene .auto-badge b{font-size:15px;font-weight:900;color:var(--gold);letter-spacing:.08em}
+.game-scene .auto-badge span{font-size:12px;opacity:.9}
+.game-scene .auto-badge.nudge{animation:auto-nudge .5s ease-out}
+@keyframes auto-nudge{30%{transform:translateX(-50%) scale(1.12)}}
+.game-scene.is-portrait .auto-badge{top:calc(var(--play-top,0px) + 196px * var(--play-scale,1))}

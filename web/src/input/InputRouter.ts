@@ -1,5 +1,6 @@
 import type {Color,InputMode,Settings} from '../../../contracts/public-types';
 import {normalizeTimestamp} from '../audio/ClockBridge';
+import {onHapticSwitch} from './haptics';
 
 export type Side='left'|'right';
 export interface Input {id:string;color:Color;performanceMs:number;receiptMs:number;source:InputMode;degraded:boolean;side?:Side}
@@ -30,9 +31,12 @@ export class InputRouter {
   root.addEventListener('pointerdown',e=>{
    const pad=(e.target as HTMLElement).closest<HTMLElement>('[data-pad]');
    if(!pad||(e.pointerType==='mouse'&&e.button!==0)||this.pointers.has(e.pointerId))return;
-   e.preventDefault();
+   // The iPhone haptic switch must receive this tap's click: no
+   // preventDefault, and capture on the switch itself.
+   const haptic=onHapticSwitch(e.target);
+   if(!haptic)e.preventDefault();
    this.pointers.set(e.pointerId,pad);pad.classList.add('pressed');
-   try{pad.setPointerCapture(e.pointerId);}catch{/* synthetic events have no capture */}
+   try{(haptic?e.target as HTMLElement:pad).setPointerCapture(e.pointerId);}catch{/* synthetic events have no capture */}
    this.emit(pad.dataset.pad as Color,e.timeStamp,'touch',pad.dataset.side as Side|undefined);
   },{signal});
   for(const name of ['pointerup','pointercancel','lostpointercapture'])root.addEventListener(name,e=>this.release((e as PointerEvent).pointerId),{signal});

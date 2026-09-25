@@ -36,12 +36,15 @@ export async function resultScreen(root:HTMLElement,r:RunResult):Promise<()=>voi
    <div class="result-stats"><div class="great"><span>良</span><strong data-count="${s.great}">0</strong></div><div class="ok"><span>可</span><strong data-count="${s.ok}">0</strong></div><div class="miss"><span>不可</span><strong data-count="${s.miss}">0</strong></div><div class="roll"><span>連打</span><strong data-count="${s.rollHits}">0</strong></div></div>
    <div class="result-gauge" aria-label="お祭りゲージ ${Math.round(s.gauge)}%"><i style="width:0%;--p:${Math.max(.01,s.gauge/100)}"></i><em></em></div>
    <div class="result-sub"><span>最大 <b>${s.maxCombo}</b> コンボ</span><span>精度 <b>${(s.accuracy*100).toFixed(1)}%</b></span><span>ゲージ <b>${Math.round(s.gauge)}%</b></span></div>
-   <div class="result-actions"><button class="primary" id="retry" data-nav>もう一度あそぶ ↻</button><a class="button" href="#/songs" data-nav id="to-songs">曲一覧へ</a></div>
+   <div class="result-actions"><button class="primary" id="retry" data-nav>${r.autoplay?'自分であそぶ ↻':'もう一度あそぶ ↻'}</button>${r.autoplay?'<button id="retry-auto" data-nav>もう一度おてほん</button>':''}<a class="button" href="#/songs" data-nav id="to-songs">曲一覧へ</a></div>
    <details class="result-detail"><summary>タイミングの詳細</summary><p>${timingSummary(s.deltas)}<br>打撃の判定差であり、機器の物理遅延の測定ではありません。<br>入力: ${r.inputMode} ／ ルール: ${r.ruleset}${r.timingUnstable?'<br>80msを超える配送遅延を検知しました。通常記録は更新していません。':''}</p></details>
   </div></section>`;
  memory.selected=r.packId;memory.difficulty=r.difficulty;
- const retry=()=>{location.hash=`/play/${r.packId}/${r.chartId}${r.autoplay?'?auto=1':r.practice?'?practice=1':''}`;};
+ // After an example (AUTO) run, "retry" means playing yourself; the example
+ // has its own button, so a drum decision never loops into AUTO.
+ const retry=()=>{location.hash=`/play/${r.packId}/${r.chartId}${!r.autoplay&&r.practice?'?practice=1':''}`;};
  root.querySelector<HTMLElement>('#retry')!.onclick=retry;
+ root.querySelector<HTMLElement>('#retry-auto')?.addEventListener('click',()=>{location.hash=`/play/${r.packId}/${r.chartId}?auto=1`;});
  const character=new Character(root.querySelector('.result-rig')!);
  const stopAnimation=character.animate(cleared?'resultWin':'idle');
  // Tally: score rolls up, counts follow, gauge fills.

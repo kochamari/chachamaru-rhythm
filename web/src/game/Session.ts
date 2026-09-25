@@ -6,7 +6,7 @@ import {PlayRenderer,stageThemeFor} from '../render/PlayRenderer';
 import {state,difficultyNames} from '../app/store';
 import {escape,toast} from '../app/ui';
 import {saveRun} from '../storage/Database';
-import {tapHaptic} from '../input/haptics';
+import {tapHaptic,hapticSwitch} from '../input/haptics';
 
 export type SessionStatus='LOADING'|'READY'|'COUNT_IN'|'PLAYING'|'PAUSED'|'FINISHING'|'RESULT'|'LOAD_ERROR'|'SHOWCASE';
 const AUTO_ROLL_INTERVAL_MS=80;
@@ -37,16 +37,19 @@ export class Session {
   this.autoplay=opts.autoplay??false;this.practice=opts.practice??false;
   this.pausedAt=Math.max(0,opts.startMs??0);
   const inputMode=this.mode==='mixed'?'keyboard':this.mode;
+  // iPhone: an invisible switch over each pad gives the tap a system haptic.
+  const haptic=state.settings.haptics!==false?hapticSwitch():'';
   root.innerHTML=`<section class="game-scene mode-${inputMode}" aria-label="演奏画面">
    <button class="pause-button" aria-label="一時停止"><span></span><span></span></button>
    <div class="pads" aria-label="太鼓の打面">
-    <button class="pad ka rim-left" data-pad="ka" data-side="left" aria-label="カッ（左のふち）"><span>カッ</span><small>D</small></button>
-    <button class="pad don skin-left" data-pad="don" data-side="left" aria-label="ドン（左の面）"><span>ドン</span><small>F</small></button>
-    <button class="pad don skin-right" data-pad="don" data-side="right" aria-label="ドン（右の面）"><span>ドン</span><small>J</small></button>
-    <button class="pad ka rim-right" data-pad="ka" data-side="right" aria-label="カッ（右のふち）"><span>カッ</span><small>K</small></button>
+    <div class="pad ka rim-left" role="button" data-pad="ka" data-side="left" aria-label="カッ（左のふち）"><span>カッ</span><small>D</small>${haptic}</div>
+    <div class="pad don skin-left" role="button" data-pad="don" data-side="left" aria-label="ドン（左の面）"><span>ドン</span><small>F</small>${haptic}</div>
+    <div class="pad don skin-right" role="button" data-pad="don" data-side="right" aria-label="ドン（右の面）"><span>ドン</span><small>J</small>${haptic}</div>
+    <div class="pad ka rim-right" role="button" data-pad="ka" data-side="right" aria-label="カッ（右のふち）"><span>カッ</span><small>K</small>${haptic}</div>
    </div>
    <div class="play-overlay"><div class="play-dialog"><span class="eyebrow">準備しています</span><h2>曲を読み込み中…</h2></div></div>
    <button class="rotate-hint">横向きにすると、もっと遊びやすくなります <b>×</b></button>
+   ${this.autoplay?'<div class="auto-badge" role="status"><b>おてほん再生中</b><span>自動で叩いています（記録されません）</span></div>':''}
   </section>`;
   this.scene=root.querySelector<HTMLElement>('.game-scene')!;
   const tag=this.autoplay?'AUTO':this.practice?'練習':'';
@@ -67,7 +70,8 @@ export class Session {
   if(this.disposed)return;
   this.status='READY';
   const how=this.mode==='touch'?'太鼓の面でドン、ふちでカッ！':this.mode==='midi'?'スネアでドン、フロアタムでカッ！':'F・J でドン、D・K でカッ！';
-  this.overlay('準備はいい？',`${difficultyNames[this.chart.difficulty]}｜${how}\n音符が丸に重なったら叩こう。`,'演奏をはじめる',()=>void this.start());
+  if(this.autoplay)this.overlay('おてほん（自動演奏）',`${difficultyNames[this.chart.difficulty]}｜ちゃちゃまるが自動で叩きます。\nあなたの入力は判定・記録されません。`,'演奏をはじめる',()=>void this.start());
+  else this.overlay('準備はいい？',`${difficultyNames[this.chart.difficulty]}｜${how}\n音符が丸に重なったら叩こう。`,'演奏をはじめる',()=>void this.start());
   this.frame=requestAnimationFrame(this.drawFrame);
  }
 
@@ -81,7 +85,7 @@ export class Session {
    <h2>${escape(title)}</h2><p>${escape(body).replace(/\n/g,'<br>')}</p>
    ${paused?'':`<div class="note-legend" aria-label="音符の見かた"><span><i class="n don"></i>ドン</span><span><i class="n ka"></i>カッ</span><span><i class="n don big"></i>大きい音符も1回</span><span><i class="n roll"></i>連打はたくさん</span></div>`}
    <button class="primary" id="resume-play">${escape(label)}</button>
-   ${paused?`<div class="pause-options"><label>操作 <select id="pause-mode"><option value="touch">タッチ</option><option value="keyboard">キーボード</option><option value="midi">電子ドラム</option></select></label><a class="button" href="${retry}">最初から</a></div>`:`<p class="dialog-hint">${this.mode==='keyboard'?'Enter でもはじめられます':''}</p>`}
+   ${paused?`<div class="pause-options"><label>操作 <select id="pause-mode"><option value="touch">タッチ</option><option value="keyboard">キーボード</option><option value="midi">電子ドラム</option></select></label><a class="button" href="${retry}">最初から</a>${this.autoplay?`<a class="button primary" id="play-myself" href="${escape(path+'?retry='+Date.now())}">自分であそぶ</a>`:''}</div>`:`<p class="dialog-hint">${this.mode==='keyboard'?'Enter でもはじめられます':''}</p>`}
    <a class="text-link" href="#/songs">曲一覧に戻る</a></div>`;
   overlay.querySelector('#resume-play')!.addEventListener('click',action);
   (overlay.querySelector('#resume-play') as HTMLButtonElement).focus({preventScroll:true});
@@ -123,11 +127,18 @@ export class Session {
   let t=0;
   try{t=this.audio.time(i.performanceMs);}catch{this.pause('音声時計を再確認してください');return;}
   this.renderer.hit(i.color,Math.max(-2000,t),i.side);
+  if(this.autoplay){this.autoNudge();return;}
   if(this.status!=='PLAYING'||this.autoplay)return;
   if(i.source!==state.settings.inputMode&&this.mode!=='mixed'){this.mode='mixed';}
   this.engine.hit({id:i.id,runId:this.runId,color:i.color,inputSongMs:this.audio.time(i.performanceMs-state.settings.inputLagMs),receiptSongMs:this.audio.time(i.receiptMs),deliveryDelayMs:i.receiptMs-i.performanceMs,source:i.source});
  }
 
+ /** The player hits during an example run: say so (their hits do not count). */
+ private autoNudge(){
+  const badge=this.scene.querySelector<HTMLElement>('.auto-badge');if(!badge)return;
+  badge.querySelector('span')!.textContent='自分で叩くときは ⏸ →「自分であそぶ」';
+  badge.classList.remove('nudge');void badge.offsetWidth;badge.classList.add('nudge');
+ }
  pause(reason='曲の続きから、2秒のカウントで再開します。'){
   if(!['PLAYING','COUNT_IN'].includes(this.status))return;
   try{this.pausedAt=Math.max(this.pausedAt,Math.max(0,this.audio.time()));}catch{/* Keep the last safe position when the clock is unavailable. */}
@@ -196,6 +207,7 @@ export class Session {
 
  showcaseSnapshot(time:number,combo:number,gauge=0){
   if(!import.meta.env.DEV)return;
+  this.scene.querySelector('.auto-badge')?.remove();
   this.practice=true;this.autoplay=true;this.pausedAt=time;this.status='SHOWCASE';this.engine.active=true;
   for(const n of this.engine.taps.slice(0,combo))this.engine.hit({id:'fixture-'+n.id,runId:this.runId,color:n.color,inputSongMs:n.timeMs+this.chart.offsetMs,receiptSongMs:n.timeMs+this.chart.offsetMs,source:'keyboard'});
   void gauge;

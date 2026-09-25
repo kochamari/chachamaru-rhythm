@@ -44,7 +44,22 @@ export class AudioEngine {
   this.volume();
   this.prepareSamples();
  }
- private onState=()=>{if(this.context?.state!=='running'&&this.source)this.suspended?.();};
+ /**
+  * The context left 'running' while a song plays. A short stop (another app
+  * or tab starting audio, a Bluetooth route change) often recovers by
+  * itself: try to resume, and pause the game only if it is still silent
+  * after RECOVER_MS. Notes follow the audio clock, so a brief stall stays in
+  * sync. A closed context pauses at once.
+  */
+ private onState=()=>{
+  const c=this.context;
+  if(!c||c.state==='running'||!this.source)return;
+  if(c.state==='closed'){this.suspended?.();return;}
+  const generation=this.generation;
+  void c.resume().catch(()=>{});
+  setTimeout(()=>{if(this.context===c&&this.source&&this.generation===generation&&c.state!=='running')this.suspended?.();},AudioEngine.RECOVER_MS);
+ };
+ static RECOVER_MS=800;
  onSuspend(cb:()=>void){this.suspended=cb;}
  volume(){
   for(const name of ['bgm','hit','effect','ui'] as const){

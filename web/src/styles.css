@@ -348,3 +348,5 @@ html[data-render="software"] .new-best{animation:none}
 .import-summary li.error b{background:var(--don-dark);color:#fff}
 .import-summary li small{grid-column:2;color:#8c5a48;font-size:12px}
 .setting-row label small{display:block;font-size:12px;font-weight:600;color:#8c7b5e;margin-top:2px}
+.haptic-host{position:relative;overflow:hidden}
+.haptic-host .haptic-switch{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
