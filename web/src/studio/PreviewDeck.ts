@@ -16,10 +16,14 @@ export class PreviewDeck {
  // Like HTMLMediaElement: play() makes it "not paused" at once, even while
  // the song is still being decoded; pause() in that time cancels the start.
  private wanted=false;
+ /** Called when play/pause state changes (not tied to rendering frames). */
+ onchange:(()=>void)|null=null;
 
  constructor(private blob:Blob,private durationMs:number){}
 
  get paused(){return !this.wanted;}
+ /** paused, starting (decoding), or playing (the source has started). */
+ get state(){return !this.wanted?'paused':this.source?'playing':'starting';}
 
  get currentTime(){
   const ctx=uiAudio.context;
@@ -34,20 +38,19 @@ export class PreviewDeck {
  }
 
  async play(){
-  this.wanted=true;
+  this.wanted=true;this.onchange?.();
   try{
    await uiAudio.unlock();
    this.buffer??=await (this.loading??=this.decode());
-  }catch(e){this.wanted=false;this.loading=null;throw e;}
-  if(this.wanted&&!this.source)this.begin();
+  }catch(e){this.wanted=false;this.loading=null;this.onchange?.();throw e;}
+  if(this.wanted&&!this.source){this.begin();this.onchange?.();}
  }
  pause(){
   this.wanted=false;
-  if(!this.source)return;
-  this.offset=this.currentTime;
-  this.halt();
+  if(this.source){this.offset=this.currentTime;this.halt();}
+  this.onchange?.();
  }
- dispose(){this.wanted=false;this.halt();this.gain?.disconnect();this.gain=null;this.buffer=null;}
+ dispose(){this.onchange=null;this.wanted=false;this.halt();this.gain?.disconnect();this.gain=null;this.buffer=null;}
 
  private get duration(){return this.buffer?.duration??this.durationMs/1000;}
  private async decode(){
@@ -62,7 +65,7 @@ export class PreviewDeck {
   const source=ctx.createBufferSource();
   source.buffer=this.buffer;source.connect(this.gain);
   // Reaching the end pauses at the end, like a media element.
-  source.onended=()=>{if(this.source===source){this.source=null;this.wanted=false;this.offset=this.duration;}};
+  source.onended=()=>{if(this.source===source){this.source=null;this.wanted=false;this.offset=this.duration;this.onchange?.();}};
   this.startedAt=ctx.currentTime;
   source.start(0,this.offset);
   this.source=source;
