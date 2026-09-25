@@ -151,3 +151,61 @@ test('U28 音ズレ合わせ measures how late the drum hits the heard beat and 
  expect(await page.evaluate(()=>[window.__chacha.settings.profile,window.__chacha.settings.audioDelayMs])).toEqual(['td17-bluetooth',15]);
  await expect(page.locator('.play-dialog a[href^="#/sync?back="]')).toBeVisible();
 });
+test('U29 a normal run earns ほねっこ (paid once, kept); the example run earns none',async({page})=>{
+ await boot(page);
+ await page.goto('/#/import');await page.locator('#pack-file').setInputFiles('fixtures/diagnostic-pack.zip');await expect(page).toHaveURL(/#\/songs/);
+ await page.evaluate(()=>{window.__chacha.settings.inputMode='keyboard';});
+ const play=async(auto:boolean)=>{
+  await page.goto(`/#/play/song-6b8b6c53e6dd3d9d/hard?${auto?'auto=1&':''}r=${Date.now()}`);
+  await page.locator('#resume-play').click();
+  if(!auto)await page.evaluate(async()=>{
+   const s=window.__chacha.session!;
+   for(const n of s.engine.taps){
+    while(s.audio.time()<n.timeMs+s.chart.offsetMs)await new Promise(r=>setTimeout(r,1));
+    window.__chacha.input.emit(n.color,performance.now(),'keyboard');
+   }
+  });
+  await expect(page.locator('.result-card')).toBeVisible({timeout:20000});
+ };
+ const stored=()=>page.evaluate(async()=>(await(await window.__chacha.db()).get('settings','festival')) as {bones:number;awards:{runId:string;total:number}[]}|undefined);
+ await play(false);
+ await expect(page.locator('.bone-award')).toBeVisible();
+ const f=(await stored())!;
+ expect(f.awards).toHaveLength(1);
+ expect(f.awards[0].total).toBeGreaterThanOrEqual(14);
+ expect(f.bones).toBe(f.awards[0].total);
+ await expect(page.locator('#bone-count')).toHaveText(String(f.awards[0].total));
+ await expect(page.locator('.bone-total b')).toHaveText(String(f.bones));
+ // Showing the same result again does not pay twice.
+ await page.reload();await expect(page.locator('.result-card')).toBeVisible();
+ expect((await stored())!.bones).toBe(f.bones);
+ await play(true);
+ await expect(page.locator('.bone-award')).toHaveCount(0);
+ expect((await stored())!.bones).toBe(f.bones);
+});
+test('U30 しばガチャ spends ほねっこ, opens capsules and fills the collection',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{await (await window.__chacha.db()).put('settings',{schemaVersion:1,bones:1150,earned:1150,owned:{},pulls:0,awards:[]},'festival');});
+ await page.goto('/#/gacha');
+ await expect(page.locator('#wallet')).toHaveText('1,150');
+ await expect(page.locator('#zukan-count')).toHaveText('0 / 21');
+ // One draw: capsule, then the card.
+ await page.locator('#pull-1').click();
+ await expect(page.locator('.gacha-reveal .reveal-capsule')).toBeVisible();
+ for(let i=0;i<3&&await page.locator('.reveal-card').isHidden();i++)await page.locator('#reveal-next').click();
+ await expect(page.locator('.reveal-card')).toBeVisible();await expect(page.locator('.reveal-card .card-new')).toHaveText('NEW!');
+ await page.locator('#reveal-next').click();
+ await expect(page.locator('.gacha-reveal')).toHaveCount(0);
+ await expect(page.locator('#zukan-count')).toHaveText('1 / 21');
+ await expect(page.locator('#wallet')).toHaveText('1,050');
+ // Ten draws: the summary shows ten outfits, at least one of them SR or better.
+ await page.locator('#pull-10').click();
+ await page.locator('#reveal-skip').click();
+ await expect(page.locator('.summary-tile')).toHaveCount(10);
+ expect(await page.locator('.summary-tile[data-rarity="SR"],.summary-tile[data-rarity="SSR"]').count()).toBeGreaterThan(0);
+ await page.locator('#reveal-next').click();
+ const f=await page.evaluate(async()=>(await(await window.__chacha.db()).get('settings','festival')) as {bones:number;pulls:number;owned:Record<string,number>});
+ expect(f.pulls).toBe(11);expect(Object.values(f.owned).reduce((a,b)=>a+b,0)).toBe(11);
+ await expect(page.locator('#wallet')).toHaveText(f.bones.toLocaleString('en-US'));
+ await expect(page.locator('#pull-10')).toBeDisabled();
+});

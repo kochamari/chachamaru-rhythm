@@ -14,6 +14,7 @@ import {resultScreen} from './screens/Result';
 import {studioScreen} from './screens/Studio';
 import {settingsScreen,diagnosticsScreen} from './screens/Settings';
 import {syncScreen} from './screens/Sync';
+import {gachaScreen} from './screens/Gacha';
 import {showcaseScreen} from './testing/showcase';
 import {flowerSvg} from './render/Character';
 import {markRenderer} from './app/gpu';
@@ -44,6 +45,7 @@ async function route(){
   else if(parts[0]==='import')cleanup=importScreen(app);
   else if(parts[0]==='settings')cleanup=await settingsScreen(app,midi,uiAudio,()=>void route());
   else if(parts[0]==='sync')cleanup=syncScreen(app,params.get('back'));
+  else if(parts[0]==='gacha')cleanup=await gachaScreen(app,params.get('back'));
   else if(parts[0]==='diagnostics')cleanup=await diagnosticsScreen(app,input,midi,uiAudio);
   else if(parts[0]==='studio')cleanup=await studioScreen(app);
   else if(parts[0]==='play'){

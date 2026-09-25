@@ -49,6 +49,8 @@ audio auditionができない場合、波形・再生成功と「人が音を聴
 | U25 | implementation | min/missing APIでもタッチ版の起動を妨げない | capability fallback試験 |
 | U27 | implementation | 電子ドラムを叩くと電子ドラム用の画面へ切替、準備画面はスネアでも開始 | E2E（MIDI入力の模擬） |
 | U28 | implementation | 音ズレ合わせが遅れを測り、出力ごとに保存・切替できる | Unit（計算）＋E2E（150ms遅れの打撃） |
+| U29 | implementation | 通常プレイの完走で「ほねっこ」を1回だけ受け取り、結果に表示・保存。おてほん・練習は0 | Unit＋E2E（診断曲を実際に叩く） |
+| U30 | implementation | しばガチャがほねっこを使い、10連は最後がスーパーレア以上、かぶりは返却、ずかんとバックアップに残る | Unit（確率・保証・残高）＋E2E |
 | P01 | implementation | 付属diagnostic-packをschema+semantic+SHA検証できる | 正fixture |
 | P02 | implementation | future schemaVersion、NaN相当、負時刻、不明kindを拒否 | 不正JSON fixture |
 | P03 | implementation | note順序/ID重複/roll競合/空譜面/曲末超過を拒否 | semantic fixture |

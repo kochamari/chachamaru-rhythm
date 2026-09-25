@@ -17,7 +17,7 @@ function obtainContext(){
  }
  return shared;
 }
-const EFFECTS:EffectName[]=['combo10','combo50','combo100','chorus','clear','fullCombo','allGreat','fail','select','move','back','count','balloon','tick'];
+const EFFECTS:EffectName[]=['combo10','combo50','combo100','chorus','clear','fullCombo','allGreat','fail','select','move','back','count','balloon','tick','fever','fullHouse','gachaTurn','gachaOpen','gachaRare'];
 const UI_EFFECTS=new Set<EffectName>(['select','move','back','count','tick']);
 
 /**

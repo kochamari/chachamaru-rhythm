@@ -3,7 +3,7 @@
 // keeps them testable and lets the engine prepare them once per session.
 
 export type HitSound='taiko'|'pop'|'wood';
-export type EffectName='combo10'|'combo50'|'combo100'|'fullCombo'|'allGreat'|'clear'|'fail'|'chorus'|'select'|'move'|'back'|'tick'|'balloon'|'count';
+export type EffectName='combo10'|'combo50'|'combo100'|'fullCombo'|'allGreat'|'clear'|'fail'|'chorus'|'select'|'move'|'back'|'tick'|'balloon'|'count'|'fever'|'fullHouse'|'gachaTurn'|'gachaOpen'|'gachaRare';
 
 function rng(seed:number){return ()=>{seed|=0;seed=seed+0x6d2b79f5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296*2-1;};}
 
@@ -148,5 +148,13 @@ export function renderEffect(name:EffectName,sr:number):Float32Array{
   case 'tick':return renderSequence(sr,[],{ka:[0]});
   case 'count':return renderSequence(sr,[{f:P.A5,t:0,dur:.25,amp:.5}]);
   case 'balloon':return renderSequence(sr,[{f:P.D6,t:0,dur:.2,amp:.4,kind:'pluck'}]);
+  // FEVER: a quick run up the scale into a ringing top note.
+  case 'fever':return renderSequence(sr,[...[P.D5,P.E5,P.G5,P.A5,P.B5].map((f,i):Tone=>({f,t:i*.045,dur:.22,amp:.42,kind:'pluck'})),{f:P.D6,t:.23,dur:.8,amp:.55},{f:P.A5,t:.23,dur:.7,amp:.3}],{ka:[0],don:[.23]});
+  // しばガチャ: the handle's ratchet, a capsule popping open, and a rare find.
+  case 'gachaTurn':return renderSequence(sr,[],{ka:[0,.08,.16,.24,.32,.4,.48]});
+  case 'gachaOpen':return renderSequence(sr,[{f:P.G5,t:0,dur:.25,amp:.45,kind:'pluck'},{f:P.D6,t:.06,dur:.6,amp:.45}],{don:[0]});
+  case 'gachaRare':return renderSequence(sr,[{f:P.D5,t:0,dur:.3,amp:.4},{f:P.G5,t:.1,dur:.3,amp:.45},{f:P.B5,t:.2,dur:.3,amp:.45},{f:P.D6,t:.3,dur:1.2,amp:.55},{f:P.G5,t:.3,dur:1.1,amp:.35,kind:'flute'},{f:P.B5,t:.3,dur:1.2,amp:.3,kind:'flute'}],{don:[0,.3],ka:[.1,.2]});
+  // 満員御礼: the whole crowd is here.
+  case 'fullHouse':return renderSequence(sr,[{f:P.G5,t:0,dur:.3,amp:.45,kind:'flute'},{f:P.B5,t:.14,dur:.3,amp:.45,kind:'flute'},{f:P.D6,t:.28,dur:.9,amp:.5,kind:'flute'},{f:P.G5,t:.28,dur:1,amp:.35},{f:P.D6,t:.42,dur:1,amp:.3}],{don:[0,.14,.28],ka:[.07,.21]});
  }
 }

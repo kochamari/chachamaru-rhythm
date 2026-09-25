@@ -2,6 +2,7 @@ import {openDB,type IDBPDatabase} from 'idb';
 import type {SongPackage,RunResult,Settings,Manifest,Chart} from '../../../contracts/public-types';
 import {validSettings} from '../app/store';
 import {blobBytes} from '../packs/bytes';
+import {validFestival,type FestivalData} from './festival';
 let dbPromise:Promise<IDBPDatabase>|undefined;
 const storedBlob=(value:Blob|{bytes:ArrayBuffer;type:string})=>value instanceof Blob?value:new Blob([value.bytes],{type:value.type});
 export function db(){return dbPromise??=openDB('chachamaru-rhythm',1,{upgrade(d){d.createObjectStore('songs',{keyPath:'packId'});d.createObjectStore('blobs');d.createObjectStore('charts');d.createObjectStore('settings');d.createObjectStore('records');d.createObjectStore('runs',{keyPath:'runId'});}});}
@@ -18,7 +19,8 @@ export const recordEligible=(r:RunResult)=>!r.autoplay&&!r.practice&&!r.timingUn
 export const recordKey=(r:RunResult)=>[r.packId,r.chartId,r.audioHash,r.chartHash,r.ruleset,r.inputMode];
 export async function saveRun(r:RunResult){const d=await db();await d.put('runs',r);if(recordEligible(r)){const key=recordKey(r),prev=await d.get('records',key);if(!prev||r.stats.score>prev.stats.score)await d.put('records',r,key);}}
 export async function saveSettings(settings:Settings){if(!validSettings(settings))throw Error('設定値が不正です');await (await db()).put('settings',settings,'main');}
-export async function backup(){const d=await db();return {schemaVersion:1,savedAt:new Date().toISOString(),ruleset:'chacha-v1',settings:await d.get('settings','main'),records:await d.getAll('records'),runs:await d.getAll('runs')};}
+/** Settings, records and ほねっこ / collected outfits (festival, since the draw was added). */
+export async function backup(){const d=await db();const festival=await d.get('settings','festival');return {schemaVersion:1,savedAt:new Date().toISOString(),ruleset:'chacha-v1',settings:await d.get('settings','main'),records:await d.getAll('records'),runs:await d.getAll('runs'),...(validFestival(festival)?{festival}:{})};}
 function validRun(value:unknown):value is RunResult {
  if(!value||typeof value!=='object')return false;
  const r=value as RunResult,s=r.stats;
@@ -30,4 +32,4 @@ function validRun(value:unknown):value is RunResult {
  if(!Number.isFinite(s.gauge)||s.gauge<0||s.gauge>100||!Number.isFinite(s.accuracy)||s.accuracy<0||s.accuracy>1||![s.fullCombo,s.allGreat,s.timingUnstable,s.finished].every(v=>typeof v==='boolean'))return false;
  return Array.isArray(s.deltas)&&s.deltas.length<=50000&&s.deltas.every(v=>Number.isFinite(v)&&Math.abs(v)<=90);
 }
-export async function restore(data:unknown){if(!data||typeof data!=='object')throw Error('バックアップが不正です');const b=data as {schemaVersion:number;ruleset:string;settings:Settings;records:RunResult[];runs:RunResult[]};if(b.schemaVersion!==1||b.ruleset!=='chacha-v1'||!validSettings(b.settings)||!Array.isArray(b.records)||!Array.isArray(b.runs)||b.records.length+b.runs.length>10000)throw Error('互換性のないバックアップです');if(![...b.records,...b.runs].every(validRun))throw Error('記録データが不正です');const d=await db(),tx=d.transaction(['settings','records','runs'],'readwrite');void tx.objectStore('settings').put(b.settings,'main');for(const r of b.records)if(recordEligible(r))void tx.objectStore('records').put(r,recordKey(r));for(const r of b.runs)void tx.objectStore('runs').put(r);await tx.done;}
+export async function restore(data:unknown){if(!data||typeof data!=='object')throw Error('バックアップが不正です');const b=data as {schemaVersion:number;ruleset:string;settings:Settings;records:RunResult[];runs:RunResult[];festival?:FestivalData};if(b.schemaVersion!==1||b.ruleset!=='chacha-v1'||!validSettings(b.settings)||!Array.isArray(b.records)||!Array.isArray(b.runs)||b.records.length+b.runs.length>10000)throw Error('互換性のないバックアップです');if(![...b.records,...b.runs].every(validRun))throw Error('記録データが不正です');if(b.festival!==undefined&&!validFestival(b.festival))throw Error('ごほうびのデータが不正です');const d=await db(),tx=d.transaction(['settings','records','runs'],'readwrite');void tx.objectStore('settings').put(b.settings,'main');if(b.festival)void tx.objectStore('settings').put(b.festival,'festival');for(const r of b.records)if(recordEligible(r))void tx.objectStore('records').put(r,recordKey(r));for(const r of b.runs)void tx.objectStore('runs').put(r);await tx.done;}

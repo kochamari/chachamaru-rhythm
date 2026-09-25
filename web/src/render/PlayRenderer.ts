@@ -7,9 +7,12 @@ import {computeLayout,logicalSize,noteX,TRAVEL_MS,type PlayLayout} from './layou
 import {softwareRendering} from '../app/gpu';
 import {noteSyllables} from './syllables';
 import {beatPhase,downbeatTimes,inSection,friendsForGauge} from './timing';
-import {DRUMMER,DANCER,DrummerState,drummerPose,dancerPose,ATLAS_FILES,type Side} from './rig';
+import {DRUMMER,DANCER,DrummerState,drummerPose,dancerPose,ATLAS_FILES,REGIONS,type Side} from './rig';
 import {PixiCharacter,type AtlasTextures} from './PixiCharacter';
 import {FRIEND_VARIANTS,recolorAtlas} from './recolor';
+import {drawRig,rigCanvas,CROWD_POSES} from './portrait';
+import {crowdStep,crowdSize,inFever,CROWD_MAX} from '../game/festival';
+import {COSTUMES,type Outfit} from './costumes';
 import * as art from './art';
 
 const {C}=art;
@@ -17,13 +20,21 @@ type Baked=art.Baked;
 export const DIFFICULTY_STYLE:Record<Difficulty,{label:string;color:number;stars:number}>={easy:{label:'かんたん',color:0xef8f2f,stars:2},normal:{label:'ふつう',color:0x3f9a55,stars:3},hard:{label:'むずかしい',color:0xd23f47,stars:5}};
 
 export type StageTheme='day'|'evening'|'sunset'|'night';
-export interface RendererOptions {chart:Chart;manifest:Manifest;settings:Settings;difficulty:Difficulty;title:string;artist:string;showPads:boolean;tag?:string;inputHint?:'keyboard'|'midi'|'touch';theme?:StageTheme}
+export interface RendererOptions {chart:Chart;manifest:Manifest;settings:Settings;difficulty:Difficulty;title:string;artist:string;showPads:boolean;tag?:string;inputHint?:'keyboard'|'midi'|'touch';theme?:StageTheme;
+ /** Show the bone counter (runs that earn ほねっこ). */
+ rewards?:boolean;
+ /** Outfits found in the draw (しばガチャ): the crowd wears them. */
+ collection?:()=>Promise<Readonly<Record<string,number>>>}
 /** Stage mood per bundled song; imported songs use the daytime festival. */
 export function stageThemeFor(packId:string):StageTheme{return ({'chachamaru-ondo':'evening','yuuyake-shippo':'sunset','hanabi-rush':'night'} as Record<string,StageTheme>)[packId]??'day';}
 interface Particle {s:Sprite;vx:number;vy:number;life:number;max:number;spin:number;gravity:number;grow:number;fade:boolean}
 interface Flyer {s:Sprite;t0:number;dur:number;x0:number;y0:number;cx:number;cy:number;x1:number;y1:number;scale0:number}
 interface Ring {s:Sprite;t0:number;dur:number;scale0:number;scale1:number;alpha:number}
 interface Friend {ch:PixiCharacter;joined:number;left:number;active:boolean;mirror:boolean}
+interface Fan {s:Sprite;light:Sprite;joined:number;phase:number;mirror:boolean;shown:boolean;coat:number;move:number;outfit?:Outfit;tex:(Texture|undefined)[]}
+/** Height of a baked crowd texture (the whole 400 × 420 rig root). */
+const CROWD_TEX_H=160;
+const PENLIGHTS=[0xff7eb6,0x7fe8ff,0xffd86b,0x9dff8a,0xc9a2ff];
 
 const PARTICLE_CAP={standard:160,reduced:40,off:0} as const;
 
@@ -52,6 +63,13 @@ export class PlayRenderer {
  private drummer!:PixiCharacter;
  private readonly drummerState=new DrummerState();
  private friends:Friend[]=[];
+ // Festival rewards: the cheering crowd (one more shiba every few 良), FEVER and the counters.
+ private readonly crowdRoot=new Container();
+ private crowd:Fan[]=[];private crowdCoats:{atlas:CanvasImageSource;scale:number}[]=[];
+ private readonly crowdStep:number;private fullHouseShown=false;private fullHouseAt=-1e9;
+ private fever=false;private feverAt=-1e9;private feverRails=new Graphics();
+ private rewardsRoot=new Container();private feverBadge=new Container();private boneText:BitmapText|null=null;private crowdText!:Text;private crowdPlate=new Container();
+ private bones=0;private bonesShown=-1;private bonePopAt=-1e9;private crowdPopAt=-1e9;private crowdCount=-1;
  private notePool:Sprite[]=[];private syllablePool:Sprite[]=[];private barPool:Sprite[]=[];
  private rollBodies:Sprite[]=[];private rollTails:Sprite[]=[];
  private particles:Particle[]=[];private spare:Sprite[]=[];
@@ -89,6 +107,7 @@ export class PlayRenderer {
   this.syllables=noteSyllables(opts.chart.notes,opts.manifest.beatTimesMs);
   this.downbeats=downbeatTimes(opts.manifest.beatTimesMs,opts.manifest.downbeatIndices);
   this.taps=opts.chart.notes.filter((n):n is Tap=>n.kind==='tap');
+  this.crowdStep=crowdStep(this.taps.length);
   this.resizeObserver=new ResizeObserver(()=>this.resize());
  }
 
@@ -119,7 +138,7 @@ export class PlayRenderer {
   this.installFonts();
   // Hit effects sit above the HUD so rings are not cut by the left panel.
   this.world.addChild(this.stageRoot,this.bandRoot,this.laneRoot,this.hud,this.laneFx,this.topFx);
-  this.stageRoot.addChild(this.stageBack,this.stageChars,this.stageFx);
+  this.stageRoot.addChild(this.stageBack,this.crowdRoot,this.stageChars,this.stageFx);
   this.laneRoot.addChild(this.laneStatic,this.barLayer,this.noteLayer,this.syllableLayer);
   this.app.stage.addChild(this.world);
   this.drummer=new PixiCharacter(DRUMMER,this.atlas);
@@ -129,6 +148,7 @@ export class PlayRenderer {
   this.resize();
   this.resizeObserver.observe(this.host);
   void this.loadFriends();
+  void this.loadCrowd();
  }
 
  // ------------------------------------------------------------ textures --
@@ -190,6 +210,33 @@ export class PlayRenderer {
   }catch{/* Friends are decoration; the game plays without them. */}
  }
 
+ /** Cheering shibas in the five coats, baked once as still pictures (cheap to draw twenty). */
+ private async loadCrowd(){
+  try{
+   const img=this.atlas.character.source.resource as CanvasImageSource&{width:number;height:number};
+   const owned:Readonly<Record<string,number>>=await this.opts.collection?.().catch(()=>({}))??{};
+   // The five coats, then special coats found in the draw; outfits found in the draw.
+   const special=COSTUMES.filter(c=>c.coat&&owned[c.id]).map(c=>c.coat!);
+   const coats=await Promise.all([...FRIEND_VARIANTS,...special].map(v=>recolorAtlas(img,v,'chachamaru-anime-v1',.5)));
+   if(!this.alive)return;
+   this.crowdCoats=[{atlas:img,scale:1},...coats.filter((c):c is HTMLCanvasElement=>!!c).map(atlas=>({atlas,scale:.5}))];
+   const basic=1+FRIEND_VARIANTS.length,outfits=COSTUMES.filter(c=>c.outfit&&owned[c.id]).map(c=>c.outfit!);
+   // A different crowd each run: special coats now and then, outfits more often the more are found.
+   let seed=(Date.now()%2147483646)+1;const random=()=>(seed=(seed*16807)%2147483647)/2147483647;
+   const dressed=Math.min(.8,.3+outfits.length*.05);
+   for(let i=0;i<CROWD_MAX;i++){
+    const coat=this.crowdCoats.length>basic&&random()<.22?basic+Math.floor(random()*(this.crowdCoats.length-basic)):(i*3+1)%Math.min(basic,this.crowdCoats.length);
+    const outfit=outfits.length&&random()<dressed?outfits[Math.floor(random()*outfits.length)]:undefined;
+    const s=new Sprite();
+    s.anchor.set(.5,399/420);s.visible=false;
+    const light=this.sprite('glowWhite');light.tint=PENLIGHTS[i%PENLIGHTS.length];light.blendMode='add';light.visible=false;
+    this.crowd.push({s,light,joined:-1e9,phase:(i*.37)%1,mirror:i%2===1,shown:false,coat,move:1+i%3,outfit,tex:[]});
+   }
+   // The far row behind the near row.
+   for(const f of [...this.crowd.slice(CROWD_MAX/2),...this.crowd.slice(0,CROWD_MAX/2)])this.crowdRoot.addChild(f.s,f.light);
+  }catch{/* The crowd is decoration too. */}
+ }
+
  // --------------------------------------------------------------- layout --
  resize(){
   if(!this.initialized)return;
@@ -225,7 +272,7 @@ export class PlayRenderer {
 
  private buildStatic(){
   const L=this.layout;
-  for(const c of [this.stageBack,this.bandRoot,this.laneStatic,this.hud])c.removeChildren().forEach(x=>{if(x!==this.stageBg&&x!==this.nightTint&&x!==this.themeTint&&x!==this.sunburst&&x!==this.goRed&&x!==this.gaugeFill&&x!==this.gaugeShine&&x!==this.progressFill&&!this.lanterns.some(l=>l.s===x||l.glow===x))x.destroy({children:true});});
+  for(const c of [this.stageBack,this.bandRoot,this.laneStatic,this.hud])c.removeChildren().forEach(x=>{if(x!==this.stageBg&&x!==this.nightTint&&x!==this.themeTint&&x!==this.sunburst&&x!==this.goRed&&x!==this.feverRails&&x!==this.gaugeFill&&x!==this.gaugeShine&&x!==this.progressFill&&!this.lanterns.some(l=>l.s===x||l.glow===x))x.destroy({children:true});});
   this.lanterns=[];
   // Stage background: cover the stage rectangle with the festival scene.
   const st=L.stage;
@@ -267,6 +314,38 @@ export class PlayRenderer {
   this.buildBand();
   this.buildLane();
   this.buildHint();
+  this.buildRewards();
+ }
+
+ /** Bone counter, crowd counter and FEVER badge. */
+ private buildRewards(){
+  this.rewardsRoot.destroy({children:true});this.rewardsRoot=new Container();
+  const L=this.layout,h=34;
+  const plate=(w:number)=>new Graphics().roundRect(0,0,w,h,h/2).fill({color:0x1c1420,alpha:.84}).stroke({color:C.gold,width:2,alpha:.9});
+  let x=0;
+  this.boneText=null;
+  if(this.opts.rewards){
+   const bone=new Container(),icon=boneIcon();icon.position.set(24,h/2);bone.addChild(plate(132),icon);
+   this.boneText=new BitmapText({text:'0',style:{fontFamily:'ChachaScore',fontSize:22}});this.boneText.anchor.set(0,.5);this.boneText.position.set(44,h/2+1);
+   bone.addChild(this.boneText);bone.position.set(x,0);bone.label='bones';this.rewardsRoot.addChild(bone);x+=140;
+  }
+  this.crowdPlate=new Container();
+  const face=new Sprite(new Texture({source:this.atlas.character.source,frame:new Rectangle(...REGIONS.head)}));
+  face.anchor.set(.5);face.height=26;face.scale.x=face.scale.y;face.position.set(22,h/2);
+  this.crowdText=new Text({text:`0/${CROWD_MAX}`,style:{fontFamily:art.FONT,fontSize:17,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:3}}});
+  this.crowdText.anchor.set(0,.5);this.crowdText.position.set(40,h/2+1);
+  this.crowdPlate.addChild(plate(112),face,this.crowdText);this.crowdPlate.pivot.set(56,h/2);this.crowdPlate.position.set(x+56,h/2);
+  this.rewardsRoot.addChild(this.crowdPlate);x+=120;
+  this.feverBadge=new Container();
+  const badgeW=this.opts.rewards?150:112;
+  const badge=new Graphics().roundRect(0,0,badgeW,h,h/2).fill(0xffc233).stroke({color:C.ink,width:2.5});
+  const label=new Text({text:this.opts.rewards?'フィーバー ×2':'フィーバー',style:{fontFamily:art.FONT,fontSize:16,fontWeight:'900',fill:C.ink}});
+  label.anchor.set(.5);label.position.set(badgeW/2,h/2+1);
+  this.feverBadge.addChild(badge,label);this.feverBadge.pivot.set(badgeW/2,h/2);this.feverBadge.position.set(x+badgeW/2,h/2);this.feverBadge.visible=false;
+  this.rewardsRoot.addChild(this.feverBadge);
+  this.rewardsRoot.position.set(L.rewards.x,L.rewards.y);
+  this.hud.addChild(this.rewardsRoot);
+  this.bonesShown=-1;this.crowdCount=-1;
  }
 
  private buildLanterns(){
@@ -350,6 +429,10 @@ export class PlayRenderer {
   // Chorus colouring of the lane (fades in).
   this.goRed.clear().rect(lane.x,lane.y,lane.w,lane.h).fill({color:0x8a1d3a,alpha:.75});
   this.goRed.alpha=0;this.laneStatic.addChild(this.goRed);
+  // FEVER: gold rails along the lane and a faint gold wash.
+  this.feverRails.clear().rect(lane.x,lane.y,lane.w,lane.h).fill({color:0xffc233,alpha:.08})
+   .rect(lane.x,lane.y-7,lane.w,5).fill(0xffd23f).rect(lane.x,lane.y+lane.h+2,lane.w,5).fill(0xffd23f);
+  this.feverRails.blendMode='add';this.feverRails.alpha=0;this.feverRails.visible=false;this.laneStatic.addChild(this.feverRails);
   // Hit zone.
   const hz=new Graphics();
   hz.rect(L.hitX-L.judgeR-6,lane.y,L.judgeR*2+12,lane.h).fill({color:0xffffff,alpha:.05});
@@ -480,8 +563,9 @@ export class PlayRenderer {
  }
 
  // ----------------------------------------------------------------- frame --
- draw(time:number,s:GameSnapshot,events:readonly EffectEvent[]=[]){
+ draw(time:number,s:GameSnapshot,events:readonly EffectEvent[]=[],bones?:number){
   if(!this.initialized)return;
+  if(bones!==undefined)this.bones=bones;
   const now=performance.now(),dt=Math.min(50,Math.max(0,now-this.lastFrame));this.lastFrame=now;
   const visible=time+this.settings.visualAdvanceMs;
   const beat=beatPhase(this.opts.manifest.beatTimesMs,time);
@@ -550,6 +634,7 @@ export class PlayRenderer {
     if(k>=1)f.ch.view.visible=false;
    }
   });
+  this.drawCrowd(now,beat,s);
   // Balloon from Chachamaru.
   const bAge=now-this.balloonAt;
   this.balloon.visible=bAge<1100;
@@ -567,6 +652,60 @@ export class PlayRenderer {
   const cAge=now-this.bannerAt;
   this.banner.visible=cAge<3200;
   if(this.banner.visible){const k=Math.min(1,cAge/380);this.banner.scale.set(.5+.5*easeOutBack(k));this.banner.alpha=cAge>2800?1-(cAge-2800)/400:1;}
+ }
+
+ /** The cheering crowd: joins one by one (every few 良), cheers on the beat, waves penlights in FEVER. */
+ private drawCrowd(now:number,beat:number,s:GameSnapshot){
+  const L=this.layout;
+  const fever=inFever(s.combo);
+  if(fever!==this.fever){this.fever=fever;if(fever)this.onFeverStart(now);}
+  if(!this.crowd.length)return;
+  const want=crowdSize(s.great,this.crowdStep);
+  if(want>=CROWD_MAX&&!this.fullHouseShown){this.fullHouseShown=true;this.fullHouseAt=now;this.onFullHouse();}
+  const lights=fever&&this.effects!=='off';
+  const party=now-this.fullHouseAt<900?Math.sin((now-this.fullHouseAt)/900*Math.PI):0;
+  this.crowd.forEach((m,i)=>{
+   const p=L.crowd[i];
+   if(i<want&&!m.shown){m.shown=true;m.joined=now;m.s.visible=true;this.crowdPopAt=now;this.bakeFan(m);if(this.effects!=='off')for(let k=0;k<3;k++)this.particle('spark',p.x,p.y-p.height,(k-1)*1.4,-2-Math.random(),520,k%2?0xffd86b:0xff8fb8,{gravity:.06});}
+   if(!m.shown||!p){m.light.visible=false;return;}
+   const k=Math.min(1,(now-m.joined)/340);
+   const hop=Math.abs(Math.sin((beat+m.phase*.5)*Math.PI));
+   const amp=fever?1.7:1;
+   const size=p.height*420/395/CROWD_TEX_H*(k<1?.35+.65*easeOutBack(k):1);
+   m.s.scale.set(m.mirror?-size:size,size);
+   m.s.position.set(p.x,p.y-hop*p.height*.06*amp-(1-k)*p.height*.3-party*p.height*.35);
+   m.s.rotation=Math.sin(beat*Math.PI+m.phase*6)*.045*amp;
+   m.s.alpha=Math.min(1,k*2);
+   // Paws go up on the beat (each on its own beat); in FEVER everyone throws both paws up every beat.
+   const up=beat>=0&&(fever||party>0?beat%1<.5:Math.floor(beat+m.phase*2)%2===0&&beat%1<.55);
+   const tex=m.tex[up?(fever||party>0?3:m.move):0]??m.tex[0];
+   if(tex&&m.s.texture!==tex)m.s.texture=tex;
+   m.light.visible=lights;
+   if(lights){
+    const sway=Math.sin(beat*Math.PI+m.phase*6);
+    m.light.position.set(p.x+(m.mirror?-1:1)*p.height*.34+sway*p.height*.1,p.y-p.height*1.02-hop*p.height*.06*amp);
+    m.light.scale.set(p.height/260);m.light.alpha=.5+.3*hop;
+   }
+  });
+ }
+ /** A joining shiba's pictures (at rest, its own cheer, and FEVER), drawn once when it arrives. */
+ private bakeFan(m:Fan){
+  const {atlas,scale}=this.crowdCoats[m.coat];
+  for(const pose of new Set([0,m.move,3]))m.tex[pose]??=Texture.from(rigCanvas(CROWD_TEX_H,g=>drawRig(g,{character:atlas},{character:scale},CROWD_POSES[pose],DANCER,{flower:false,outfit:m.outfit})));
+  m.s.texture=m.tex[0]!;
+ }
+ private onFeverStart(now:number){
+  const L=this.layout;
+  this.feverAt=now;
+  this.ring(L.hitX,L.laneY,'glowGold',now,420,.8,3,.9);
+  this.drummerState.react('happy',this.lastSongTime);
+  if(this.effects!=='off')for(let i=0;i<12;i++){const a=i/12*Math.PI*2;this.particle('spark',L.hitX,L.laneY,Math.cos(a)*4,Math.sin(a)*4,420,0xffd23f,{gravity:.03});}
+ }
+ /** 満員御礼: every place in the crowd is taken. */
+ private onFullHouse(){
+  const st=this.layout.stage;
+  this.showMessage('満員御礼！','おうえんの柴犬が、全員そろった！');
+  if(this.effects!=='off')[0,260,520].forEach((d,i)=>window.setTimeout(()=>{if(this.alive)this.firework(st.x+st.w*(.3+.2*i),st.y+st.h*(.16+.06*(i%2)));},d));
  }
 
  private drawLane(visible:number,now:number,beat:number,s:GameSnapshot){
@@ -587,6 +726,9 @@ export class PlayRenderer {
    f.alpha=mix*.95;f.visible=mix>.01;
   });
   this.judgeFire.alpha=mix*(.55+.15*Math.sin(now*.012));this.judgeFire.visible=mix>.01;
+  // FEVER rails glow on the beat (a gentle pulse, no flashing) and fade out when it ends.
+  const railTarget=this.fever&&this.effects!=='off'?.55+.3*Math.max(0,Math.cos(beat*Math.PI*2)):0;
+  this.feverRails.alpha+=(railTarget-this.feverRails.alpha)*Math.min(1,.2);this.feverRails.visible=this.feverRails.alpha>.01;
   // Walk back if time moved backwards (retry, seek).
   if(visible<this.lastSongTime)this.upcoming=0;
   this.lastSongTime=visible;
@@ -682,6 +824,15 @@ export class PlayRenderer {
   // Song progress under the syllable strip.
   const p=Math.max(0,Math.min(1,time/this.opts.manifest.durationMs));
   this.progressBar.width=L.progress.w*p;
+  // Bones, crowd and FEVER counters.
+  if(this.boneText&&this.bones!==this.bonesShown){if(this.bones>this.bonesShown&&this.bonesShown>=0)this.bonePopAt=now;this.bonesShown=this.bones;this.boneText.text=this.bones.toLocaleString('en-US');}
+  const bonePlate=this.rewardsRoot.getChildByLabel('bones');
+  if(bonePlate){const age=now-this.bonePopAt;bonePlate.scale.set(age<120?1+.06*Math.sin(age/120*Math.PI):1);}
+  const shown=this.crowd.filter(m=>m.shown).length;
+  if(shown!==this.crowdCount){this.crowdCount=shown;this.crowdText.text=`${shown}/${CROWD_MAX}`;this.crowdText.style.fill=shown>=CROWD_MAX?0xffd23f:0xffffff;}
+  const cAge=now-this.crowdPopAt;this.crowdPlate.scale.set(cAge<200?1+.12*Math.sin(cAge/200*Math.PI):1);
+  this.feverBadge.visible=this.fever;
+  if(this.fever){const age=now-this.feverAt;this.feverBadge.scale.set(age<320?.4+.6*easeOutBack(age/320):1+.04*Math.sin(now*.012));}
   // Roll balloon.
   const rAge=now-this.rollAt;
   this.rollBalloon.visible=this.rollCount>0&&rAge<700;
@@ -858,6 +1009,7 @@ export class PlayRenderer {
  /** Snapshot of renderer state for tests and diagnostics. */
  debug(){
   return {layout:this.layout,chorus:this.chorus,chorusMix:this.chorusMix,friends:this.friends.filter(f=>f.active).length,
+   crowd:this.crowd.filter(m=>m.shown).length,fever:this.fever,bones:this.bonesShown,
    notes:this.notePool.filter(s=>s.visible).length,particles:this.particles.length,flyers:this.flyers.length,
    drummer:this.drummer?.angles(),drummerState:this.drummer?this.host.dataset.state:undefined,pads:this.opts.showPads,
    pose:this.drummer?drummerPose(this.drummerState,this.lastSongTime,0,'idle').state:''};
@@ -867,6 +1019,7 @@ export class PlayRenderer {
   this.alive=false;this.resizeObserver.disconnect();
   if(this.initialized){this.app.destroy(true,{children:true});for(const name of ['ChachaScore','ChachaCombo'])try{BitmapFont.uninstall(name);}catch{/* not installed */}}
   for(const t of Object.values(this.tex??{}))t.texture.destroy(true);
+  for(const m of this.crowd)for(const t of m.tex)t?.destroy(true);
   this.stageBgTexture?.destroy(false);
  }
 }
@@ -890,6 +1043,16 @@ function clipToBox(points:number[],box:{x0:number;y0:number;x1:number;y1:number}
 function easeOut(k:number){return 1-(1-k)*(1-k);}
 function easeOutBack(k:number){const c=1.70158;return 1+(c+1)*Math.pow(k-1,3)+c*Math.pow(k-1,2);}
 function rainbow(now:number){const h=(now*.2)%360;const f=(n:number)=>{const k=(n+h/60)%6;return Math.round(255*(1-.45*Math.max(0,Math.min(k,4-k,1))));};return (f(5)<<16)|(f(3)<<8)|f(1);}
+
+/** A cartoon dog bone (ほねっこ), about 32 × 20, with one outline around the whole shape. */
+function boneIcon():Graphics{
+ const g=new Graphics();
+ const shape=()=>{for(const sx of [-1,1])for(const sy of [-1,1])g.circle(sx*11,sy*4.6,5.4);g.roundRect(-11,-4.8,22,9.6,3);};
+ shape();g.stroke({color:C.ink,width:4.5});
+ shape();g.fill(0xfff2ce);
+ g.roundRect(-8,-2.4,12,2.2,1).fill({color:0xffffff,alpha:.7});
+ return g;
+}
 
 function lanternGraphic():Container{
  const g=new Graphics();

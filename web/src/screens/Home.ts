@@ -1,6 +1,7 @@
 import {BRAND} from '../app/brand';
 import {Character,flowerSvg} from '../render/Character';
 import {nav} from '../app/context';
+import {boneSvg} from '../app/ui';
 
 const icon={
  plus:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
@@ -18,6 +19,7 @@ export function homeScreen(root:HTMLElement):()=>void{
    <div class="title-actions">
     <a class="drum-start" href="#/songs" data-nav id="start-game"><strong>はじめる</strong><small>ドン で スタート</small></a>
     <div class="title-links">
+     <a class="chip-button gacha-chip" href="#/gacha" data-nav>${boneSvg()} しばガチャ</a>
      <a class="chip-button" href="#/import" data-nav>${icon.plus} 曲を追加</a>
      <a class="chip-button" href="#/settings" data-nav>${icon.gear} 設定・電子ドラム</a>
      <a class="chip-button" href="#/studio" data-nav>${icon.studio} 譜面工房</a>

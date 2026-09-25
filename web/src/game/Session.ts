@@ -9,6 +9,8 @@ import {saveRun,saveSettings} from '../storage/Database';
 import {tapHaptic,hapticSwitch} from '../input/haptics';
 import {adoptDrum} from '../app/drumMode';
 import {outputOptions,useOutput,setTiming,clampDelay,signedMs} from '../app/output';
+import {BoneCounter,crowdStep,crowdSize,inFever,finishBones,CROWD_MAX} from './festival';
+import {awardBones,loadFestival} from '../storage/festival';
 
 export type SessionStatus='LOADING'|'READY'|'COUNT_IN'|'PLAYING'|'PAUSED'|'FINISHING'|'RESULT'|'LOAD_ERROR'|'SHOWCASE';
 const AUTO_ROLL_INTERVAL_MS=80;
@@ -24,6 +26,8 @@ export class Session {
  private celebrated=false;private countShown=-1;private finishTimer=0;
  /** Player hits judged so far, and whether the screen is set up for the electronic drum. */
  private judged=0;private drumUi=false;
+ /** ほねっこ for this run (normal play only), and the festival moments that get a sound. */
+ private readonly rewards:boolean;private readonly boneCounter:BoneCounter;private fever=false;private fullHouse=false;
  private abort=new AbortController();private wake:WakeLockSentinel|null=null;
  private readonly scene:HTMLElement;
  onResult:(r:RunResult)=>void=()=>{};
@@ -40,6 +44,8 @@ export class Session {
   this.mode=state.settings.inputMode;
   this.autoplay=opts.autoplay??false;this.practice=opts.practice??false;
   this.pausedAt=Math.max(0,opts.startMs??0);
+  this.rewards=!this.autoplay&&!this.practice;
+  this.boneCounter=new BoneCounter(crowdStep(chart.notes.filter(n=>n.kind==='tap').length));
   const inputMode=this.mode==='mixed'?'keyboard':this.mode;
   this.drumUi=inputMode==='midi';
   // iPhone: an invisible switch over each pad gives the tap a system haptic.
@@ -58,7 +64,7 @@ export class Session {
   </section>`;
   this.scene=root.querySelector<HTMLElement>('.game-scene')!;
   const tag=this.autoplay?'AUTO':this.practice?'練習':'';
-  this.renderer=new PlayRenderer(this.scene,{chart,manifest:pack.manifest,settings:state.settings,difficulty:chart.difficulty,title:pack.manifest.title,artist:pack.manifest.artist,showPads:inputMode==='touch',tag,inputHint:inputMode,theme:stageThemeFor(pack.manifest.packId)});
+  this.renderer=new PlayRenderer(this.scene,{chart,manifest:pack.manifest,settings:state.settings,difficulty:chart.difficulty,title:pack.manifest.title,artist:pack.manifest.artist,showPads:inputMode==='touch',tag,inputHint:inputMode,theme:stageThemeFor(pack.manifest.packId),rewards:this.rewards,collection:()=>loadFestival().then(f=>f.owned)});
   const signal=this.abort.signal;
   this.scene.querySelector('.pause-button')!.addEventListener('click',()=>this.pause(),{signal});
   this.scene.querySelector('.rotate-hint')!.addEventListener('click',e=>(e.currentTarget as HTMLElement).remove(),{signal});
@@ -217,12 +223,17 @@ export class Session {
   for(const e of events){
    if(e.kind==='combo')this.audio.chime(e.value!>=100?3:e.value!>=50?2:1);
   }
+  if(this.rewards)this.boneCounter.add(events,s.great);
+  const fever=inFever(s.combo);
+  if(fever&&!this.fever&&this.status==='PLAYING')this.audio.effect('fever');
+  this.fever=fever;
+  if(!this.fullHouse&&crowdSize(s.great,this.boneCounter.step)>=CROWD_MAX){this.fullHouse=true;this.audio.effect('fullHouse');}
   if(s.finished&&!this.celebrated&&this.status==='PLAYING'&&!this.practice){
    this.celebrated=true;
    if(s.allGreat){this.renderer.celebrate('allGreat');this.audio.effect('allGreat');}
    else if(s.fullCombo){this.renderer.celebrate('fullCombo');this.audio.effect('fullCombo');}
   }
-  this.renderer.draw(t,s,events);
+  this.renderer.draw(t,s,events,this.rewards?this.boneCounter.bones:undefined);
   if(this.status==='PLAYING'&&t>=this.pack.manifest.durationMs+170&&this.audio.ended&&s.finished&&!this.done)this.finish();
   this.frame=requestAnimationFrame(this.drawFrame);
  };
@@ -250,7 +261,9 @@ export class Session {
   const result:RunResult={runId:this.runId,packId:this.pack.manifest.packId,chartId:this.chart.chartId,audioHash:this.pack.manifest.audio.sha256,chartHash:this.pack.manifest.charts.find(c=>c.chartId===this.chart.chartId)!.sha256,ruleset:RULESET,inputMode:this.mode,autoplay:this.autoplay,practice:this.practice,date:new Date().toISOString(),settings:structuredClone(state.settings),stats,title:this.pack.manifest.title,difficulty:this.chart.difficulty,timingUnstable:stats.timingUnstable};
   const cleared=stats.gauge>=70;
   if(!this.celebrated){this.celebrated=true;this.renderer.celebrate(cleared?'clear':'finish');this.audio.effect(cleared?'clear':'fail');}
-  const save=saveRun(result).catch(()=>toast('結果を保存できませんでした。ストレージ容量を確認してください'));
+  // ほねっこ are paid once per finished normal run, before the result screen reads them.
+  const award=this.rewards?awardBones(this.runId,this.boneCounter.bones,finishBones(stats)).catch(()=>null):Promise.resolve(null);
+  const save=Promise.all([saveRun(result),award]).catch(()=>toast('結果を保存できませんでした。ストレージ容量を確認してください'));
   this.finishTimer=window.setTimeout(()=>{void save.then(()=>{this.audio.stop();this.status='RESULT';if(!this.disposed)this.onResult(result);});},1500);
  }
 

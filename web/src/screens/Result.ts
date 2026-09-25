@@ -1,10 +1,11 @@
 import type {RunResult} from '../../../contracts/public-types';
-import {header,escape} from '../app/ui';
+import {header,escape,boneSvg} from '../app/ui';
 import {difficultyNames} from '../app/store';
 import {Character,flowerSvg,crownSvg} from '../render/Character';
 import {recordEligible} from '../storage/Database';
 import {previousBest,crownOf} from '../app/records';
 import {nav,uiAudio,memory} from '../app/context';
+import {loadFestival} from '../storage/festival';
 
 function timingSummary(values:readonly number[]){
  if(!values.length)return '命中した音符のタイミングデータがありません。';
@@ -22,6 +23,9 @@ export async function resultScreen(root:HTMLElement,r:RunResult):Promise<()=>voi
  const eligible=recordEligible(r);
  const prev=eligible?await previousBest(r):null;
  const newBest=eligible&&(prev===null||s.score>prev);
+ // ほねっこ paid for this run (normal play only; AUTO and practice earn none).
+ const festival=await loadFestival().catch(()=>null);
+ const award=festival?.awards.find(a=>a.runId===r.runId)??null;
  const tag=r.autoplay?'AUTO · 参考記録':r.practice?'練習 · 参考記録':r.inputMode==='mixed'?'操作を途中で変更 · 参考記録':r.timingUnstable?'配送遅延あり · 参考記録':`通常プレイ · ${r.inputMode==='touch'?'タッチ':r.inputMode==='midi'?'電子ドラム':'キーボード'}`;
  const confetti=crown!=='none'&&crown!=='clear'?`<div class="confetti" aria-hidden="true">${Array.from({length:32},(_,i)=>`<i style="left:${(i*37)%100}%;background:${['#ff6b5a','#ffd86b','#6ee7ff','#7ed36f','#fff'][i%5]};animation-delay:${-(i%9)*.45}s;animation-duration:${3+i%4}s"></i>`).join('')}</div>`:'';
  root.innerHTML=`${header()}<section class="result-page ${cleared?'':'failed'}">${confetti}
@@ -36,6 +40,7 @@ export async function resultScreen(root:HTMLElement,r:RunResult):Promise<()=>voi
    <div class="result-stats"><div class="great"><span>良</span><strong data-count="${s.great}">0</strong></div><div class="ok"><span>可</span><strong data-count="${s.ok}">0</strong></div><div class="miss"><span>不可</span><strong data-count="${s.miss}">0</strong></div><div class="roll"><span>連打</span><strong data-count="${s.rollHits}">0</strong></div></div>
    <div class="result-gauge" aria-label="お祭りゲージ ${Math.round(s.gauge)}%"><i style="width:0%;--p:${Math.max(.01,s.gauge/100)}"></i><em></em></div>
    <div class="result-sub"><span>最大 <b>${s.maxCombo}</b> コンボ</span><span>精度 <b>${(s.accuracy*100).toFixed(1)}%</b></span><span>ゲージ <b>${Math.round(s.gauge)}%</b></span></div>
+   ${award?`<div class="bone-award" aria-label="ほねっこ ${award.total}本"><span class="bone-award-icon">${boneSvg()}</span><div class="bone-main"><b>ほねっこ ＋<span id="bone-count" data-count="${award.total}">0</span></b><small>演奏 ${award.play}${award.items.map(i=>`・${escape(i.label)} ${i.bones}`).join('')}</small></div><div class="bone-side"><span class="bone-total">もっている<b>${festival!.bones.toLocaleString()}</b></span><a class="button bone-gacha" href="#/gacha?back=${encodeURIComponent(location.hash)}" data-nav>ガチャ</a></div></div>`:''}
    <div class="result-actions"><button class="primary" id="retry" data-nav>${r.autoplay?'自分であそぶ ↻':'もう一度あそぶ ↻'}</button>${r.autoplay?'<button id="retry-auto" data-nav>もう一度おてほん</button>':''}<a class="button" href="#/songs" data-nav id="to-songs">曲一覧へ</a></div>
    <details class="result-detail"><summary>タイミングの詳細</summary><p>${timingSummary(s.deltas)}<br>打撃の判定差であり、機器の物理遅延の測定ではありません。<br>入力: ${r.inputMode} ／ ルール: ${r.ruleset}${r.timingUnstable?'<br>80msを超える配送遅延を検知しました。通常記録は更新していません。':''}</p></details>
   </div></section>`;

@@ -396,3 +396,121 @@ html[data-render="software"] .new-best{animation:none}
  .detail-art .art-title{right:130px;bottom:10px}
  .detail-art p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
+/* ほねっこ: bones earned by a run (spent on the shiba draw). */
+.bone-svg{display:block;width:100%;height:100%}
+.bone-award{display:flex;align-items:center;gap:12px;margin:10px 0;padding:8px 14px;border-radius:16px;border:2.5px solid var(--ink);background:linear-gradient(100deg,#fff2ce,#ffe39a);box-shadow:0 3px 0 var(--ink)}
+.bone-award-icon{width:46px;height:30px;flex:none}
+.bone-award b{font-size:20px;font-weight:900;font-variant-numeric:tabular-nums}
+.bone-award small{display:block;font-size:12px;color:#6b5a48;font-weight:700}
+.bone-main{flex:1;min-width:0}
+.bone-side{display:flex;align-items:center;gap:10px}
+.bone-total{font-size:12px;font-weight:800;color:#6b5a48;text-align:right;line-height:1.2}
+.bone-total b{display:block;font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums}
+.bone-award b{white-space:nowrap}
+@media (max-width:480px){
+ .bone-award{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:8px 12px}
+ .bone-award-icon{width:36px;height:24px}.bone-award b{font-size:18px}
+ .bone-side{grid-column:1/-1;justify-content:space-between;border-top:1.5px dashed #d9b86a;padding-top:6px}
+ .bone-total{display:flex;align-items:baseline;gap:6px;text-align:left}.bone-total b{display:inline}
+ .result-actions{grid-template-columns:1.45fr 1fr}.result-actions .primary{white-space:nowrap;font-size:16px;padding-left:10px;padding-right:10px}
+}
+/* Phones held sideways: the whole result card, bones and buttons on one screen. */
+@media (max-height:500px) and (orientation:landscape){
+ .result-page{padding-top:4px;padding-bottom:4px;min-height:calc(100svh - 48px)}
+ .result-dog .eyebrow{display:none}
+ .result-dog h1{font-size:34px;margin:0}
+ .result-character{width:min(150px,42svh);margin-top:2px}
+ .celebration{font-size:12px;margin-top:4px}
+ .result-card{padding:10px 14px}
+ .result-card .eyebrow{font-size:11px}
+ .result-card h2{display:inline-block;font-size:18px;margin:0 8px 2px 0;vertical-align:middle}
+ .result-card .tag,.result-card .new-best{font-size:11px;padding:2px 10px;vertical-align:middle}
+ .result-score{font-size:30px;margin:0}.result-score small{display:none}
+ .result-stats{margin:2px 0;gap:6px}.result-stats div{padding:2px 4px;border-width:2px}.result-stats span{font-size:11px}.result-stats strong{font-size:16px}
+ .result-gauge{height:14px;margin:4px 0 2px}
+ .result-sub{display:none}
+ .bone-award{margin:6px 0;padding:4px 10px;gap:8px}.bone-award-icon{width:34px;height:22px}.bone-award b{font-size:16px}.bone-award small{font-size:11px}
+ .result-actions{margin-top:6px}.result-actions .primary,.result-actions .button{min-height:40px;padding:6px 12px;font-size:15px}
+}
+/* しばガチャ (#/gacha) and しばずかん */
+.gacha-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:center;max-width:900px;margin:0 auto 18px}
+.gacha-machine{position:relative;max-width:300px;width:100%;justify-self:center}
+.gacha-svg{display:block;width:100%;height:auto;filter:none}
+.gacha-machine.turning .gacha-handle{animation:gacha-turn .72s cubic-bezier(.4,.1,.3,1)}
+.gacha-machine.turning .gacha-caps{animation:gacha-jiggle .18s 4 linear;transform-origin:120px 130px}
+@keyframes gacha-turn{to{transform:rotate(360deg)}}
+@keyframes gacha-jiggle{25%{transform:translate(-2px,1px) rotate(-2deg)}75%{transform:translate(2px,-1px) rotate(2deg)}}
+.drop-capsule{position:absolute;left:64%;top:84%;width:13%;aspect-ratio:1;border-radius:50%;border:3px solid var(--ink);background:linear-gradient(#fff 50%,var(--cap,#8fd3ff) 50%)}
+.drop-capsule[data-rarity="R"]{--cap:#7ed36f}.drop-capsule[data-rarity="SR"]{--cap:#ffcf3f}.drop-capsule[data-rarity="SSR"]{background:linear-gradient(90deg,#ff6b8a,#ffd23f,#6ee7ff,#c9a2ff)}
+.drop-capsule.dropping{animation:capsule-drop .6s cubic-bezier(.3,.7,.4,1)}
+@keyframes capsule-drop{0%{transform:translateY(-40px) scale(.6)}55%{transform:translateY(8px) scale(1)}75%{transform:translateY(-6px)}100%{transform:none}}
+.gacha-panel{display:grid;gap:12px}
+.wallet{display:flex;align-items:center;gap:10px;font-weight:800;color:#5a4a3a}
+.wallet-icon{width:48px;height:32px;flex:none}
+.wallet b{margin-left:auto;font-size:30px;color:var(--ink);font-variant-numeric:tabular-nums}
+.gacha-one,.gacha-ten{display:grid;justify-items:center;gap:2px;font-size:20px;min-height:64px}
+.gacha-one small,.gacha-ten small{font-size:12px;font-weight:700;opacity:.9}
+.gacha-ten{background:linear-gradient(#ffe38a,#ffc233);border:2.5px solid var(--ink);box-shadow:0 4px 0 var(--ink);color:var(--ink)}
+.gacha-hint{min-height:1.4em;margin:0;font-size:13px;font-weight:700;color:#8a4a2a}
+.gacha-rates summary{cursor:pointer;font-size:13px;font-weight:800;color:#6b5a48}
+.gacha-rates p{font-size:12px;line-height:1.7}
+.zukan{max-width:900px;margin:0 auto}
+.zukan h2 span{font-size:15px;color:#8a7658;margin-left:6px}
+.zukan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+.zukan-card{display:grid;justify-items:center;gap:2px;padding:8px 4px;min-height:0;border-radius:14px;border:2.5px solid var(--rc,#cfd6df);background:#fff;font-size:12px;box-shadow:0 3px 0 var(--rc,#cfd6df)}
+.zukan-card[data-rarity="R"]{--rc:#4fb3e8}.zukan-card[data-rarity="SR"]{--rc:#f0b429}.zukan-card[data-rarity="SSR"]{--rc:#ff5fa2;background:linear-gradient(160deg,#fff,#fff0f7 60%,#eaf8ff)}
+.zukan-card.unknown{background:#efe6d6;opacity:1;cursor:default}
+.zukan-card.unknown:disabled{opacity:1}
+.zukan-card b{font-size:12px;line-height:1.2}
+.zukan-card small{font-size:11px;color:var(--rc,#8a96a8);font-weight:900;letter-spacing:.05em}
+.zukan-pic{display:grid;place-items:center;height:96px}
+/* The reveal: one capsule or card at a time over a dark festival night. */
+.gacha-reveal [hidden],.gacha-machine [hidden]{display:none!important}
+.gacha-reveal.summary-open{grid-template-rows:auto auto;align-content:center}
+.gacha-reveal{position:fixed;inset:0;z-index:60;display:grid;grid-template-rows:1fr auto auto;justify-items:center;align-items:center;padding:24px 16px calc(24px + env(safe-area-inset-bottom));background:radial-gradient(circle at 50% 42%,#4a2a55,#150d1a 70%);color:#fff;overflow:auto}
+.reveal-rays{position:absolute;inset:-50%;z-index:-1;opacity:0;transition:opacity .4s;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,220,120,.16) 0 10deg,transparent 10deg 20deg);animation:rays-turn 24s linear infinite;pointer-events:none}
+.gacha-reveal[data-rarity="SR"] .reveal-rays{opacity:1}
+.gacha-reveal[data-rarity="SSR"] .reveal-rays{opacity:1;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,120,180,.2) 0 8deg,rgba(120,220,255,.16) 8deg 16deg,transparent 16deg 24deg)}
+@keyframes rays-turn{to{transform:rotate(360deg)}}
+.reveal-body{display:grid;place-items:center;min-height:0}
+.reveal-capsule{position:relative;width:min(46vw,190px);aspect-ratio:1;border:none;background:none;padding:0;min-height:0;cursor:pointer;animation:capsule-wobble 1.6s ease-in-out infinite}
+.reveal-capsule i{position:absolute;left:0;right:0;height:50%;border:5px solid var(--ink);transition:transform .26s ease-in,opacity .26s}
+.reveal-capsule .cap-top{top:0;border-radius:999px 999px 0 0;border-bottom-width:2.5px;background:var(--cap,#8fd3ff)}
+.reveal-capsule .cap-bottom{bottom:0;border-radius:0 0 999px 999px;border-top-width:2.5px;background:#fffaf0}
+.reveal-capsule .cap-top::after{content:'';position:absolute;left:18%;top:22%;width:24%;height:18%;border-radius:50%;background:rgba(255,255,255,.7)}
+.reveal-capsule[data-rarity="R"]{--cap:#7ed36f}.reveal-capsule[data-rarity="SR"]{--cap:linear-gradient(#ffe78a,#ffc233)}
+.reveal-capsule[data-rarity="SSR"]{--cap:linear-gradient(90deg,#ff6b8a,#ffd23f,#6ee7ff,#c9a2ff)}
+.reveal-capsule[data-rarity="SR"],.reveal-capsule[data-rarity="SSR"]{filter:drop-shadow(0 0 18px rgba(255,210,90,.75))}
+.reveal-capsule.upgrade{animation:capsule-upgrade .6s ease-out,capsule-wobble 1.6s .6s ease-in-out infinite}
+.reveal-capsule.open .cap-top{transform:translateY(-70%) rotate(-24deg);opacity:0}
+.reveal-capsule.open .cap-bottom{transform:translateY(40%);opacity:0}
+@keyframes capsule-wobble{50%{transform:rotate(-5deg) translateY(-4px)}}
+@keyframes capsule-upgrade{0%{transform:scale(1)}40%{transform:scale(1.18) rotate(8deg)}100%{transform:scale(1)}}
+.reveal-card{position:relative;display:grid;justify-items:center;gap:4px;width:min(320px,88vw);padding:16px 16px 18px;border-radius:22px;border:4px solid var(--rc,#cfd6df);background:linear-gradient(170deg,#fffaf0,#fff2ce);color:var(--ink);box-shadow:0 8px 0 var(--ink),0 0 40px rgba(255,210,120,.35);text-align:center}
+.reveal-card[data-rarity="R"]{--rc:#4fb3e8}.reveal-card[data-rarity="SR"]{--rc:#f0b429}.reveal-card[data-rarity="SSR"]{--rc:#ff5fa2;background:linear-gradient(170deg,#fff,#fff0f7 45%,#eaf8ff)}
+.reveal-card.pop{animation:card-pop .42s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes card-pop{0%{transform:scale(.4) rotate(-6deg);opacity:0}100%{transform:none;opacity:1}}
+.card-rarity{font-size:13px;font-weight:900;letter-spacing:.08em;color:var(--rc,#8a96a8)}
+.reveal-card h3{margin:2px 0 0;font-size:22px;font-weight:900}
+.reveal-card p{margin:0;font-size:13px;color:#6b5a48}
+.card-pic{display:grid;place-items:center;min-height:120px}
+.card-new{position:absolute;top:-14px;right:-10px;padding:4px 12px;border-radius:999px;background:#ff5f5f;color:#fff;font-weight:900;border:3px solid var(--ink);transform:rotate(8deg)}
+.card-dup{font-size:13px;font-weight:800;color:#8a6a2a}
+.reveal-count{margin:6px 0 0;font-weight:800;color:#ffe9c4;min-height:1.2em}
+.reveal-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.reveal-actions .primary{min-width:180px}
+.reveal-summary{display:grid;gap:12px;justify-items:center;width:min(760px,100%)}
+.reveal-summary h3{margin:0;font-size:22px}
+.reveal-summary h3 small{display:block;font-size:13px;color:#ffe9c4}
+.summary-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;width:100%}
+.summary-tile{position:relative;display:grid;justify-items:center;padding:6px 2px;border-radius:12px;background:#fffaf0;color:var(--ink);border:3px solid var(--rc,#cfd6df);font-size:11px}
+.summary-tile[data-rarity="R"]{--rc:#4fb3e8}.summary-tile[data-rarity="SR"]{--rc:#f0b429}.summary-tile[data-rarity="SSR"]{--rc:#ff5fa2}
+.summary-tile i{position:absolute;top:-8px;right:-6px;font-style:normal;font-size:10px;font-weight:900;padding:1px 6px;border-radius:999px;background:#ff5f5f;color:#fff;border:2px solid var(--ink)}
+.tile-pic{display:grid;place-items:center;height:70px}
+@media (max-width:640px){.gacha-main{grid-template-columns:1fr}.gacha-machine{max-width:220px}.summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-height:500px) and (orientation:landscape){.gacha-machine{max-width:200px}.gacha-reveal{padding:10px 16px}.reveal-card{padding:10px 12px 12px}.card-pic{min-height:90px}.summary-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.tile-pic{height:56px}}
+@media (prefers-reduced-motion:reduce){.reveal-rays,.reveal-capsule{animation:none}}
+.gacha-chip svg.bone-svg{width:30px;height:20px}
+.bone-gacha{min-height:40px;padding:6px 12px;font-size:14px;border:2.5px solid var(--ink);box-shadow:0 3px 0 var(--ink);background:linear-gradient(#ffe38a,#ffc233);flex:none}
+/* Title screen on a sideways phone: the menu chips in two columns. */
+@media (max-height:500px) and (orientation:landscape){.title-links{grid-template-columns:repeat(2,auto);gap:8px}.title-actions{flex-wrap:nowrap}.title-links .chip-button{white-space:nowrap}}

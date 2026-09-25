@@ -54,6 +54,8 @@ GitHub Pagesは静的配信で、Python解析APIをホストしていません�
 | 音源時計・補正・打音・効果音・試聴 | `web/src/audio/AudioEngine.ts`, `ClockBridge.ts`, `synth.ts`, `Preview.ts` |
 | キー・タッチ・MIDI入力 | `web/src/input/InputRouter.ts`, `web/src/screens/Settings.ts`, 電子ドラムへの自動切替 `web/src/app/drumMode.ts` |
 | 音ズレ合わせ・音の出力ごとの補正 | `web/src/screens/Sync.ts`（画面）, `web/src/game/sync.ts`（計算）, `web/src/app/output.ts`（出力の切替） |
+| おうえん団・フィーバー・ほねっこ | `web/src/game/festival.ts`（計算）, `web/src/render/PlayRenderer.ts`（`drawCrowd`）, `web/src/storage/festival.ts`（保存） |
+| しばガチャ・しばずかん・衣装 | `web/src/screens/Gacha.ts`, `web/src/game/gacha.ts`（確率）, `web/src/render/costumes.ts`（衣装の絵）, `web/src/render/portrait.ts`・`shibaCard.ts`（リグを1枚絵に） |
 | 演奏画面の描画（レーン・音符・ゲージ・演出・ステージ） | `web/src/render/PlayRenderer.ts`, `layout.ts`, `art.ts`, `syllables.ts`, `timing.ts`, `web/src/play.css` |
 | キャラクター（骨格・ポーズ・毛色違いの仲間） | `web/src/render/rig.ts`（共通データ）, `Character.ts`（メニュー用SVG）, `PixiCharacter.ts`（演奏用WebGL）, `recolor.ts` |
 | 同梱曲の作曲・譜面 | `scripts/compose/`（`songs/*.py` に譜面と楽曲、`build.py` で書き出し） |
