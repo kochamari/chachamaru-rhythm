@@ -34,7 +34,7 @@
 | --- | --- | --- |
 | Webプレイヤー | GitHub Pages／ローカルのブラウザ | 曲ZIPを読み込み、演奏する。曲・設定・結果をそのブラウザのIndexedDBに保存。ログイン不要 |
 | Studio UI | `#/studio`（ローカル／公開版） | ローカルでは音源のドロップだけで解析→ZIP保存→ゲームへ追加（複数可、1曲ずつ順番）。波形・拍・譜面・サビ区間を編集。自動保存、undo/redo、ZIP書出し。公開版では既存ZIPを読み込んでブラウザ内で編集 |
-| Studio API | Macのloopback FastAPI | 音源をAAC-LC化し、最終音源をlibrosaで解析、3難易度の下書きを作る。曲名・アーティストが空ならタグ→ファイル名。解析は同時に1つ（409）で、UIは空くまで待つ。`/api/health` の `studio` は起動フォルダの識別（`Start Studio.command` が別フォルダの譜面工房を再利用しないため） |
+| Studio API | Macのloopback FastAPI | 音源をAAC-LC化し、最終音源をlibrosaで解析、3難易度の下書きを作る。曲名・アーティストが空ならタグ→ファイル名。解析は同時に1つ（409）で、UIは空くまで待つ。`/api/health` の `studio` は起動フォルダの識別（`Start Studio.command` と Macアプリが別フォルダの譜面工房を再利用しないため）。Macアプリ（`scripts/install-mac-app.sh`、`chachamaru-studio://`）は `scripts/studio.mjs --app` で裏起動、`--stop` で停止 |
 
 GitHub Pagesは静的配信で、Python解析APIをホストしていません。公開サイトだけで元音源から解析できるとは案内しないでください。ローカルStudioで作ったZIPを自分の端末へ移し、公開プレイヤーへ取り込む構成です。公開版Studioでは既存ZIPの編集をブラウザ内に保存できます。自動生成譜面は編集前提の下書きで、原曲の演奏を完全に採譜したものではありません。
 
