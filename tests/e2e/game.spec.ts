@@ -182,7 +182,9 @@ test('U30 しばガチャ spends ほねっこ, opens capsules and fills the coll
  // One draw: capsule, then the card.
  await page.locator('#pull-1').click();
  await expect(page.locator('.gacha-reveal .reveal-capsule')).toBeVisible();
- for(let i=0;i<3&&await page.locator('.reveal-card').isHidden();i++)await page.locator('#reveal-next').click();
+ // One tap opens it; a rare capsule may first change colour and need a second tap.
+ await page.locator('#reveal-next').click();
+ if(await page.locator('.reveal-capsule.upgrade').count())await page.locator('#reveal-next').click();
  await expect(page.locator('.reveal-card')).toBeVisible();await expect(page.locator('.reveal-card .card-new')).toHaveText('NEW!');
  await page.locator('#reveal-next').click();
  await expect(page.locator('.gacha-reveal')).toHaveCount(0);
