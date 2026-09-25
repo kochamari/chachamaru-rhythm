@@ -166,17 +166,25 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none}
 .paper{background:var(--cream);border:3px solid var(--ink);border-radius:18px;padding:20px;box-shadow:0 5px 0 var(--ink);color:var(--ink)}
 .paper h2{font-size:20px;margin:0 0 14px;font-weight:900}
 .paper p{font-size:13px;color:#6b5a48}
-.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+/* minmax(0,…): the cards follow the screen width instead of their widest
+   control (on phones a select with long options pushed them off-screen). */
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
 .full-width{grid-column:1/-1}
 .setting-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1.5px dashed var(--line);font-size:15px;font-weight:700}
 .setting-row label{flex:1}
 .setting-row input[type=range]{width:min(46%,260px);accent-color:var(--lacquer)}
 .setting-row output{width:46px;text-align:right;font-variant-numeric:tabular-nums}
 .setting-row input[type=checkbox]{width:24px;height:24px;accent-color:var(--lacquer)}
-.setting-row select,.setting-row input[type=number]{min-height:42px;border-radius:10px;border:2px solid var(--line);background:#fff;padding:0 10px;font-size:16px}
-.stepper{display:flex;align-items:center;gap:4px}
+.setting-row select,.setting-row input[type=number]{min-height:42px;border-radius:10px;border:2px solid var(--line);background:#fff;padding:0 10px;font-size:16px;min-width:0;max-width:62%}
+.stepper{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
 .stepper button{min-height:40px;min-width:44px;padding:4px 8px;font-size:14px}
-.stepper input{width:84px;text-align:center}
+.stepper input{width:84px;text-align:center;max-width:100%}
+@media (max-width:520px){
+ /* Rows with +/- buttons: the explanation on top, the buttons underneath. */
+ .setting-row:has(.stepper){flex-direction:column;align-items:stretch}
+ .setting-row:has(.stepper) .stepper{justify-content:flex-start}
+}
+@media (max-width:420px){.stepper input{width:64px}.stepper button{min-width:40px;padding:4px 6px}}
 .status-text{padding:10px 12px;background:#efe6cf;border-radius:10px;font-size:14px;margin:10px 0;overflow-wrap:anywhere}
 .midi-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
 .midi-map{display:grid;gap:8px;padding:14px;border-radius:14px;border:2.5px solid var(--ink);background:#fff}
@@ -266,7 +274,7 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none}
 
 /* ------------------------------------------------------------ responsive */
 @media (max-width:980px){
- .settings-grid{grid-template-columns:1fr}
+ .settings-grid{grid-template-columns:minmax(0,1fr)}
  .library-body{grid-template-columns:minmax(240px,.85fr) minmax(0,1.15fr)}
 }
 @media (max-width:720px){
@@ -339,3 +347,4 @@ html[data-render="software"] .new-best{animation:none}
 .import-summary li.updated b{background:var(--ka-dark);color:#fff}
 .import-summary li.error b{background:var(--don-dark);color:#fff}
 .import-summary li small{grid-column:2;color:#8c5a48;font-size:12px}
+.setting-row label small{display:block;font-size:12px;font-weight:600;color:#8c7b5e;margin-top:2px}

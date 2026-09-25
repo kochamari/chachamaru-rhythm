@@ -6,6 +6,7 @@ import {PlayRenderer,stageThemeFor} from '../render/PlayRenderer';
 import {state,difficultyNames} from '../app/store';
 import {escape,toast} from '../app/ui';
 import {saveRun} from '../storage/Database';
+import {tapHaptic} from '../input/haptics';
 
 export type SessionStatus='LOADING'|'READY'|'COUNT_IN'|'PLAYING'|'PAUSED'|'FINISHING'|'RESULT'|'LOAD_ERROR'|'SHOWCASE';
 const AUTO_ROLL_INTERVAL_MS=80;
@@ -116,6 +117,8 @@ export class Session {
  private hit(i:Input){
   if(this.status==='READY'&&i.source==='keyboard'&&i.color==='don'){void this.start();return;}
   if(!['READY','COUNT_IN','PLAYING'].includes(this.status))return;
+  // Inside the pointerdown dispatch, so phones treat it as the user's tap.
+  if(i.source==='touch'&&state.settings.haptics!==false)tapHaptic(i.color);
   this.audio.hit(i.color);
   let t=0;
   try{t=this.audio.time(i.performanceMs);}catch{this.pause('音声時計を再確認してください');return;}

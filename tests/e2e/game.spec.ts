@@ -1,4 +1,4 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,devices,type Page} from '@playwright/test';
 import {mkdirSync,readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {unzipSync,zipSync,strToU8,strFromU8} from 'fflate';
@@ -53,4 +53,32 @@ test('P13 a collection ZIP adds only new songs, skips the ones already here and 
  const titles=await page.evaluate(async()=>(await window.__chacha.db().then(d=>d.getAll('songs')) as {manifest:{title:string;packId:string;revision:number}}[]).map(s=>s.manifest));
  expect(titles.filter(m=>m.packId.startsWith('bundle-e2e')).map(m=>[m.title,m.revision])).toEqual([['まとめ試験A',5],['まとめ試験B',1]]);
  await page.locator('#to-songs').click();await expect(page.getByRole('button',{name:/まとめ試験A/})).toBeVisible();
+});
+
+test('U26 tapping the drum vibrates on phones, and the setting turns it off',async({page,browser},info)=>{
+ const tap=()=>page.evaluate(()=>{let id=90;for(const pad of ['don','ka'])document.querySelector(`[data-pad="${pad}"]`)!.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:id++,pointerType:'touch'}));for(const n of [90,91])document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:n}));});
+ // Android and others: the Vibration API, don longer than ka.
+ await page.addInitScript(()=>{const calls:number[]=[];Object.assign(window,{vibrations:calls});Object.defineProperty(navigator,'vibrate',{configurable:true,value:(ms:number)=>{calls.push(ms);return true;}});});
+ await boot(page);await page.evaluate(()=>{window.__chacha.settings.inputMode='touch';});
+ await page.goto('/#/play/himawari-demo/easy');await page.locator('#resume-play').click();
+ await expect.poll(()=>page.evaluate(()=>window.__chacha.session?.status)).toMatch(/COUNT_IN|PLAYING/);
+ await tap();expect(await page.evaluate(()=>(window as unknown as {vibrations:number[]}).vibrations)).toEqual([14,7]);
+ await page.evaluate(()=>{window.__chacha.settings.haptics=false;});await tap();
+ expect(await page.evaluate(()=>(window as unknown as {vibrations:number[]}).vibrations)).toEqual([14,7]);
+ await page.goto('/#/settings');await expect(page.locator('#haptics')).not.toBeChecked();await page.locator('#haptics').check();
+ await expect.poll(()=>page.evaluate(()=>window.__chacha.settings.haptics)).toBe(true);
+ // iPhone: no Vibration API; each tap toggles a hidden switch (the iOS tick).
+ const phone=await browser.newContext({...devices['iPhone 13'],baseURL:info.project.use.baseURL});
+ const p=await phone.newPage();await p.route('**/api/**',r=>r.fulfill({status:404,contentType:'application/json',body:'{}'}));
+ await p.goto('/');await p.waitForFunction(()=>window.__chacha?.bundledReady,null,{timeout:60000});
+ await p.evaluate(()=>{window.__chacha.settings.inputMode='touch';});
+ await p.goto('/#/play/himawari-demo/easy');await p.locator('#resume-play').click();
+ await expect.poll(()=>p.evaluate(()=>window.__chacha.session?.status)).toMatch(/COUNT_IN|PLAYING/);
+ const states:(boolean|null)[]=[];
+ for(const pad of ['don','ka']){
+  await p.evaluate(pad=>{document.querySelector(`[data-pad="${pad}"]`)!.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:pad==='don'?95:96,pointerType:'touch'}));},pad);
+  states.push(await p.evaluate(()=>document.querySelector<HTMLInputElement>('label[data-haptic] input[switch]')?.checked??null));
+ }
+ expect(states).toEqual([true,false]);
+ await phone.close();
 });

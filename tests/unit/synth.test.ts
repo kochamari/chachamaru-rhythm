@@ -48,10 +48,13 @@ describe('synthesised drum sounds',()=>{
 
 describe('settings with the new options',()=>{
  it('accepts older saves without scroll speed or sound set, rejects unknown values',()=>{
-  const old:Partial<typeof defaults>=structuredClone(defaults);delete old.scrollSpeed;delete old.hitSound;
+  const old:Partial<typeof defaults>=structuredClone(defaults);delete old.scrollSpeed;delete old.hitSound;delete old.haptics;
   expect(validSettings(old)).toBe(true);
   expect(validSettings({...defaults,scrollSpeed:1.5,hitSound:'wood'})).toBe(true);
   expect(validSettings({...defaults,scrollSpeed:3})).toBe(false);
   expect(validSettings({...defaults,hitSound:'bark' as never})).toBe(false);
+  expect(defaults.haptics).toBe(true);
+  expect(validSettings({...defaults,haptics:false})).toBe(true);
+  expect(validSettings({...defaults,haptics:'yes' as never})).toBe(false);
  });
 });
