@@ -85,3 +85,30 @@ test('U26 tapping the drum vibrates on phones, and the setting turns it off',asy
  await p.goto('/#/settings');await expect(p.locator('#test-don input.haptic-switch')).toHaveCount(1);
  await phone.close();
 });
+test('U27 hitting the electronic drum switches to drum play, and the snare starts the song',async({page})=>{
+ const drum=(color:'don'|'ka')=>page.evaluate(c=>{window.__chacha.input.emit(c,performance.now(),'midi');},color);
+ await boot(page);await page.evaluate(()=>{window.__chacha.settings.inputMode='touch';});
+ // In a menu, the first drum hit switches the input for good and says so.
+ await page.goto('/#/songs');await page.getByRole('button',{name:/ひまわり囃子/}).click();
+ await expect(page.locator('#input-mode')).toHaveValue('touch');
+ await drum('ka');
+ await expect(page.locator('#input-mode')).toHaveValue('midi');
+ await expect(page.locator('#toast')).toContainText('電子ドラム');
+ expect(await page.evaluate(()=>window.__chacha.settings.inputMode)).toBe('midi');
+ // The play screen opens without the touch drum and with the large drum
+ // lane; after that tap, a snare hit can start the song.
+ await page.locator('#play-song').click();
+ await expect(page.getByRole('button',{name:'演奏をはじめる'})).toBeVisible();
+ await expect(page.locator('.game-scene')).toHaveClass(/mode-midi/);await expect(page.locator('.pads')).toBeHidden();
+ await expect(page.locator('.dialog-hint')).toContainText('スネア');
+ expect(await page.evaluate(()=>window.__chacha.session!.renderer.layout.drumMode)).toBe(true);
+ await drum('don');
+ await expect.poll(()=>page.evaluate(()=>window.__chacha.session?.status)).toMatch(/COUNT_IN|PLAYING/);
+ // A run set up for touch that the drum takes over before any hit is still drum play (not mixed).
+ await page.evaluate(()=>{window.__chacha.settings.inputMode='touch';});
+ await page.goto('/#/play/himawari-demo/easy?retry=1');
+ await expect(page.getByRole('button',{name:'演奏をはじめる'})).toBeVisible();await expect(page.locator('.pads')).toBeVisible();
+ await drum('ka');
+ await expect(page.locator('.pads')).toBeHidden();
+ expect(await page.evaluate(()=>[window.__chacha.session?.mode,window.__chacha.session?.status])).toEqual(['midi','READY']);
+});

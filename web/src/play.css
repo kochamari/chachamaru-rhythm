@@ -65,9 +65,21 @@
 .play-dialog p{font-size:14px;color:#5a4a3a;margin:0 0 6px;line-height:1.7}
 .play-dialog .primary{display:block;width:100%;margin:14px 0 8px;font-size:19px}
 .play-dialog .dialog-hint{font-size:12px;color:#8a7658;min-height:1em}
+.play-dialog .dialog-hint.nudge{color:var(--don-dark);font-weight:800;animation:hint-nudge .5s ease-out}
+@keyframes hint-nudge{30%{transform:scale(1.08)}}
 .play-dialog .text-link{font-size:13px;color:#6b5a44}
 .pause-options{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0 14px;font-size:13px;flex-wrap:wrap}
 .pause-options select{min-height:40px;border-radius:10px;border:2px solid #d9c9a6;background:#fff;padding:0 8px}
+/* Phones held sideways (often on a drum stand): a wider, flatter dialog so
+   everything down to the song-list link fits without scrolling. */
+@media (orientation:landscape) and (max-height:500px){
+ .play-dialog{width:min(640px,calc(100% - 32px));padding:12px 24px 10px;border-radius:18px}
+ .play-dialog h2{font-size:24px;margin:2px 0 4px}
+ .play-dialog p{font-size:13px;line-height:1.5;margin:0 0 4px}
+ .play-dialog .note-legend{margin:4px 0 0;gap:4px 14px}
+ .play-dialog .primary{margin:8px 0 4px;min-height:46px;padding:8px 20px}
+ .pause-options{margin:4px 0 8px}
+}
 
 .game-scene .rotate-hint{
  display:none;position:absolute;z-index:7;left:50%;transform:translateX(-50%);top:calc(var(--play-top,0px) + 330px * var(--play-scale,1));

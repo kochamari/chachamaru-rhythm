@@ -7,6 +7,10 @@
 export interface Rect {x:number;y:number;w:number;h:number}
 export interface PlayLayout {
  W:number;H:number;portrait:boolean;showPads:boolean;
+ /** Electronic-drum play in landscape: lane and notes sized to read from a stand. */
+ drumMode:boolean;
+ /** Scale for text-like sprites (syllables, judgement words). */
+ textScale:number;
  /** Festival band across the top: bunting, title plate. */
  band:Rect;
  /** Title plate inside the band (song name, difficulty). */
@@ -50,8 +54,37 @@ export function logicalSize(cssWidth:number,cssHeight:number){
  return {W,H:LANDSCAPE_H,portrait,scale:Math.min(w/W,h/LANDSCAPE_H)};
 }
 
-export function computeLayout(W:number,H:number,showPads:boolean):PlayLayout{
- return H>W?portraitLayout(W,H,showPads):landscapeLayout(W,H,showPads);
+export function computeLayout(W:number,H:number,showPads:boolean,drumMode=false):PlayLayout{
+ if(H>W)return portraitLayout(W,H,showPads);
+ return drumMode&&!showPads?drumLayout(W,H):landscapeLayout(W,H,showPads);
+}
+
+/**
+ * Landscape with an electronic drum: the phone sits on a stand an arm's
+ * length or more away, so the lane takes most of the height (notes 1.6×),
+ * with the score and combo scaled to match and a shorter stage below.
+ */
+function drumLayout(W:number,H:number):PlayLayout{
+ const band={x:0,y:0,w:W,h:58};
+ const titleW=Math.min(460,Math.max(280,W*.3));
+ const title={x:W-titleW-100,y:4,w:titleW,h:50};
+ const blockY=64,panelW=Math.round(Math.min(330,Math.max(270,W*.2)));
+ const gauge={x:panelW+6,y:blockY+2,w:W-panelW-18,h:34};
+ const lane={x:panelW,y:blockY+44,w:W-panelW,h:232};
+ const laneY=lane.y+lane.h/2;
+ const hitX=panelW+120;
+ const syllables={x:panelW,y:lane.y+lane.h,w:W-panelW,h:40};
+ const panel={x:0,y:blockY,w:panelW,h:syllables.y+syllables.h-blockY};
+ const stageTop=syllables.y+syllables.h+6;
+ const stage={x:0,y:stageTop,w:W,h:H-stageTop};
+ const charHeight=Math.min(300,stage.h*.92);
+ const feet=stage.y+stage.h-8;
+ const character={x:W*.24,y:feet,height:charHeight};
+ const friendH=charHeight*.74;
+ const left=W*.24+charHeight*.55+friendH*.3,right=W-friendH*.42-18;
+ const friends=[0,1,2,3].map(i=>({x:left+(right-left)*i/3,y:feet-(i%2?10:0),height:friendH*(i%2?.9:1)}));
+ const drum={x:panelW/2,y:lane.y+lane.h*.52,r:Math.min(92,panelW*.3)};
+ return {W,H,portrait:false,showPads:false,drumMode:true,textScale:1.5,band,title,panel,scoreBox:{x:panel.x+10,y:panel.y+8,w:panel.w-20,h:50},score:{x:panelW-18,y:blockY+33,size:42},drum,diffTag:{x:drum.x,y:drum.y+drum.r+18},gauge,lane,laneY,hitX,laneRight:W-26,noteR:48,largeR:66,judgeR:70,syllables,stage,character,friends,balloon:{x:character.x+charHeight*.34,y:feet-charHeight*.98},pads:null,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
 }
 
 function landscapeLayout(W:number,H:number,showPads:boolean):PlayLayout{
@@ -78,7 +111,7 @@ function landscapeLayout(W:number,H:number,showPads:boolean):PlayLayout{
  const left=W*.3+charHeight*.55+friendH*.3,right=W-friendH*.42-18;
  const friends=[0,1,2,3].map(i=>({x:left+(right-left)*i/3,y:feet-(i%2?12:0),height:friendH*(i%2?.9:1)}));
  const drum={x:panelW/2,y:blockY+112,r:Math.min(58,panelW*.26)};
- return {W,H,portrait:false,showPads,band,title,panel,scoreBox:{x:panel.x+10,y:panel.y+8,w:panel.w-20,h:40},score:{x:panelW-18,y:blockY+26,size:30},drum,diffTag:{x:drum.x,y:drum.y+drum.r+14},gauge,lane,laneY,hitX,laneRight:W-26,noteR:30,largeR:42,judgeR:44,syllables,stage,character,friends,balloon:{x:character.x+charHeight*.34,y:feet-charHeight*.98},pads,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
+ return {W,H,portrait:false,showPads,drumMode:false,textScale:1,band,title,panel,scoreBox:{x:panel.x+10,y:panel.y+8,w:panel.w-20,h:40},score:{x:panelW-18,y:blockY+26,size:30},drum,diffTag:{x:drum.x,y:drum.y+drum.r+14},gauge,lane,laneY,hitX,laneRight:W-26,noteR:30,largeR:42,judgeR:44,syllables,stage,character,friends,balloon:{x:character.x+charHeight*.34,y:feet-charHeight*.98},pads,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
 }
 
 // Portrait: the score/drum panel sits above a full-width lane so notes get
@@ -107,7 +140,7 @@ function portraitLayout(W:number,H:number,showPads:boolean):PlayLayout{
   {x:W*.14,y:feet-charHeight*.34,height:friendH*.86},{x:W*.86,y:feet-charHeight*.34,height:friendH*.86},
   {x:W*.2,y:Math.min(stage.y+stage.h-6,feet+charHeight*.08),height:friendH},{x:W*.8,y:Math.min(stage.y+stage.h-6,feet+charHeight*.08),height:friendH},
  ];
- return {W,H,portrait:true,showPads,band,title,panel,scoreBox,score:{x:W-26,y:117,size:26},drum,diffTag:{x:scoreBox.x+52,y:117},gauge,lane,laneY,hitX,laneRight:W-14,noteR:24,largeR:34,judgeR:36,syllables,stage,character,friends,balloon:{x:W*.5+charHeight*.24,y:feet-charHeight*1.02},pads,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
+ return {W,H,portrait:true,showPads,drumMode:false,textScale:1,band,title,panel,scoreBox,score:{x:W-26,y:117,size:26},drum,diffTag:{x:scoreBox.x+52,y:117},gauge,lane,laneY,hitX,laneRight:W-14,noteR:24,largeR:34,judgeR:36,syllables,stage,character,friends,balloon:{x:W*.5+charHeight*.24,y:feet-charHeight*1.02},pads,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
 }
 
 /** x position of a note whose target is targetMs when the visual clock is nowMs. */

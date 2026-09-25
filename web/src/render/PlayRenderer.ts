@@ -202,7 +202,7 @@ export class PlayRenderer {
   this.sizeKey=key;
   const w=Math.max(1,fullW-pl-pr),h=Math.max(1,fullH-pt-pb);
   const size=logicalSize(w,h);
-  this.layout=computeLayout(size.W,size.H,this.opts.showPads);
+  this.layout=computeLayout(size.W,size.H,this.opts.showPads,this.opts.inputHint==='midi');
   this.scale=size.scale;
   this.app.renderer.resize(fullW,fullH);
   const left=pl+(w-size.W*size.scale)/2,top=pt+(h-size.H*size.scale)/2;
@@ -216,8 +216,12 @@ export class PlayRenderer {
   this.buildStatic();
   this.placeCharacters();
  }
- setPadsVisible(show:boolean){if(this.opts.showPads===show)return;this.opts.showPads=show;this.resize();}
- setInputHint(mode:'keyboard'|'midi'|'touch'){this.opts.inputHint=mode;if(this.initialized)this.buildHint();}
+ /** Touch drum, key hint and, for an electronic drum in landscape, a larger lane follow the input. */
+ setInput(mode:'keyboard'|'midi'|'touch'){
+  const show=mode==='touch';
+  if(this.opts.showPads===show&&this.opts.inputHint===mode)return;
+  this.opts.showPads=show;this.opts.inputHint=mode;this.resize();
+ }
 
  private buildStatic(){
   const L=this.layout;
@@ -378,7 +382,7 @@ export class PlayRenderer {
   this.laneStatic.addChild(gf,this.gaugeFill,this.gaugeShine);
   const clearX=gauge.x+4+(gauge.w-gauge.h*1.6-8)*.7;
   const mark=new Graphics().rect(clearX-1.5,gauge.y+3,3,gauge.h-6).fill(0xffffff);
-  const clearLabel=new Text({text:'クリア',style:{fontFamily:art.FONT,fontSize:13,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:4}}});
+  const clearLabel=new Text({text:'クリア',style:{fontFamily:art.FONT,fontSize:Math.max(13,Math.round(13*gauge.h/28)),fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:4}}});
   clearLabel.anchor.set(0,.5);clearLabel.position.set(clearX+6,gauge.y+gauge.h/2);
   this.laneStatic.addChild(mark,clearLabel);
   this.gaugeFlower=this.sprite('sunflower');this.gaugeFlower.position.set(gauge.x+gauge.w-gauge.h*.72,gauge.y+gauge.h/2);this.gaugeFlower.scale.set(.5);
@@ -393,12 +397,13 @@ export class PlayRenderer {
   this.scoreText.anchor.set(1,.5);this.scoreText.position.set(L.score.x,L.score.y+6);
   this.comboText=new BitmapText({text:'',style:{fontFamily:'ChachaCombo',fontSize:L.drum.r*.78}});
   this.comboText.anchor.set(.5);this.comboText.position.set(L.drum.x,L.drum.y-L.drum.r*.14);
-  this.comboLabel=new Text({text:'コンボ',style:{fontFamily:art.FONT,fontSize:13,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:4}}});
+  this.comboLabel=new Text({text:'コンボ',style:{fontFamily:art.FONT,fontSize:13*L.textScale,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:4}}});
   this.comboLabel.anchor.set(.5);this.comboLabel.position.set(L.drum.x,L.drum.y+L.drum.r*.5);this.comboLabel.visible=false;
   const diff=DIFFICULTY_STYLE[this.opts.difficulty];
-  const tag=new Text({text:diff.label,style:{fontFamily:art.FONT,fontSize:13,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:4}}});
+  const tag=new Text({text:diff.label,style:{fontFamily:art.FONT,fontSize:13*L.textScale,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:4}}});
   tag.anchor.set(.5);tag.position.set(L.diffTag.x,L.diffTag.y);
-  const tagBg=new Graphics().roundRect(L.diffTag.x-tag.width/2-10,L.diffTag.y-11,tag.width+20,22,11).fill(diff.color).stroke({color:0xffffff,width:1.5,alpha:.7});
+  const tagH=22*L.textScale;
+  const tagBg=new Graphics().roundRect(L.diffTag.x-tag.width/2-10,L.diffTag.y-tagH/2,tag.width+20,tagH,tagH/2).fill(diff.color).stroke({color:0xffffff,width:1.5,alpha:.7});
   this.hud.addChild(this.scoreText,this.comboText,this.comboLabel,tagBg,tag);
   // Balloons and messages live in HUD/stage layers.
   this.buildBalloons();
@@ -631,10 +636,10 @@ export class PlayRenderer {
   // Syllables from the judge circle outwards; skip one that would overlap the previous.
   let lastRight=-Infinity;
   for(let k=labels.length-1;k>=0;k--){
-   const {x,text}=labels[k];const half=(this.tex['syl:'+text]?.texture.width??40)*.25+3;
+   const {x,text}=labels[k];const half=((this.tex['syl:'+text]?.texture.width??40)*.25+3)*L.textScale;
    if(x-half<lastRight)continue;
    const sy=this.syllablePool[si++];if(!sy)break;
-   sy.visible=true;this.setTex(sy,'syl:'+text);sy.position.set(x,L.syllables.y+L.syllables.h/2+2);lastRight=x+half;
+   sy.visible=true;this.setTex(sy,'syl:'+text);sy.scale.set(L.textScale);sy.position.set(x,L.syllables.y+L.syllables.h/2+2);lastRight=x+half;
   }
   for(let i=pi;i<this.notePool.length;i++)this.notePool[i].visible=false;
   for(let i=ri;i<this.rollBodies.length;i++){this.rollBodies[i].visible=false;this.rollTails[i].visible=false;}
@@ -643,7 +648,7 @@ export class PlayRenderer {
   const jAge=now-this.judgeAt;
   for(const [k,sp] of Object.entries(this.judgement)){sp.visible=k===this.judgeKind&&jAge<320;}
   const j=this.judgement[this.judgeKind];
-  if(j.visible){j.position.set(L.hitX,(L.portrait?L.laneY-L.judgeR-4:L.lane.y-6)-Math.min(1,jAge/120)*12);j.scale.set(L.portrait?.8:1);j.alpha=jAge>220?1-(jAge-220)/100:1;j.scale.set((L.portrait?.8:1)*(jAge<60?.8+jAge/300:1));}
+  if(j.visible){j.position.set(L.hitX,(L.portrait?L.laneY-L.judgeR-4:L.lane.y-6)-Math.min(1,jAge/120)*12);j.scale.set(L.portrait?.8:1);j.alpha=jAge>220?1-(jAge-220)/100:1;j.scale.set((L.portrait?.8:L.textScale)*(jAge<60?.8+jAge/300:1));}
   const fAge=now-this.fastLateAt;this.fastLate.visible=fAge<420&&this.settings.fastLate;
   if(this.fastLate.visible){this.fastLate.position.set(L.hitX,L.lane.y+L.lane.h-12);this.fastLate.alpha=fAge>300?1-(fAge-300)/120:1;}
   this.judgeGlow.alpha=Math.max(0,this.judgeGlow.alpha-.08);

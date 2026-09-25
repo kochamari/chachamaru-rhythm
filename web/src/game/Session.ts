@@ -1,12 +1,13 @@
 import type {Chart,SongPackage,RunResult,InputMode,Roll} from '../../../contracts/public-types';
 import {Engine,RULESET} from './Engine';
-import {AudioEngine} from '../audio/AudioEngine';
+import {AudioEngine,sharedAudioContext} from '../audio/AudioEngine';
 import {InputRouter,type Input} from '../input/InputRouter';
 import {PlayRenderer,stageThemeFor} from '../render/PlayRenderer';
 import {state,difficultyNames} from '../app/store';
 import {escape,toast} from '../app/ui';
 import {saveRun} from '../storage/Database';
 import {tapHaptic,hapticSwitch} from '../input/haptics';
+import {adoptDrum} from '../app/drumMode';
 
 export type SessionStatus='LOADING'|'READY'|'COUNT_IN'|'PLAYING'|'PAUSED'|'FINISHING'|'RESULT'|'LOAD_ERROR'|'SHOWCASE';
 const AUTO_ROLL_INTERVAL_MS=80;
@@ -20,6 +21,8 @@ export class Session {
  runId=crypto.randomUUID();status:SessionStatus='LOADING';mode:InputMode;autoplay=false;practice=false;
  private pausedAt=0;private frame=0;private disposed=false;private done=false;private autoIndex=0;private autoRollAt=-1e9;
  private celebrated=false;private countShown=-1;private finishTimer=0;
+ /** Player hits judged so far, and whether the screen is set up for the electronic drum. */
+ private judged=0;private drumUi=false;
  private abort=new AbortController();private wake:WakeLockSentinel|null=null;
  private readonly scene:HTMLElement;
  onResult:(r:RunResult)=>void=()=>{};
@@ -37,6 +40,7 @@ export class Session {
   this.autoplay=opts.autoplay??false;this.practice=opts.practice??false;
   this.pausedAt=Math.max(0,opts.startMs??0);
   const inputMode=this.mode==='mixed'?'keyboard':this.mode;
+  this.drumUi=inputMode==='midi';
   // iPhone: an invisible switch over each pad gives the tap a system haptic.
   const haptic=state.settings.haptics!==false?hapticSwitch():'';
   root.innerHTML=`<section class="game-scene mode-${inputMode}" aria-label="演奏画面">
@@ -69,10 +73,33 @@ export class Session {
   await this.renderer.init();
   if(this.disposed)return;
   this.status='READY';
-  const how=this.mode==='touch'?'太鼓の面でドン、ふちでカッ！':this.mode==='midi'?'スネアでドン、フロアタムでカッ！':'F・J でドン、D・K でカッ！';
+  this.readyOverlay();
+  this.frame=requestAnimationFrame(this.drawFrame);
+ }
+
+ private readyOverlay(){
+  const how=this.mode==='touch'?'太鼓の面でドン、ふちでカッ！':this.drumUi?'スネアでドン、フロアタムでカッ！':'F・J でドン、D・K でカッ！';
   if(this.autoplay)this.overlay('おてほん（自動演奏）',`${difficultyNames[this.chart.difficulty]}｜ちゃちゃまるが自動で叩きます。\nあなたの入力は判定・記録されません。`,'演奏をはじめる',()=>void this.start());
   else this.overlay('準備はいい？',`${difficultyNames[this.chart.difficulty]}｜${how}\n音符が丸に重なったら叩こう。`,'演奏をはじめる',()=>void this.start());
-  this.frame=requestAnimationFrame(this.drawFrame);
+ }
+
+ /** Touch drum, key hint and layout for one input; the audio uses the drum-module volume for MIDI. */
+ private showMode(mode:'touch'|'keyboard'|'midi'){
+  for(const m of ['touch','keyboard','midi'])this.scene.classList.toggle('mode-'+m,m===mode);
+  this.drumUi=mode==='midi';
+  this.renderer.setInput(mode);this.audio.volume();
+ }
+
+ /**
+  * The electronic drum was hit while the screen was set up for another
+  * input: switch to drum play. A run that already judged other hits keeps
+  * counting as mixed input.
+  */
+ private useDrum(){
+  adoptDrum();
+  if(this.mode!=='mixed')this.mode=this.judged?'mixed':'midi';
+  this.showMode('midi');
+  if(this.status==='READY')this.readyOverlay();
  }
 
  private overlay(title:string,body:string,label:string,action:()=>void,paused=false){
@@ -85,7 +112,7 @@ export class Session {
    <h2>${escape(title)}</h2><p>${escape(body).replace(/\n/g,'<br>')}</p>
    ${paused?'':`<div class="note-legend" aria-label="音符の見かた"><span><i class="n don"></i>ドン</span><span><i class="n ka"></i>カッ</span><span><i class="n don big"></i>大きい音符も1回</span><span><i class="n roll"></i>連打はたくさん</span></div>`}
    <button class="primary" id="resume-play">${escape(label)}</button>
-   ${paused?`<div class="pause-options"><label>操作 <select id="pause-mode"><option value="touch">タッチ</option><option value="keyboard">キーボード</option><option value="midi">電子ドラム</option></select></label><a class="button" href="${retry}">最初から</a>${this.autoplay?`<a class="button primary" id="play-myself" href="${escape(path+'?retry='+Date.now())}">自分であそぶ</a>`:''}</div>`:`<p class="dialog-hint">${this.mode==='keyboard'?'Enter でもはじめられます':''}</p>`}
+   ${paused?`<div class="pause-options"><label>操作 <select id="pause-mode"><option value="touch">タッチ</option><option value="keyboard">キーボード</option><option value="midi">電子ドラム</option></select></label><a class="button" href="${retry}">最初から</a>${this.autoplay?`<a class="button primary" id="play-myself" href="${escape(path+'?retry='+Date.now())}">自分であそぶ</a>`:''}</div>`:`<p class="dialog-hint">${this.drumUi?'スネア（ドン）を叩いても、はじめられます':this.mode==='keyboard'?'Enter でもはじめられます':''}</p>`}
    <a class="text-link" href="#/songs">曲一覧に戻る</a></div>`;
   overlay.querySelector('#resume-play')!.addEventListener('click',action);
   (overlay.querySelector('#resume-play') as HTMLButtonElement).focus({preventScroll:true});
@@ -93,9 +120,8 @@ export class Session {
   if(select){
    select.value=state.settings.inputMode==='mixed'?'keyboard':state.settings.inputMode;
    select.onchange=()=>{
-    state.settings.inputMode=select.value as InputMode;this.mode='mixed';this.audio.volume();
-    for(const m of ['touch','keyboard','midi'])this.scene.classList.toggle('mode-'+m,select.value===m);
-    this.renderer.setPadsVisible(select.value==='touch');this.renderer.setInputHint(select.value as 'touch');
+    state.settings.inputMode=select.value as InputMode;this.mode='mixed';
+    this.showMode(select.value as 'touch');
    };
   }
  }
@@ -119,7 +145,15 @@ export class Session {
  }
 
  private hit(i:Input){
-  if(this.status==='READY'&&i.source==='keyboard'&&i.color==='don'){void this.start();return;}
+  if(i.source==='midi'&&!this.drumUi&&this.status!=='SHOWCASE')this.useDrum();
+  if(this.status==='READY'&&i.color==='don'&&i.source==='keyboard'){void this.start();return;}
+  // A drum hit is not a tap: it can start the song only once the phone has
+  // allowed sound (any earlier tap in the menus does that).
+  if(this.status==='READY'&&i.color==='don'&&i.source==='midi'){
+   if(sharedAudioContext()?.state==='running')void this.start();
+   else this.readyHint('音を出すため、最初の1回だけ「演奏をはじめる」をタップしてください');
+   return;
+  }
   if(!['READY','COUNT_IN','PLAYING'].includes(this.status))return;
   // Inside the pointerdown dispatch, so phones treat it as the user's tap.
   if(i.source==='touch'&&state.settings.haptics!==false)tapHaptic(i.color);
@@ -130,7 +164,13 @@ export class Session {
   if(this.autoplay){this.autoNudge();return;}
   if(this.status!=='PLAYING'||this.autoplay)return;
   if(i.source!==state.settings.inputMode&&this.mode!=='mixed'){this.mode='mixed';}
+  this.judged++;
   this.engine.hit({id:i.id,runId:this.runId,color:i.color,inputSongMs:this.audio.time(i.performanceMs-state.settings.inputLagMs),receiptSongMs:this.audio.time(i.receiptMs),deliveryDelayMs:i.receiptMs-i.performanceMs,source:i.source});
+ }
+
+ private readyHint(text:string){
+  const hint=this.scene.querySelector<HTMLElement>('.dialog-hint');if(!hint)return;
+  hint.textContent=text;hint.classList.remove('nudge');void hint.offsetWidth;hint.classList.add('nudge');
  }
 
  /** The player hits during an example run: say so (their hits do not count). */

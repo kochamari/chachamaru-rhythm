@@ -16,6 +16,7 @@ import {settingsScreen,diagnosticsScreen} from './screens/Settings';
 import {showcaseScreen} from './testing/showcase';
 import {flowerSvg} from './render/Character';
 import {markRenderer} from './app/gpu';
+import {adoptDrum} from './app/drumMode';
 
 declare const __TEST__:boolean;
 document.documentElement.style.setProperty('--festival',`url("${import.meta.env.BASE_URL}original-assets/festival.webp")`);
@@ -30,7 +31,8 @@ async function route(){
  cleanup();cleanup=()=>{};
  session?.dispose();session=null;
  nav.reset();
- input.onHit=i=>nav.input(i);input.onPause=()=>{};
+ // Hitting the registered electronic drum in a menu switches play to it.
+ input.onHit=i=>{if(i.source==='midi')adoptDrum();nav.input(i);};input.onPause=()=>{};
  const [path,query]=(location.hash.slice(1)||'/').split('?'),parts=path.split('/').filter(Boolean),params=new URLSearchParams(query);
  const current=()=>generation===navGeneration;
  window.scrollTo(0,0);
