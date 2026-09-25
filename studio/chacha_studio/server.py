@@ -25,6 +25,13 @@ EXPORTS={}
 LOCK=threading.RLock()
 STAGING=False
 
+def stop_group(pid,sig):
+    """Signal a worker's process group. The worker may finish between the
+    poll() and this call: Linux then reports ESRCH, macOS EPERM for a group of
+    exited processes. Either way there is nothing left to stop."""
+    try:os.killpg(pid,sig)
+    except (ProcessLookupError,PermissionError):pass
+
 def project_dir(pid):
     if not re.fullmatch(r'[a-f0-9-]{36}',pid):raise HTTPException(400,'プロジェクトIDが不正です')
     d=DATA/'projects'/pid
@@ -124,9 +131,9 @@ def cancel(jid:str):
     if j.get('committed'):return {'ok':True,'alreadyComplete':True}
     p=j['process']
     if p.poll() is None:
-        os.killpg(p.pid,signal.SIGTERM)
+        stop_group(p.pid,signal.SIGTERM)
         try:p.wait(timeout=5)
-        except subprocess.TimeoutExpired:os.killpg(p.pid,signal.SIGKILL);p.wait()
+        except subprocess.TimeoutExpired:stop_group(p.pid,signal.SIGKILL);p.wait()
     d=j['directory']
     if not (d/'project.json').exists():
         for f in d.iterdir():

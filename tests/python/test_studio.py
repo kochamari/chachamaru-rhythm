@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import subprocess
+import sys
 import time
 import uuid
 import zipfile
@@ -238,3 +239,22 @@ def test_health_identifies_this_studio_for_the_launcher(client):
     data=c.get('/api/health').json()
     assert data['studio']==server.INSTANCE and len(data['studio'])==16
     assert 'quickPack' in data['features']
+
+def test_cancel_after_the_worker_finished_is_harmless(client,monkeypatch):
+    c,h,_=client
+    calls=[]
+    def gone(pid,sig):
+        calls.append(sig)
+        raise PermissionError(1,'Operation not permitted')  # macOS: group already exited
+    monkeypatch.setattr(server.os,'killpg',gone)
+    proc=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],start_new_session=True)
+    try:
+        d=server.DATA/'projects'/str(uuid.uuid4());d.mkdir(parents=True)
+        core.write_json(d/'status.json',{'status':'ANALYZING','progress':40,'message':''})
+        server.JOBS['finished-job']={'process':proc,'directory':d}
+        monkeypatch.setattr(proc,'wait',lambda timeout=None:0)
+        assert c.delete('/api/jobs/finished-job',headers=h).json()=={'ok':True}
+        assert calls==[server.signal.SIGTERM]
+    finally:
+        proc.kill();subprocess.Popen.wait(proc)
+        server.JOBS.pop('finished-job',None)
