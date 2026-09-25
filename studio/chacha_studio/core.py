@@ -141,6 +141,27 @@ def export_project(project, directory, target):
         for name,b in files.items():z.writestr(name,b)
     return m
 
+def export_bundle(projects, target):
+    """Several songs in one ZIP for the iPhone: bundle.json plus each song's
+    ordinary pack ZIP under songs/ (stored, not compressed again). Projects
+    with the same audio share a packId and appear once (the first given)."""
+    import re
+    import tempfile
+    songs = []
+    with zipfile.ZipFile(target, 'w', zipfile.ZIP_STORED) as z:
+        for project, directory in projects:
+            if project['manifest']['packId'] in {s['packId'] for s in songs}:
+                continue
+            with tempfile.TemporaryDirectory() as tmp:
+                pack = Path(tmp) / 'pack.zip'
+                m = export_project(project, directory, pack)
+                data = pack.read_bytes()
+            path = f"songs/{re.sub(r'[^A-Za-z0-9_-]', '_', m['packId'])[:100]}.zip"
+            z.writestr(path, data)
+            songs.append({'packId': m['packId'], 'revision': m['revision'], 'title': m['title'], 'artist': m['artist'], 'path': path, 'sha256': hashlib.sha256(data).hexdigest()})
+        z.writestr('bundle.json', json.dumps({'kind': 'chachamaru-bundle', 'schemaVersion': 1, 'songs': songs}, ensure_ascii=False, separators=(',', ':')))
+    return songs
+
 def chorus_candidates(y, sr, duration, beats, window_ms=16000, count=3):
     """Loudest 16 s stretches (at most three), separated so they are distinct
     parts of the song, snapped to beats. Energy candidates only: they are

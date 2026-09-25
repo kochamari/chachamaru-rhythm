@@ -32,7 +32,7 @@
 
 | 対象 | 実行場所 | 役割・データ |
 | --- | --- | --- |
-| Webプレイヤー | GitHub Pages／ローカルのブラウザ | 曲ZIPを読み込み、演奏する。曲・設定・結果をそのブラウザのIndexedDBに保存。ログイン不要 |
+| Webプレイヤー | GitHub Pages／ローカルのブラウザ | 曲ZIP（1曲、または `bundle.json` 付きのまとめZIP・複数選択）を読み込み、演奏する。まとめて読むときは、ない曲だけ追加・同じ曲はそのまま・違う版は更新（`packs/bundle.ts`、`mergeSong`）。曲・設定・結果をそのブラウザのIndexedDBに保存。ログイン不要 |
 | Studio UI | `#/studio`（ローカル／公開版） | ローカルでは音源のドロップだけで解析→ZIP保存→ゲームへ追加（複数可、1曲ずつ順番）。波形・拍・譜面・サビ区間を編集。自動保存、undo/redo、ZIP書出し。公開版では既存ZIPを読み込んでブラウザ内で編集 |
 | Studio API | Macのloopback FastAPI | 音源をAAC-LC化し、最終音源をlibrosaで解析、3難易度の下書きを作る。曲名・アーティストが空ならタグ→ファイル名。解析は同時に1つ（409）で、UIは空くまで待つ。`/api/health` の `studio` は起動フォルダの識別（`Start Studio.command` と Macアプリが別フォルダの譜面工房を再利用しないため）。Macアプリ（`scripts/install-mac-app.sh`、`chachamaru-studio://`）は `scripts/studio.mjs --app` で裏起動、`--stop` で停止 |
 

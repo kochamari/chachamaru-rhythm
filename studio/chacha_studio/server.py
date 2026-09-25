@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI,Request,HTTPException,UploadFile,File,Form
 from fastapi.responses import JSONResponse,FileResponse
 from fastapi.staticfiles import StaticFiles
-from .core import ROOT,DATA,write_json,validate,export_project,ffmpeg,ffprobe
+from .core import ROOT,DATA,write_json,validate,export_project,export_bundle,ffmpeg,ffprobe
 
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
 TOKEN=secrets.token_urlsafe(32)
@@ -187,6 +187,24 @@ def export(pid:str):
         except Exception as e:raise HTTPException(422,str(e)) from e
         EXPORTS[eid]=target
     return {'exportId':eid}
+
+@app.post('/api/bundles')
+async def bundle(request:Request):
+    """Several projects in one ZIP, to send to the iPhone at once."""
+    body=await request.json()
+    ids=body.get('projectIds') if isinstance(body,dict) else None
+    if not isinstance(ids,list) or not 1<=len(ids)<=100 or not all(isinstance(i,str) for i in ids):raise HTTPException(422,'まとめる曲の指定が不正です')
+    with LOCK:
+        projects=[]
+        for pid in dict.fromkeys(ids):
+            d=project_dir(pid);projects.append((json.loads((d/'project.json').read_text()),d))
+    eid=str(uuid.uuid4());target=DATA/'exports'/f'{eid}.zip';target.parent.mkdir(parents=True,exist_ok=True)
+    try:songs=await asyncio.to_thread(export_bundle,projects,target)
+    except Exception as e:
+        target.unlink(missing_ok=True)
+        raise HTTPException(422,str(e)) from e
+    EXPORTS[eid]=target
+    return {'exportId':eid,'songs':songs}
 
 @app.get('/api/exports/{eid}')
 def download(eid:str):

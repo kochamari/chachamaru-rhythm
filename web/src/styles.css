@@ -45,11 +45,13 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none}
 .topbar{position:sticky;top:0;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:12px;
  height:64px;padding:0 max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));
  background:linear-gradient(#cf4533,var(--lacquer) 60%,var(--lacquer-dark));border-bottom:3px solid var(--gold);box-shadow:0 3px 0 #0003;color:#fff}
-.brand{display:flex;align-items:center;gap:8px;min-width:0}
+/* The brand keeps its width; on narrow phones the menu scrolls sideways
+   instead of the title running under it. */
+.brand{display:flex;align-items:center;gap:8px;flex:none}
 .brand svg{width:38px;height:38px;flex:none;filter:drop-shadow(0 2px 0 #0004)}
 .brand span{font-weight:900;font-size:20px;line-height:1.05;text-shadow:0 2px 0 #0005;white-space:nowrap}
 .brand small{display:block;font-size:10px;letter-spacing:.32em;color:#ffe7b0;margin-top:3px}
-.topbar nav{display:flex;align-items:center;gap:4px;font-size:14px;font-weight:800;overflow-x:auto;scrollbar-width:none}
+.topbar nav{display:flex;align-items:center;gap:4px;font-size:14px;font-weight:800;overflow-x:auto;scrollbar-width:none;min-width:0}
 .topbar nav::-webkit-scrollbar{display:none}
 .topbar nav a{padding:9px 12px;border-radius:10px;white-space:nowrap;min-height:40px;display:flex;align-items:center}
 .topbar nav a:hover{background:#ffffff1f}
@@ -326,3 +328,14 @@ html[data-render="software"] .difficulty-cards .crown{filter:none}
 html[data-render="software"] .drum-start::before{animation:none;opacity:.6}
 html[data-render="software"] .confetti{display:none}
 html[data-render="software"] .new-best{animation:none}
+
+/* Result of importing several songs at once */
+.import-summary{display:grid;gap:10px;justify-items:center;margin-top:10px}
+.import-summary strong{font-size:18px;font-weight:900;color:var(--ink)}
+.import-summary ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;width:100%;max-width:520px;text-align:left}
+.import-summary li{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:baseline;padding:8px 12px;border-radius:10px;background:#fff8e6;border:1.5px solid #e5d4ae;color:var(--ink);font-size:14px}
+.import-summary li b{font-size:12px;padding:2px 8px;border-radius:999px;background:#e8dcc2;color:#5b4a38;white-space:nowrap}
+.import-summary li.added b{background:#2f7d4a;color:#fff}
+.import-summary li.updated b{background:var(--ka-dark);color:#fff}
+.import-summary li.error b{background:var(--don-dark);color:#fff}
+.import-summary li small{grid-column:2;color:#8c5a48;font-size:12px}

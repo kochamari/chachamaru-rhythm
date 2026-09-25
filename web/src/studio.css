@@ -35,3 +35,16 @@
 .mac-studio-callout strong{font-size:17px;font-weight:900}
 .mac-studio-callout span{font-size:14px;color:#5b4a38}
 .mac-studio-callout small{font-size:12px;color:#8c7b5e}
+
+/* Several songs in one ZIP for the iPhone */
+.bundle-panel{display:grid;gap:12px;max-width:640px;margin:18px auto 6px;padding:16px 18px;border:2.5px solid var(--ink);border-radius:16px;background:#fffdf6;color:var(--ink);box-shadow:0 4px 0 var(--ink);text-align:left}
+.bundle-head{display:grid;gap:4px}
+.bundle-head strong{font-size:17px;font-weight:900}
+.bundle-head span{font-size:13px;color:#6b5a48}
+.bundle-list{display:grid;gap:6px;max-height:260px;overflow:auto;padding-right:4px}
+.bundle-list label{display:grid;grid-template-columns:auto 1fr;gap:0 10px;align-items:center;padding:8px 10px;border-radius:10px;background:#fff6dc;border:1.5px solid #e5d4ae;cursor:pointer}
+.bundle-list label:has(input:checked){background:#ffe9b0;border-color:#d9a441}
+.bundle-list input{grid-row:span 2;width:20px;height:20px;accent-color:var(--don)}
+.bundle-list b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bundle-list small{font-size:12px;color:#8c7b5e}
+.bundle-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}

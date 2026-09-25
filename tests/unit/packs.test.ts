@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {zipSync,strToU8} from 'fflate';
 import {unpack,readFiles,exportPack} from '../../web/src/packs/zip';
 import {validateManifest,validateChart,sha256} from '../../web/src/packs/validators';
+import {isBundle,readBundle,bundleSong} from '../../web/src/packs/bundle';
 import type {SongPackage,Manifest,Chart} from '../../contracts/public-types';
 const zip=new Uint8Array(readFileSync('web/public/original-demo/himawari.zip'));const files=unpack(zip);const manifest:Manifest=JSON.parse(new TextDecoder().decode(files['manifest.json']));const valid:Chart=JSON.parse(new TextDecoder().decode(files['charts/normal.json']));
 describe('pack validation',()=>{
@@ -17,3 +18,29 @@ describe('pack validation',()=>{
  it('E09 demo is 64s, contains rolls/large notes and >100 normal taps',async()=>{const p=await readFiles(files);expect(p.manifest.durationMs).toBe(64000);expect(p.charts[1].notes.filter(n=>n.kind==='tap').length).toBeGreaterThan(100);expect(p.charts.every(c=>c.notes.some(n=>n.kind==='roll'))).toBe(true);expect(p.charts[1].notes.some(n=>n.kind==='tap'&&n.size==='large')).toBe(true);});
 });
 export const getFixture=async():Promise<SongPackage>=>readFiles(files);
+
+describe('song collection ZIP (several songs for the iPhone)',()=>{
+ const other=new Uint8Array(readFileSync('web/public/original-demo/ondo.zip'));
+ async function collection(songs:{path:string;data:Uint8Array;title:string}[],edit?:(list:Record<string,unknown>)=>void){
+  const list:Record<string,unknown>={kind:'chachamaru-bundle',schemaVersion:1,songs:await Promise.all(songs.map(async s=>({packId:s.path.slice(6,-4),revision:1,title:s.title,artist:'ちゃちゃまる音楽隊',path:s.path,sha256:await sha256(s.data)})))};
+  edit?.(list);
+  return zipSync({'bundle.json':strToU8(JSON.stringify(list)),...Object.fromEntries(songs.map(s=>[s.path,[s.data,{level:0}]]))});
+ }
+ it('reads each song as an ordinary pack and checks its SHA-256',async()=>{
+  const z=await collection([{path:'songs/himawari-demo.zip',data:zip,title:'ひまわり囃子'},{path:'songs/chachamaru-ondo.zip',data:other,title:'ちゃちゃまる音頭'}]);
+  expect(isBundle(z)).toBe(true);expect(isBundle(zip)).toBe(false);
+  const songs=readBundle(z);expect(songs.map(s=>s.title)).toEqual(['ひまわり囃子','ちゃちゃまる音頭']);
+  const pack=await readFiles(unpack(new Uint8Array(await bundleSong(z,songs[1]))));
+  expect(pack.manifest.packId).toBe('chachamaru-ondo');
+ });
+ it('rejects a tampered song, unsafe names and unknown formats',async()=>{
+  const z=await collection([{path:'songs/himawari-demo.zip',data:zip,title:'ひまわり囃子'}]);
+  const songs=readBundle(z);
+  await expect(bundleSong(z,{...songs[0],sha256:'0'.repeat(64)})).rejects.toThrow('SHA-256');
+  for(const bad of ['../x.zip','songs/../../x.zip','songs/a b.zip','songs/x.txt'])
+   await expect(collection([{path:'songs/himawari-demo.zip',data:zip,title:'x'}],l=>{(l.songs as {path:string}[])[0].path=bad;}).then(readBundle)).rejects.toThrow('曲リスト');
+  await expect(collection([{path:'songs/himawari-demo.zip',data:zip,title:'x'}],l=>{l.kind='other';}).then(readBundle)).rejects.toThrow('形式');
+  await expect(collection([{path:'songs/himawari-demo.zip',data:zip,title:'x'}],l=>{l.songs=[];}).then(readBundle)).rejects.toThrow('形式');
+  expect(()=>readBundle(zipSync({'bundle.json':strToU8('{not json')}))).toThrow('読めません');
+ });
+});

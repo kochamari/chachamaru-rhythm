@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import io
 import json
 import subprocess
 import sys
@@ -258,3 +259,27 @@ def test_cancel_after_the_worker_finished_is_harmless(client,monkeypatch):
     finally:
         proc.kill();subprocess.Popen.wait(proc)
         server.JOBS.pop('finished-job',None)
+
+def test_bundle_puts_several_songs_in_one_zip(client):
+    c,h,pid=client
+    base=json.loads((server.DATA/'projects'/pid/'project.json').read_text())
+    def another(pack_id,title):
+        other=str(uuid.uuid4());d=server.DATA/'projects'/other;d.mkdir(parents=True)
+        p=copy.deepcopy(base);p['projectId']=other;p['manifest']['packId']=pack_id;p['manifest']['title']=title
+        core.write_json(d/'project.json',p);(d/'song.m4a').write_bytes((server.DATA/'projects'/pid/'song.m4a').read_bytes())
+        return other
+    second=another('song-bundletest0002','二曲目')
+    same_audio=another(base['manifest']['packId'],'同じ音源の別プロジェクト')
+    r=c.post('/api/bundles',headers=h,json={'projectIds':[pid,second,pid,same_audio]})
+    assert r.status_code==200,r.text
+    assert [s['title'] for s in r.json()['songs']]==[base['manifest']['title'],'二曲目']
+    z=zipfile.ZipFile(io.BytesIO(c.get('/api/exports/'+r.json()['exportId'],headers=h).content))
+    listing=json.loads(z.read('bundle.json'))
+    assert listing['kind']=='chachamaru-bundle' and listing['schemaVersion']==1 and len(listing['songs'])==2
+    for song in listing['songs']:
+        info=z.getinfo(song['path']);assert info.compress_type==zipfile.ZIP_STORED
+        inner=z.read(song['path']);assert hashlib.sha256(inner).hexdigest()==song['sha256']
+        m=json.loads(zipfile.ZipFile(io.BytesIO(inner)).read('manifest.json'))
+        assert (m['packId'],m['title'])==(song['packId'],song['title'])
+    assert c.post('/api/bundles',headers=h,json={'projectIds':[]}).status_code==422
+    assert c.post('/api/bundles',headers=h,json={'projectIds':['../etc']}).status_code==400
