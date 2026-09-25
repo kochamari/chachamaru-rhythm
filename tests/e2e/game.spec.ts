@@ -112,3 +112,42 @@ test('U27 hitting the electronic drum switches to drum play, and the snare start
  await expect(page.locator('.pads')).toBeHidden();
  expect(await page.evaluate(()=>[window.__chacha.session?.mode,window.__chacha.session?.status])).toEqual(['midi','READY']);
 });
+test('U28 音ズレ合わせ measures how late the drum hits the heard beat and keeps it per sound output',async({page})=>{
+ test.setTimeout(90000);
+ await boot(page);
+ await page.goto('/#/sync?back=%23%2Fsongs');
+ await page.locator('[data-output="td17-bluetooth"]').click();
+ await expect(page.locator('[data-output="td17-bluetooth"]')).toHaveAttribute('aria-checked','true');
+ // Hit every beat 150 ms (±6) after the browser plays it, as a drummer
+ // would with Bluetooth delay.
+ await page.locator('#sync-start').click();
+ await page.evaluate(async()=>{
+  const sync=(window as unknown as {__sync:{beatPerformanceMs:(k:number)=>number}}).__sync;
+  for(let k=0;k<20;k++){
+   const at=sync.beatPerformanceMs(k)+150+(k%3-1)*6;
+   while(performance.now()<at+2)await new Promise(r=>setTimeout(r,5));
+   window.__chacha.input.emit('don',at,'midi');
+  }
+ });
+ await expect(page.locator('#sync-result')).toContainText('ms',{timeout:10000});
+ const measured=await page.evaluate(()=>window.__chacha.settings.audioDelayMs);
+ expect(Math.abs(measured-150)).toBeLessThanOrEqual(5);
+ await expect.poll(()=>page.evaluate(async()=>((await(await window.__chacha.db()).get('settings','main')) as Settings).calibrationProfiles['td17-bluetooth']?.audioDelayMs)).toBe(measured);
+ await expect(page.locator('[data-output="td17-bluetooth"] small')).toHaveText(`＋${measured}ms`);
+ // Undo, then fine-tune by hand.
+ await page.locator('#sync-undo').click();
+ expect(await page.evaluate(()=>window.__chacha.settings.audioDelayMs)).toBe(0);
+ await page.locator('[data-nudge="10"]').click();await page.locator('[data-nudge="5"]').click();
+ await expect(page.locator('#sync-delay')).toHaveText('音の遅れ ＋15ms');
+ // Each output keeps its own delay; the song select and the play dialog switch between them.
+ await page.locator('#sync-back').click();
+ await page.getByRole('button',{name:/ひまわり囃子/}).click();
+ await expect(page.locator('#output-profile')).toHaveValue('td17-bluetooth');
+ await page.locator('#output-profile').selectOption('phone-speaker');
+ expect(await page.evaluate(()=>[window.__chacha.settings.profile,window.__chacha.settings.audioDelayMs])).toEqual(['phone-speaker',0]);
+ await page.goto('/#/play/himawari-demo/easy');
+ await expect(page.locator('#dialog-output')).toHaveValue('phone-speaker');
+ await page.locator('#dialog-output').selectOption('td17-bluetooth');
+ expect(await page.evaluate(()=>[window.__chacha.settings.profile,window.__chacha.settings.audioDelayMs])).toEqual(['td17-bluetooth',15]);
+ await expect(page.locator('.play-dialog a[href^="#/sync?back="]')).toBeVisible();
+});

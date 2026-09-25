@@ -60,6 +60,15 @@ export class AudioEngine {
   setTimeout(()=>{if(this.context===c&&this.source&&this.generation===generation&&c.state!=='running')this.suspended?.();},AudioEngine.RECOVER_MS);
  };
  static RECOVER_MS=800;
+ /**
+  * Right after a resume the output clock (getOutputTimestamp) can still read
+  * 0 for a moment. Wait briefly for it, so a run's clock (fixed at start)
+  * uses the same mode as 音ズレ合わせ did; the measured delay assumes that.
+  */
+ async settle(){
+  const c=this.context;if(!c||typeof c.getOutputTimestamp!=='function')return;
+  for(let i=0;i<20&&!((c.getOutputTimestamp().contextTime??0)>0);i++)await new Promise(r=>setTimeout(r,25));
+ }
  onSuspend(cb:()=>void){this.suspended=cb;}
  volume(){
   for(const name of ['bgm','hit','effect','ui'] as const){

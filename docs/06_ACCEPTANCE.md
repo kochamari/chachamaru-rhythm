@@ -47,6 +47,8 @@ audio auditionができない場合、波形・再生成功と「人が音を聴
 | U23 | implementation | count-in中に得点/不可が増えず、0ms noteを救済 | timeline状態遷移 |
 | U24 | implementation | AUTO/練習/mixed/unstableが通常最高記録を書換えない | RecordRepository試験 |
 | U25 | implementation | min/missing APIでもタッチ版の起動を妨げない | capability fallback試験 |
+| U27 | implementation | 電子ドラムを叩くと電子ドラム用の画面へ切替、準備画面はスネアでも開始 | E2E（MIDI入力の模擬） |
+| U28 | implementation | 音ズレ合わせが遅れを測り、出力ごとに保存・切替できる | Unit（計算）＋E2E（150ms遅れの打撃） |
 | P01 | implementation | 付属diagnostic-packをschema+semantic+SHA検証できる | 正fixture |
 | P02 | implementation | future schemaVersion、NaN相当、負時刻、不明kindを拒否 | 不正JSON fixture |
 | P03 | implementation | note順序/ID重複/roll競合/空譜面/曲末超過を拒否 | semantic fixture |

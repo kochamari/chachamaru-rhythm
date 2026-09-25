@@ -105,3 +105,9 @@ body:has(.game-scene){overflow:hidden;overscroll-behavior:none}
 .game-scene .auto-badge.nudge{animation:auto-nudge .5s ease-out}
 @keyframes auto-nudge{30%{transform:translateX(-50%) scale(1.12)}}
 .game-scene.is-portrait .auto-badge{top:calc(var(--play-top,0px) + 196px * var(--play-scale,1))}
+/* Sound output on the READY and pause dialogs (音ズレ合わせ is one tap away). */
+.play-dialog .dialog-output{display:flex;align-items:center;justify-content:center;gap:6px 12px;flex-wrap:wrap;margin:4px 0 8px;font-size:13px;font-weight:800;color:#5a4a3a}
+.play-dialog .dialog-output select{min-height:36px;max-width:min(260px,100%);border-radius:10px;border:2px solid #d9c9a6;background:#fff;padding:0 6px;font-weight:700}
+.play-dialog .delay-nudge{display:inline-flex;align-items:center;gap:4px}
+.play-dialog .delay-nudge button{min-height:36px;min-width:44px;padding:2px 8px;border-radius:10px;font-size:13px}
+.play-dialog .delay-nudge output{min-width:4.6em;text-align:center;font-variant-numeric:tabular-nums}

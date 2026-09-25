@@ -7,6 +7,7 @@ import {characterSvg,flowerSvg} from '../render/Character';
 import {bestsFor,crownSvg,type ChartBest} from '../app/records';
 import {nav,preview,memory} from '../app/context';
 import {BUNDLED_ORDER,songColor,chartLevel,bpmOf} from '../app/songinfo';
+import {outputOptions,useOutput} from '../app/output';
 
 const DIFFS:Difficulty[]=['easy','normal','hard'];
 const kindOf=(m:Manifest,source?:string)=>m.packId==='himawari-demo'||source==='demo'||m.generator?.startsWith('original-composition')?'demo':source==='studio'?'studio':'mine';
@@ -76,7 +77,8 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
    <div class="detail-body">
     <div class="difficulty-cards" role="group" aria-label="難易度">${DIFFS.filter(d=>p.charts.some(c=>c.difficulty===d)).map(d=>{const b=bests[d];return `<button data-difficulty="${d}" data-nav class="${memory.difficulty===d?'active':''}" aria-pressed="${memory.difficulty===d}">${b?crownSvg(b.crown):''}<span class="d-name">${difficultyNames[d]}</span><span class="d-stars" aria-label="レベル ${chartLevel(p.charts.find(c=>c.difficulty===d)!)}">★${chartLevel(p.charts.find(c=>c.difficulty===d)!)}</span><span class="d-best">${b?`ベスト ${b.score.toLocaleString()}`:'まだ遊んでいません'}</span></button>`;}).join('')}</div>
     <div class="chart-meta"><span>音符 <b>${taps}</b></span>${rolls?`<span>連打 <b>${rolls}</b></span>`:''}${m.sections.some(s=>s.kind==='chorus')?'<span>サビで夜祭り演出</span>':''}</div>
-    <label class="input-choice">操作 <select id="input-mode"><option value="touch">タッチ（画面の太鼓）</option><option value="keyboard">キーボード（D F J K）</option><option value="midi">電子ドラム（MIDI）</option></select></label>
+    <div class="play-choices"><label class="input-choice">操作 <select id="input-mode"><option value="touch">タッチ（画面の太鼓）</option><option value="keyboard">キーボード（D F J K）</option><option value="midi">電子ドラム（MIDI）</option></select></label>
+     <div class="input-choice"><label for="output-profile">音の出力</label><select id="output-profile">${outputOptions(state.settings,escape)}</select><a class="button sync-mini" href="#/sync?back=%23%2Fsongs">ズレ合わせ</a></div></div>
     <div class="start-row"><button class="primary" id="play-song" data-nav>この曲であそぶ！</button><button class="auto" id="auto-song" data-nav>AUTO<small>お手本</small></button></div>
     <div class="small-actions"><button id="export-song">曲パックを保存</button><button id="delete-song">この曲を削除</button></div>
     <p class="detail-note">${m.generator?.startsWith('chacha-generator')?'自動下書きの譜面です。譜面工房でリズムを調整できます。':'大きい音符も1回叩けばOK（大音符アシスト）。'}</p>
@@ -85,6 +87,8 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
   detail.querySelectorAll<HTMLElement>('[data-difficulty]').forEach(b=>b.onclick=()=>{memory.difficulty=b.dataset.difficulty as Difficulty;zone='detail';void renderDetail().then(focusDetail);});
   const select=detail.querySelector<HTMLSelectElement>('#input-mode')!;select.value=mode;
   select.onchange=()=>{state.settings.inputMode=select.value as InputMode;void saveSettings(state.settings);};
+  const output=detail.querySelector<HTMLSelectElement>('#output-profile')!;
+  output.onchange=()=>{useOutput(state.settings,output.value);void saveSettings(state.settings);output.innerHTML=outputOptions(state.settings,escape);};
   detail.querySelector<HTMLElement>('#play-song')!.onclick=()=>play(false);
   detail.querySelector<HTMLElement>('#auto-song')!.onclick=()=>play(true);
   detail.querySelector<HTMLElement>('#export-song')!.onclick=async()=>{try{download(await exportPack(p),`${m.title}.zip`);}catch(e){toast((e as Error).message);}};

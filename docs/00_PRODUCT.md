@@ -41,6 +41,7 @@ LATER：風船、分岐、対戦、ランキング、ガチャ、キック、5�
 | Play | #/play/:songId/:chartId | 読込、開始タップ、カウントイン、演奏、pause |
 | Result | #/result/:runId | 結果、リトライ、曲一覧、詳細タイミング |
 | Settings | #/settings | 音量、演出、補正、保存、バックアップ |
+| 音ズレ合わせ | #/sync | 音の出力ごとの遅れを、音に合わせて叩いて測る・確かめる・微調整 |
 | Diagnostics | #/diagnostics | API、入力、音声、ストレージ、ログ出力 |
 | Studio | #/studio | デスクトップ編集。解析APIはMacローカルのみ |
 

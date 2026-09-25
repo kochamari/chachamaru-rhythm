@@ -350,3 +350,49 @@ html[data-render="software"] .new-best{animation:none}
 .setting-row label small{display:block;font-size:12px;font-weight:600;color:#8c7b5e;margin-top:2px}
 .haptic-host{position:relative;overflow:hidden}
 .haptic-host .haptic-switch{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+/* 音ズレ合わせ (#/sync) */
+.sync-steps{display:grid;gap:18px;max-width:900px;margin:auto}
+.sync-steps h2{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sync-steps h2 small{font-size:13px;color:#8a7658;font-weight:700}
+.sync-steps .paper p{font-size:14px;line-height:1.7}
+.step{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--don);color:#fff;font-size:16px;border:2px solid var(--ink);flex:none}
+.output-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.output-choices button{display:grid;gap:2px;justify-items:start;text-align:left;min-height:62px;padding:10px 14px;border-radius:14px;border:2.5px solid #d9c9a6;background:#fff}
+.output-choices button[aria-checked="true"]{border-color:var(--ink);background:#fff2ce;box-shadow:0 3px 0 var(--ink)}
+.output-choices button[aria-checked="true"] span::before{content:'✓ ';color:var(--don-dark)}
+.output-choices small{font-size:13px;color:#8a7658;font-variant-numeric:tabular-nums}
+.sync-steps .sync-note{font-size:13px;color:#7a6a52}
+.sync-pad{position:relative;overflow:hidden;display:grid;place-items:center;align-content:center;gap:4px;min-height:150px;margin:12px 0;border-radius:20px;border:3px solid var(--ink);background:radial-gradient(circle at 50% 42%,#ff8a70,var(--don) 62%,#c93f2c);color:#fff;text-align:center;user-select:none;-webkit-user-select:none;touch-action:none;cursor:pointer;box-shadow:0 5px 0 var(--ink);transition:transform .06s,box-shadow .06s}
+.sync-pad strong{font-size:22px;text-shadow:0 2px 0 #0005}
+.sync-pad small{font-size:15px;font-weight:800;opacity:.95;font-variant-numeric:tabular-nums}
+.sync-pad.pressed,.sync-pad.hit{transform:translateY(3px);box-shadow:0 2px 0 var(--ink);background:radial-gradient(circle at 50% 42%,#ffa088,#ff6a52 62%,#d9503b)}
+.sync-progress{position:absolute;left:0;right:0;bottom:0;height:6px;background:var(--gold);transform-origin:left;transform:scaleX(0)}
+.sync-result{min-height:1.5em}
+.sync-result b{font-size:20px;color:var(--don-dark)}
+.sync-lane{display:block;width:100%;height:110px;border-radius:14px;border:3px solid var(--ink);background:#2d1b2e;margin:10px 0 6px}
+.sync-judge{min-height:3em;text-align:center;font-size:16px;font-weight:800}
+.sync-judge b{font-size:22px;margin-right:6px}.sync-judge .great{color:#d9482b}.sync-judge .ok{color:#1b7f98}.sync-judge .bad{color:#8a7658}
+.sync-judge small{display:block;font-size:13px;color:#7a6a52;font-weight:700}
+.sync-adjust{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;max-width:420px;margin:6px auto}
+.sync-adjust output{grid-column:1/-1;order:-1;text-align:center;font-weight:900;font-size:19px;font-variant-numeric:tabular-nums}
+.sync-adjust button{min-width:0;padding:8px 4px}
+.sync-callout{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 14px;padding:14px 16px;border-radius:14px;background:#fff2ce;border:2px solid var(--gold-deep)}
+.sync-callout strong{font-size:15px}
+.sync-callout p{margin:4px 0 0}
+.output-choice{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;min-width:0}
+.output-choice select{min-height:44px;max-width:100%}
+.play-choices{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
+.input-choice label{flex:none}
+.input-choice select{min-width:0}
+.sync-mini{min-height:42px;padding:6px 10px;font-size:12px;border-radius:10px;flex:none}
+@media (max-height:500px) and (orientation:landscape){
+ .play-choices{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+ .play-choices .input-choice{gap:6px;font-size:12px}
+ .play-choices select{min-height:34px;font-size:13px;padding:0 6px}
+ .play-choices .sync-mini{display:none}
+ /* Keep the start button on screen under Safari's bars (about 340px tall). */
+ .detail-body{padding:6px 12px 8px;gap:5px}
+ .difficulty-cards button{min-height:48px;padding:3px 4px}
+ .detail-art .art-title{right:130px;bottom:10px}
+ .detail-art p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
