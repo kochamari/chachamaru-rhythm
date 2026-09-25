@@ -55,34 +55,20 @@ test('P13 a collection ZIP adds only new songs, skips the ones already here and 
  await page.locator('#to-songs').click();await expect(page.getByRole('button',{name:/まとめ試験A/})).toBeVisible();
 });
 
-test('U26 tapping the drum vibrates on phones, and the setting turns it off',async({page,browser},info)=>{
- const tap=()=>page.evaluate(()=>{let id=90;for(const pad of ['don','ka'])document.querySelector(`[data-pad="${pad}"]`)!.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:id++,pointerType:'touch'}));for(const n of [90,91])document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:n}));});
- // Android and others: the Vibration API, don longer than ka.
- await page.addInitScript(()=>{const calls:number[]=[];Object.assign(window,{vibrations:calls});Object.defineProperty(navigator,'vibrate',{configurable:true,value:(ms:number)=>{calls.push(ms);return true;}});});
- await boot(page);await page.evaluate(()=>{window.__chacha.settings.inputMode='touch';});
- await page.goto('/#/play/himawari-demo/easy');await page.locator('#resume-play').click();
- await expect.poll(()=>page.evaluate(()=>window.__chacha.session?.status)).toMatch(/COUNT_IN|PLAYING/);
- await tap();expect(await page.evaluate(()=>(window as unknown as {vibrations:number[]}).vibrations)).toEqual([14,7]);
- await page.evaluate(()=>{window.__chacha.settings.haptics=false;});await tap();
- expect(await page.evaluate(()=>(window as unknown as {vibrations:number[]}).vibrations)).toEqual([14,7]);
- await page.goto('/#/settings');await expect(page.locator('#haptics')).not.toBeChecked();await page.locator('#haptics').check();
- await expect.poll(()=>page.evaluate(()=>window.__chacha.settings.haptics)).toBe(true);
- // iPhone: no Vibration API. Each pad carries an invisible switch that the
- // finger itself toggles (the only haptic path left on iOS 26.5+), and the
- // same tap still hits the drum.
+test('U26 touch pads on an iPhone hit the drum with no vibration parts',async({browser},info)=>{
+ // Tap vibration was removed at the user's request (iPhone could only vibrate
+ // on release). The pads are plain again and each tap is one hit.
  const phone=await browser.newContext({...devices['iPhone 13'],baseURL:info.project.use.baseURL});
  const p=await phone.newPage();await p.route('**/api/**',r=>r.fulfill({status:404,contentType:'application/json',body:'{}'}));
  await p.goto('/');await p.waitForFunction(()=>window.__chacha?.bundledReady,null,{timeout:60000});
  await p.evaluate(()=>{window.__chacha.settings.inputMode='touch';});
  await p.goto('/#/play/himawari-demo/easy');await p.locator('#resume-play').click();
  await expect.poll(()=>p.evaluate(()=>window.__chacha.session?.status)).toMatch(/COUNT_IN|PLAYING/);
- const don=p.locator('[data-pad="don"]').first(),ka=p.locator('[data-pad="ka"]').first();
- await expect(don.locator('input.haptic-switch[switch]')).toHaveCount(1);
+ await expect(p.locator('.pads input')).toHaveCount(0);
  const before=await p.evaluate(()=>window.__chacha.input.count);
- await don.tap();await ka.tap();
+ await p.locator('[data-pad="don"]').first().tap();await p.locator('[data-pad="ka"]').first().tap();
  expect(await p.evaluate(()=>window.__chacha.input.count)).toBe(before+2);
- await expect(don.locator('input.haptic-switch')).toBeChecked();await expect(ka.locator('input.haptic-switch')).toBeChecked();
- await p.goto('/#/settings');await expect(p.locator('#test-don input.haptic-switch')).toHaveCount(1);
+ await p.goto('/#/settings');await expect(p.locator('#haptics')).toHaveCount(0);
  await phone.close();
 });
 test('U27 hitting the electronic drum switches to drum play, and the snare starts the song',async({page})=>{

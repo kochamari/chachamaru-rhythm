@@ -53,7 +53,8 @@ describe('settings with the new options',()=>{
   expect(validSettings({...defaults,scrollSpeed:1.5,hitSound:'wood'})).toBe(true);
   expect(validSettings({...defaults,scrollSpeed:3})).toBe(false);
   expect(validSettings({...defaults,hitSound:'bark' as never})).toBe(false);
-  expect(defaults.haptics).toBe(true);
+  // Tap vibration was removed; saves from when it existed still load.
+  expect(defaults.haptics).toBeUndefined();
   expect(validSettings({...defaults,haptics:false})).toBe(true);
   expect(validSettings({...defaults,haptics:'yes' as never})).toBe(false);
  });

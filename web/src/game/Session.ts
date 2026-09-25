@@ -6,7 +6,6 @@ import {PlayRenderer,stageThemeFor} from '../render/PlayRenderer';
 import {state,difficultyNames} from '../app/store';
 import {escape,toast} from '../app/ui';
 import {saveRun,saveSettings} from '../storage/Database';
-import {tapHaptic,hapticSwitch} from '../input/haptics';
 import {adoptDrum} from '../app/drumMode';
 import {outputOptions,useOutput,setTiming,clampDelay,signedMs} from '../app/output';
 import {BoneCounter,crowdStep,crowdSize,inFever,finishBones,CROWD_MAX} from './festival';
@@ -48,15 +47,13 @@ export class Session {
   this.boneCounter=new BoneCounter(crowdStep(chart.notes.filter(n=>n.kind==='tap').length));
   const inputMode=this.mode==='mixed'?'keyboard':this.mode;
   this.drumUi=inputMode==='midi';
-  // iPhone: an invisible switch over each pad gives the tap a system haptic.
-  const haptic=state.settings.haptics!==false?hapticSwitch():'';
   root.innerHTML=`<section class="game-scene mode-${inputMode}" aria-label="演奏画面">
    <button class="pause-button" aria-label="一時停止"><span></span><span></span></button>
    <div class="pads" aria-label="太鼓の打面">
-    <div class="pad ka rim-left" role="button" data-pad="ka" data-side="left" aria-label="カッ（左のふち）"><span>カッ</span><small>D</small>${haptic}</div>
-    <div class="pad don skin-left" role="button" data-pad="don" data-side="left" aria-label="ドン（左の面）"><span>ドン</span><small>F</small>${haptic}</div>
-    <div class="pad don skin-right" role="button" data-pad="don" data-side="right" aria-label="ドン（右の面）"><span>ドン</span><small>J</small>${haptic}</div>
-    <div class="pad ka rim-right" role="button" data-pad="ka" data-side="right" aria-label="カッ（右のふち）"><span>カッ</span><small>K</small>${haptic}</div>
+    <div class="pad ka rim-left" role="button" data-pad="ka" data-side="left" aria-label="カッ（左のふち）"><span>カッ</span><small>D</small></div>
+    <div class="pad don skin-left" role="button" data-pad="don" data-side="left" aria-label="ドン（左の面）"><span>ドン</span><small>F</small></div>
+    <div class="pad don skin-right" role="button" data-pad="don" data-side="right" aria-label="ドン（右の面）"><span>ドン</span><small>J</small></div>
+    <div class="pad ka rim-right" role="button" data-pad="ka" data-side="right" aria-label="カッ（右のふち）"><span>カッ</span><small>K</small></div>
    </div>
    <div class="play-overlay"><div class="play-dialog"><span class="eyebrow">準備しています</span><h2>曲を読み込み中…</h2></div></div>
    <button class="rotate-hint">横向きにすると、もっと遊びやすくなります <b>×</b></button>
@@ -170,8 +167,6 @@ export class Session {
    return;
   }
   if(!['READY','COUNT_IN','PLAYING'].includes(this.status))return;
-  // Inside the pointerdown dispatch, so phones treat it as the user's tap.
-  if(i.source==='touch'&&state.settings.haptics!==false)tapHaptic(i.color);
   this.audio.hit(i.color);
   let t=0;
   try{t=this.audio.time(i.performanceMs);}catch{this.pause('音声時計を再確認してください');return;}
