@@ -360,13 +360,44 @@ export const COSTUMES:Costume[]=[
  // SSR
  {id:'sora',series:'kenami',name:'そらまる',rarity:'SSR',blurb:'夏の空をうつした、ふしぎな毛色。',coat:COATS.sora},
  {id:'yoru',series:'kenami',name:'よるまる',rarity:'SSR',blurb:'星空みたいに、しずかで深い。',coat:COATS.yoru},
- {id:'tenshi',series:'densetsu',name:'てんしの柴',rarity:'SSR',blurb:'リズムの神さまの、おつかい。',outfit:{
-  under:g=>{for(const s of [-1,1]){g.save();g.translate(207+s*58,232);g.scale(s,1);
-   g.beginPath();g.moveTo(0,0);g.bezierCurveTo(40,-42,110,-72,132,-42);g.bezierCurveTo(122,-30,126,-10,112,0);g.bezierCurveTo(120,12,110,30,94,30);g.bezierCurveTo(98,48,78,60,62,52);g.bezierCurveTo(50,64,20,60,0,30);g.closePath();fill(g,'#ffffff');stroke(g,3,'#8fa6cc');
-   for(const [x1,y1,x2,y2] of [[30,-12,110,-24],[26,6,102,10],[20,22,82,38]]){g.beginPath();g.moveTo(x1,y1);g.quadraticCurveTo((x1+x2)/2,(y1+y2)/2-8,x2,y2);stroke(g,2,'#c9d6ee');}
-   g.restore();}},
-  head:g=>{const glow=g.createRadialGradient(207,16,0,207,16,70);glow.addColorStop(0,'rgba(255,240,160,.75)');glow.addColorStop(1,'rgba(255,240,160,0)');g.fillStyle=glow;g.fillRect(137,-40,140,110);
-   ellipse(g,207,16,56,11);g.lineWidth=10;g.strokeStyle='#ffd23f';g.stroke();ellipse(g,207,16,56,11);g.lineWidth=3;g.strokeStyle='#fff6c2';g.stroke();}}},
+ {id:'shishimai',series:'densetsu',name:'獅子舞の柴',rarity:'SSR',blurb:'かぷっとかまれて、一年じゅう元気。',cardPose:3,outfit:{
+  // The lion-dance cloth: green with white 唐草 swirls, hanging behind the body.
+  under:g=>{
+   g.beginPath();g.moveTo(128,48);g.bezierCurveTo(84,110,64,200,76,330);g.quadraticCurveTo(207,356,338,330);g.bezierCurveTo(350,200,330,110,286,48);g.closePath();
+   fill(g,'#1f7a44');
+   g.save();g.clip();
+   for(let y=70;y<340;y+=46)for(let x=60+((y/46)%2)*23;x<360;x+=46){
+    g.beginPath();for(let k=0;k<=28;k++){const a=k/28*Math.PI*3.2,r=2+k*.55;g.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r);}
+    g.lineWidth=3.5;g.strokeStyle='#f4f1e6';g.lineCap='round';g.stroke();
+   }
+   g.restore();
+   g.beginPath();g.moveTo(128,48);g.bezierCurveTo(84,110,64,200,76,330);g.quadraticCurveTo(207,356,338,330);g.bezierCurveTo(350,200,330,110,286,48);stroke(g,3);
+  },
+  // The lion head worn on top, "biting" the head (for good luck): upper jaw above, lower jaw on the forehead.
+  head:g=>{
+   // Mane tufts behind the head.
+   for(let i=0;i<9;i++){const x=136+i*17.5,up=i%2?6:0;ellipse(g,x,26-up,11,13);fill(g,i%2?'#ffd23f':'#231c2e');}
+   // Ears.
+   for(const s of [-1,1]){g.beginPath();g.moveTo(207+s*62,30);g.quadraticCurveTo(207+s*92,14,207+s*84,46);g.closePath();fill(g,'#d8262b');stroke(g,2.5);ellipse(g,207+s*76,32,5,8,s*.5);fill(g,'#ffd23f');}
+   // Head.
+   ellipse(g,207,46,72,38);fill(g,'#d8262b');stroke(g,3);
+   ellipse(g,188,30,22,9,-.2);fill(g,'rgba(255,255,255,.22)');
+   // Brows, eyes, nose and cheeks.
+   for(const s of [-1,1]){
+    g.beginPath();g.moveTo(207+s*12,34);g.quadraticCurveTo(207+s*28,14,207+s*46,28);g.lineWidth=7;g.strokeStyle='#ffd23f';g.lineCap='round';g.stroke();g.lineWidth=2;g.strokeStyle=INK;g.stroke();
+    ellipse(g,207+s*27,44,11,11);fill(g,'#ffe066');stroke(g,2.5);
+    ellipse(g,207+s*25,45,5,5);fill(g,INK);ellipse(g,207+s*23,42,1.8,1.8);fill(g,'#fff');
+    ellipse(g,207+s*50,60,6,6);fill(g,'#ffd23f');stroke(g,1.5);
+   }
+   ellipse(g,207,58,15,11);fill(g,'#b8161b');stroke(g,2.5);
+   ellipse(g,201,60,3.5,2.6);fill(g,INK);ellipse(g,213,60,3.5,2.6);fill(g,INK);
+   // Upper teeth.
+   g.beginPath();g.roundRect(162,70,90,12,5);fill(g,'#fffaf0');stroke(g,2.5);
+   for(let x=173;x<250;x+=11){g.beginPath();g.moveTo(x,70);g.lineTo(x,82);g.lineWidth=1.5;g.strokeStyle=INK;g.stroke();}
+   // Lower jaw with its teeth, on the forehead.
+   g.beginPath();g.moveTo(166,88);g.quadraticCurveTo(207,112,248,88);g.lineTo(246,98);g.quadraticCurveTo(207,122,168,98);g.closePath();fill(g,'#d8262b');stroke(g,2.5);
+   for(let k=0;k<6;k++){const x=176+k*12,y=91+Math.sin((k+.5)/6*Math.PI)*9;g.beginPath();g.moveTo(x-4,y+1);g.lineTo(x,y-7);g.lineTo(x+4,y+1);g.closePath();fill(g,'#fffaf0');stroke(g,1.5);}
+  }}},
  {id:'tonosama',series:'densetsu',name:'とのさま',rarity:'SSR',blurb:'よきにはからえ、ドン。',cardPose:3,outfit:{
   body:g=>{
    for(const s of [-1,1]){g.beginPath();g.moveTo(207+s*18,198);g.lineTo(207+s*62,232);g.lineTo(207+s*66,320);g.lineTo(207+s*10,320);g.closePath();fill(g,'#2c3e6e');stroke(g,3);}

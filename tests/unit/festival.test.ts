@@ -204,7 +204,7 @@ it('おみくじ by score for a cleared run; none for a failed one',()=>{
 });
 
 import {seriesProgress,settleCollection,PITY} from '../../web/src/game/gacha';
-import {SERIES,COMPLETE_BONUS} from '../../web/src/render/costumes';
+import {SERIES,COMPLETE_BONUS,COSTUME_BY_ID} from '../../web/src/render/costumes';
 import {rarePool,DRAW_COATS} from '../../web/src/game/festival';
 
 it('the big update: 60+ outfits in series, every rarity and series well stocked, ids unique',()=>{
@@ -266,4 +266,18 @@ it('coats found in the draw come on stage as rare friends',()=>{
  for(let n=0;n<4000&&!seen;n++)seen=drawFriends(random,{sora:1}).includes('sora');
  expect(seen).toBe(true);
  for(let n=0;n<500;n++)expect(drawFriends(random,{}).includes('sora')).toBe(false);
+});
+
+it('てんしの柴 was replaced by 獅子舞の柴: whoever drew it owns the lion instead',async()=>{
+ expect(COSTUME_BY_ID.has('tenshi')).toBe(false);
+ expect(COSTUME_BY_ID.get('shishimai')).toMatchObject({rarity:'SSR',series:'densetsu'});
+ await (await db()).clear('settings');
+ await saveFestival({...emptyFestival(),bones:300,earned:300,owned:{tenshi:1,kin:2}});
+ expect((await loadFestival()).owned).toEqual({kin:2,shishimai:1});
+ // Draws see the replacement as owned, and the stored data drops the old id.
+ let seen:Record<string,number>={};
+ await spendOnDraws(1,owned=>{seen={...owned};return [{id:'uchiwa',refund:0}];},PULL_COST);
+ expect(seen).toEqual({kin:2,shishimai:1});
+ const raw=await (await db()).get('settings','festival') as {owned:Record<string,number>};
+ expect(raw.owned).toEqual({kin:2,shishimai:1,uchiwa:1});
 });

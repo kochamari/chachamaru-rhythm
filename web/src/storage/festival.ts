@@ -49,9 +49,19 @@ export function validFestival(v:unknown):v is FestivalData{
  return f.awards.every(a=>a&&typeof a.runId==='string'&&a.runId.length<=200&&typeof a.date==='string'&&count(a.play)&&count(a.total)&&Array.isArray(a.items)&&a.items.length<=12&&a.items.every(i=>i&&typeof i.label==='string'&&i.label.length<=40&&count(i.bones))&&validAwardExtras(a));
 }
 
+/**
+ * Outfits replaced after they were released: whoever drew one owns its
+ * replacement instead (てんしの柴 → 獅子舞の柴, 2026-09-26, at the user's request).
+ */
+const REPLACED:Record<string,string>={tenshi:'shishimai'};
+function migrate(f:FestivalData):FestivalData{
+ for(const [from,to] of Object.entries(REPLACED)){const n=f.owned[from];if(n){f.owned[to]=(f.owned[to]??0)+n;delete f.owned[from];}}
+ return f;
+}
+
 export async function loadFestival():Promise<FestivalData>{
  const v=await (await db()).get('settings',KEY);
- return validFestival(v)?v:emptyFestival();
+ return validFestival(v)?migrate(v):emptyFestival();
 }
 export async function saveFestival(f:FestivalData){
  if(!validFestival(f))throw Error('ごほうびのデータが不正です');
@@ -66,7 +76,7 @@ export async function saveFestival(f:FestivalData){
  */
 export async function awardBones(runId:string,play:number,items:{label:string;bones:number}[],extras?:{slot:SlotSymbol[];xp:number;now?:Date}):Promise<Award>{
  const d=await db(),tx=d.transaction('settings','readwrite'),store=tx.objectStore('settings');
- const raw=await store.get(KEY),f=validFestival(raw)?raw:emptyFestival();
+ const raw=await store.get(KEY),f=validFestival(raw)?migrate(raw):emptyFestival();
  const paid=f.awards.find(a=>a.runId===runId);
  if(paid){await tx.done;return paid;}
  const all=[...items];
@@ -97,7 +107,7 @@ export interface Settled {bonuses:{label:string;bones:number}[];paid:string[];co
  */
 export async function spendOnDraws<P extends {id:string;refund:number}>(count:number,draw:(owned:Record<string,number>,pity:{since:number})=>P[],cost:number,settle?:(owned:Record<string,number>,paid:string[],complete:boolean)=>Settled):Promise<{pulls:P[];festival:FestivalData;bonuses:{label:string;bones:number}[]}>{
  const d=await db(),tx=d.transaction('settings','readwrite'),store=tx.objectStore('settings');
- const raw=await store.get(KEY),f=validFestival(raw)?raw:emptyFestival();
+ const raw=await store.get(KEY),f=validFestival(raw)?migrate(raw):emptyFestival();
  if(f.bones<cost){await tx.done;throw Error('ほねっこが足りません');}
  const pity={since:f.sinceSSR??0};
  const pulls=draw(f.owned,pity);
