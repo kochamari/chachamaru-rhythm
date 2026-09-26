@@ -186,7 +186,9 @@ test('U30 しばガチャ spends ほねっこ, opens capsules and fills the coll
  await page.evaluate(async()=>{await (await window.__chacha.db()).put('settings',{schemaVersion:1,bones:1150,earned:1150,owned:{},pulls:0,awards:[]},'festival');});
  await page.goto('/#/gacha');
  await expect(page.locator('#wallet')).toHaveText('1,150');
- await expect(page.locator('#zukan-count')).toHaveText('0 / 21');
+ await expect(page.locator('#zukan-count')).toHaveText(/^0 \/ \d+$/);
+ const total=Number((await page.locator('#zukan-count').textContent())!.split('/')[1]);
+ expect(total).toBeGreaterThanOrEqual(60);
  // One draw: capsule, then the card.
  await page.locator('#pull-1').click();
  await expect(page.locator('.gacha-reveal .reveal-capsule')).toBeVisible();
@@ -196,7 +198,7 @@ test('U30 しばガチャ spends ほねっこ, opens capsules and fills the coll
  await expect(page.locator('.reveal-card')).toBeVisible();await expect(page.locator('.reveal-card .card-new')).toHaveText('NEW!');
  await page.locator('#reveal-next').click();
  await expect(page.locator('.gacha-reveal')).toHaveCount(0);
- await expect(page.locator('#zukan-count')).toHaveText('1 / 21');
+ await expect(page.locator('#zukan-count')).toHaveText(`1 / ${total}`);
  await expect(page.locator('#wallet')).toHaveText('1,050');
  // Ten draws: the summary shows ten outfits, at least one of them SR or better.
  await page.locator('#pull-10').click();
@@ -208,4 +210,22 @@ test('U30 しばガチャ spends ほねっこ, opens capsules and fills the coll
  expect(f.pulls).toBe(11);expect(Object.values(f.owned).reduce((a,b)=>a+b,0)).toBe(11);
  await expect(page.locator('#wallet')).toHaveText(f.bones.toLocaleString('en-US'));
  await expect(page.locator('#pull-10')).toBeDisabled();
+ // 天井: after 79 draws without ウルトラレア the next one is ウルトラレア. A series
+ // completed (the お面 set here) pays its bonus once, with a celebration.
+ await page.evaluate(async()=>{await (await window.__chacha.db()).put('settings',{schemaVersion:1,bones:200,earned:200,owned:{kitsune:1,oni:1,tengu:1,hyottoko:1,okame:1},pulls:79,awards:[],sinceSSR:79},'festival');});
+ await page.reload();
+ await expect(page.locator('#pity-left')).toHaveText('1');
+ await page.locator('#pull-1').click();
+ await page.locator('#reveal-next').click();
+ if(await page.locator('.reveal-capsule.upgrade').count())await page.locator('#reveal-next').click();
+ await expect(page.locator('.reveal-card .card-rarity')).toContainText('ウルトラレア');
+ await expect(page.locator('.reveal-card .card-rarity')).toContainText('天井');
+ await page.locator('#reveal-next').click();
+ await expect(page.locator('.complete-reveal')).toContainText('お面');
+ await expect(page.locator('.complete-reveal')).toContainText('＋250');
+ await page.locator('#complete-close').click();
+ await expect(page.locator('.series-shelf[data-series="omen"]')).toHaveClass(/done/);
+ const g=await page.evaluate(async()=>(await(await window.__chacha.db()).get('settings','festival')) as {bones:number;sets:string[];sinceSSR:number});
+ expect(g).toMatchObject({bones:350,sets:['omen'],sinceSSR:0});
+ await expect(page.locator('#pity-left')).toHaveText('80');
 });

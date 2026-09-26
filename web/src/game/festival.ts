@@ -20,7 +20,15 @@ export const RARE_COATS=['kin','sakura','gin'] as const;
 export const RARE_CHANCE=[.015,.025,.045,.08] as const;
 /** リーチ: when the first three hold two (or three) the same, the fourth completes it this much more often. */
 export const REACH_BOOST={pair:.15,three:.3} as const;
-export const isRare=(coat:string)=>(RARE_COATS as readonly string[]).includes(coat);
+/** Coats found in しばガチャ: once owned, they can come as rare friends too. */
+export const DRAW_COATS=['kin','sakura','sora','yoru','mint','choco'] as const;
+/** At most this many "shares" of RARE_CHANCE per friend (owning many coats raises it up to here). */
+export const RARE_CAP=6;
+export const isRare=(coat:string)=>!(COMMON_COATS as readonly string[]).includes(coat);
+/** Rare coats that can come to this player's stage: the three stage coats plus draw coats they own. */
+export function rarePool(owned:Readonly<Record<string,number>>={}):string[]{
+ return [...RARE_COATS,...DRAW_COATS.filter(c=>!(RARE_COATS as readonly string[]).includes(c)&&owned[c])];
+}
 
 function most(coats:readonly string[]){
  let best='',count=0;
@@ -39,8 +47,10 @@ export function drawFriends(random:()=>number,owned:Readonly<Record<string,numbe
    const boost=count>=3?REACH_BOOST.three:count>=2?REACH_BOOST.pair:0;
    if(boost&&random()<boost){out.push(coat);continue;}
   }
-  const u=random();let acc=0,picked='';
-  for(const id of RARE_COATS){acc+=RARE_CHANCE[i]*(owned[id]?2:1);if(u<acc){picked=id;break;}}
+  // A rare coat: owned ones count twice; owning many raises the chance up to RARE_CAP shares.
+  const pool=rarePool(owned),weights=pool.map(id=>owned[id]?2:1),sum=weights.reduce((a,b)=>a+b,0);
+  const chance=RARE_CHANCE[i]*Math.min(sum,RARE_CAP),u=random();let picked='';
+  if(u<chance){let acc=0;for(const [k,id] of pool.entries()){acc+=weights[k]/sum*chance;if(u<acc){picked=id;break;}}picked||=pool[pool.length-1];}
   out.push(picked||COMMON_COATS[Math.min(COMMON_COATS.length-1,Math.floor(random()*COMMON_COATS.length))]);
  }
  return out;

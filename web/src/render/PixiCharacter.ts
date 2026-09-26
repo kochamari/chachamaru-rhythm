@@ -103,11 +103,12 @@ export class PixiCharacter {
   if(outfit.under){const sp=layer(outfit.under);if(sp)this.back.addChildAt(sp,0);}
   if(outfit.body){const sp=layer(outfit.body);if(sp)this.back.addChild(sp);}
   const head=this.bones.get('head');
-  if(outfit.head&&head){const sp=layer(outfit.head);if(sp){const [px,py]=this.pivots.get('head')!;sp.position.set(-px,-py);head.c.addChild(sp);}}
+  // Head outfits (hats) may rise above the rig box: paint them with 80 units of headroom.
+  if(outfit.head&&head){const sp=layer(outfit.head,400,500,0,80);if(sp){const [px,py]=this.pivots.get('head')!;sp.position.set(sp.x-px,sp.y-py);head.c.addChild(sp);}}
   const hold=outfit.hold,bone=hold?.paw==='left'?'armLeft':'armRight',paw=this.bones.get(bone);
   if(hold&&paw){
-   // Painted around the grip (the grip is at the middle of a 240-unit square).
-   const sp=layer(hold.paint,240,240,120,120);
+   // Painted around the grip (the grip is at the middle of a 300-unit square).
+   const sp=layer(hold.paint,300,300,150,150);
    if(sp){
     const c=new Container();const [px,py]=this.pivots.get(bone)!;const [gx,gy]=GRIP[bone];
     c.position.set(gx-px,gy-py);c.addChild(sp);paw.c.addChildAt(c,0);

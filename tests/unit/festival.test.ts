@@ -76,9 +76,10 @@ it('a ten-draw always brings SR or better; repeats are marked and pay bones back
  const low=[.1,.5,.1,.5,.1,.5,.1,.5,.1,.5,.1,.5,.1,.5,.1,.5,.1,.5,.2,.5];let i=0;
  const pulls=drawOutfits(10,()=>low[i++%low.length],{});
  expect(pulls.slice(0,9).every(p=>p.rarity==='N')).toBe(true);expect(pulls[9].rarity).toBe('SR');
- // Always 0.1: the first N outfit, already owned here.
- const owned={hachimaki:1};
- expect(drawOutfits(1,()=>.1,owned)[0]).toEqual({id:'hachimaki',rarity:'N',isNew:false,refund:10});
+ // Always 0.1: a ノーマル outfit (a tenth of the way through the list), already owned here.
+ const normals=COSTUMES.filter(c=>c.rarity==='N'),expected=normals[Math.floor(.1*normals.length)].id;
+ const owned={[expected]:1};
+ expect(drawOutfits(1,()=>.1,owned)[0]).toEqual({id:expected,rarity:'N',isNew:false,refund:10});
  expect(collected(owned)).toEqual({have:1,all:COSTUMES.length});
 });
 
@@ -200,4 +201,69 @@ import {fortuneFor} from '../../web/src/game/festival';
 it('おみくじ by score for a cleared run; none for a failed one',()=>{
  expect([fortuneFor(1000000,true),fortuneFor(949999,true),fortuneFor(850000,true),fortuneFor(760000,true),fortuneFor(600000,true),fortuneFor(420000,true)]).toEqual(['大吉','中吉','中吉','小吉','吉','末吉']);
  expect(fortuneFor(990000,false)).toBe(null);
+});
+
+import {seriesProgress,settleCollection,PITY} from '../../web/src/game/gacha';
+import {SERIES,COMPLETE_BONUS} from '../../web/src/render/costumes';
+import {rarePool,DRAW_COATS} from '../../web/src/game/festival';
+
+it('the big update: 60+ outfits in series, every rarity and series well stocked, ids unique',()=>{
+ expect(COSTUMES.length).toBeGreaterThanOrEqual(60);
+ expect(new Set(COSTUMES.map(c=>c.id)).size).toBe(COSTUMES.length);
+ for(const c of COSTUMES){expect(SERIES.some(s=>s.id===c.series)).toBe(true);expect(!!c.outfit!==!!c.coat).toBe(true);expect(/^[a-z0-9-]{1,40}$/.test(c.id)).toBe(true);}
+ for(const s of SERIES)expect(COSTUMES.filter(c=>c.series===s.id).length).toBeGreaterThanOrEqual(3);
+ for(const r of ['N','R','SR','SSR'] as const)expect(COSTUMES.filter(c=>c.rarity===r).length).toBeGreaterThanOrEqual(5);
+ // Every coat in the draw can also come on stage.
+ for(const c of COSTUMES.filter(c=>c.coat))expect(DRAW_COATS as readonly string[]).toContain(c.id);
+});
+
+it('天井: the 80th draw without ウルトラレア is one, and the counter carries across draws',()=>{
+ const never=()=>.1;// always ノーマル
+ const pity={since:0};
+ const first=drawOutfits(10,never,{},pity);
+ expect(first.every(p=>p.rarity!=='SSR')).toBe(true);
+ expect(pity.since).toBe(10);
+ pity.since=PITY-2;
+ const pulls=drawOutfits(3,never,{},pity);
+ expect(pulls.map(p=>p.rarity)).toEqual(['N','SSR','N']);
+ expect(pulls[1].pity).toBe(true);
+ expect(pity.since).toBe(1);
+ // A natural ウルトラレア resets it too.
+ const lucky={since:40};drawOutfits(1,()=>.995,{},lucky);expect(lucky.since).toBe(0);
+});
+
+it('series and the whole book pay once when completed',()=>{
+ const omen=COSTUMES.filter(c=>c.series==='omen').map(c=>c.id);
+ const owned=Object.fromEntries(omen.map(id=>[id,1]));
+ expect(seriesProgress(owned).find(p=>p.series.id==='omen')).toMatchObject({have:omen.length,all:omen.length,done:true});
+ const first=settleCollection(owned,[],false);
+ expect(first.bonuses).toEqual([expect.objectContaining({label:'お面 コンプ',bones:250})]);
+ expect(settleCollection(owned,first.paid,false).bonuses).toEqual([]);
+ const everything=Object.fromEntries(COSTUMES.map(c=>[c.id,1]));
+ const all=settleCollection(everything,first.paid,false);
+ expect(all.complete).toBe(true);
+ expect(all.bonuses.at(-1)).toEqual({label:'しばずかん コンプリート',bones:COMPLETE_BONUS});
+ expect(all.bonuses.length).toBe(SERIES.length);// the other series + the book
+ expect(settleCollection(everything,all.paid,true).bonuses).toEqual([]);
+});
+
+it('spending settles series bonuses in the same transaction and saves the 天井 counter',async()=>{
+ await awardBones('run-s',300,[]);
+ const f0=await loadFestival();
+ await saveFestival({...f0,owned:{kitsune:1,oni:1,tengu:1,hyottoko:1},sinceSSR:12});
+ const r=await spendOnDraws(1,(owned,pity)=>{pity.since+=1;return [{id:'okame',refund:0}];},PULL_COST,settleCollection);
+ expect(r.bonuses.map(b=>b.label)).toEqual(['お面 コンプ']);
+ const f=await loadFestival();
+ expect([f.bones,f.sets,f.sinceSSR]).toEqual([300-PULL_COST+250,['omen'],13]);
+ expect(validFestival({...f,sinceSSR:-1})).toBe(false);
+ expect(validFestival({...f,sets:['<x>']})).toBe(false);
+});
+
+it('coats found in the draw come on stage as rare friends',()=>{
+ expect(rarePool({})).toEqual(['kin','sakura','gin']);
+ expect(rarePool({sora:1,choco:2,hachimaki:1})).toEqual(['kin','sakura','gin','sora','choco']);
+ let seen=false;const random=lcg(9);
+ for(let n=0;n<4000&&!seen;n++)seen=drawFriends(random,{sora:1}).includes('sora');
+ expect(seen).toBe(true);
+ for(let n=0;n<500;n++)expect(drawFriends(random,{}).includes('sora')).toBe(false);
 });

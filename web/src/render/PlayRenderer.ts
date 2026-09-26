@@ -10,7 +10,7 @@ import {beatPhase,downbeatTimes,inSection,friendsForGauge,FRIEND_STEPS} from './
 import {DRUMMER,DANCER,DrummerState,drummerPose,dancerPose,ATLAS_FILES,REGIONS,type Side} from './rig';
 import {PixiCharacter,type AtlasTextures} from './PixiCharacter';
 import {FRIEND_VARIANTS,recolorAtlas} from './recolor';
-import {feverLevel,joinBonuses,isReach,isRare,COMMON_COATS,RARE_COATS,ALL_FRIENDS_BONES,type Bonus} from '../game/festival';
+import {feverLevel,joinBonuses,isReach,isRare,rarePool,COMMON_COATS,ALL_FRIENDS_BONES,type Bonus} from '../game/festival';
 import {COSTUMES,COATS} from './costumes';
 import type {EffectName} from '../audio/synth';
 import * as art from './art';
@@ -226,7 +226,8 @@ export class PlayRenderer {
    // Every coat's picture (the reels show them all), then the four drawn friends.
    const variantOf=(id:string)=>FRIEND_VARIANTS.find(v=>v.id===id)??COATS[id as keyof typeof COATS]??FRIEND_VARIANTS[0];
    const canvases=new Map<string,HTMLCanvasElement|null>();
-   for(const id of [...COMMON_COATS,...RARE_COATS]){
+   const rares=rarePool(owned);
+   for(const id of [...COMMON_COATS,...rares]){
     const canvas=await recolorAtlas(img,variantOf(id),'chachamaru-anime-v1',.5);
     if(!this.alive)return;
     canvases.set(id,canvas);
@@ -254,7 +255,7 @@ export class PlayRenderer {
     caption.anchor.set(.5,1);caption.position.set(0,-64);caption.label='caption';
     reel.addChild(reelFace,caption);this.stageFx.addChild(reel);
     // What rolls by: a shuffled mix of every coat (rare ones now and then), ending on theirs.
-    const pool=[...COMMON_COATS,...COMMON_COATS,...RARE_COATS],seq:string[]=[];
+    const pool=[...COMMON_COATS,...COMMON_COATS,...rares],seq:string[]=[];
     for(let n=0;n<(i===FRIEND_SLOTS-1?22:14);n++)seq.push(pool[Math.floor(random()*pool.length)]);
     seq.push(coats[i]);
     // A gold glow near the end hints at a rare coat: usually true, sometimes not (like a slot's hint).

@@ -1,8 +1,8 @@
 import {header,escape,toast,boneSvg} from '../app/ui';
 import {nav,uiAudio} from '../app/context';
 import {loadFestival,spendOnDraws,type FestivalData} from '../storage/festival';
-import {drawOutfits,cryptoRandom,collected,PULL_COST,TEN_PULLS,DUPLICATE_BONES,type Pull} from '../game/gacha';
-import {COSTUMES,COSTUME_BY_ID,RARITY_LABEL,type Costume,type Rarity} from '../render/costumes';
+import {drawOutfits,cryptoRandom,collected,seriesProgress,settleCollection,PULL_COST,TEN_PULLS,DUPLICATE_BONES,PITY,type Pull} from '../game/gacha';
+import {COSTUMES,COSTUME_BY_ID,RARITY_LABEL,COMPLETE_BONUS,type Costume,type Rarity} from '../render/costumes';
 import {shibaPicture} from '../render/shibaCard';
 
 declare const __TEST__:boolean;
@@ -36,7 +36,7 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
  const back=backParam&&/^#\/(?!gacha)[\w/?=&%.-]*$/.test(backParam)?backParam:'#/';
  let festival:FestivalData=await loadFestival();
  let busy=false,disposed=false;
- root.innerHTML=`${header()}<section class="page gacha-page"><div class="page-heading"><div><span class="eyebrow">ほねっこで、お祭りの仲間をふやそう</span><h1>しばガチャ</h1><p>当たった衣装は、演奏中に来てくれる仲間の柴犬が着て登場します。レアな毛色の柴犬は、4匹目として来ることがあります。</p></div><a class="button" id="gacha-back" href="${escape(back)}" data-nav>もどる</a></div>
+ root.innerHTML=`${header()}<section class="page gacha-page"><div class="page-heading"><div><span class="eyebrow">ほねっこで、お祭りの仲間をふやそう</span><h1>しばガチャ</h1><p>当たった衣装は、演奏中に来てくれる仲間の柴犬が着て登場します。当てた毛色の柴犬も、演奏中に仲間として来るようになります。</p><p class="gacha-news"><b>大型アップデート</b> 衣装が${COSTUMES.length}種類に！ シリーズをそろえると ほねっこボーナス、80回で ウルトラレア確定。</p></div><a class="button" id="gacha-back" href="${escape(back)}" data-nav>もどる</a></div>
   <div class="gacha-main">
    <div class="gacha-machine">${machineSvg()}<div class="drop-capsule" hidden></div></div>
    <div class="gacha-panel paper">
@@ -44,10 +44,11 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
     <button class="primary gacha-one" id="pull-1" data-nav>1回ひく<small>ほねっこ ${PULL_COST}</small></button>
     <button class="gacha-ten" id="pull-10" data-nav>10回ひく<small>ほねっこ ${PULL_COST*TEN_PULLS}・スーパーレア以上が1つ確定</small></button>
     <p class="gacha-hint" id="gacha-hint" role="status"></p>
-    <details class="gacha-rates"><summary>出る確率と、かぶったとき</summary><p>ノーマル 58%・レア 30%・スーパーレア 10%・ウルトラレア 2%。10回ひくと、最後の1回はスーパーレア以上です。<br>同じ衣装が出たら ほねっこが戻ります（ノーマル ${DUPLICATE_BONES.N}・レア ${DUPLICATE_BONES.R}・スーパーレア ${DUPLICATE_BONES.SR}・ウルトラレア ${DUPLICATE_BONES.SSR}）。<br>ほねっこは演奏でたまります（良1本、フィーバー中は2本、50コンボごと・全員集合・クリアなどでボーナス）。</p></details>
+    <div class="pity" aria-label="ウルトラレア確定までの回数"><span>ウルトラレア確定まで</span><b id="pity-left">${PITY}</b><span>回</span><i><em id="pity-bar"></em></i></div>
+    <details class="gacha-rates"><summary>出る確率と、かぶったとき</summary><p>ノーマル 58%・レア 30%・スーパーレア 10%・ウルトラレア 2%。10回ひくと、最後の1回はスーパーレア以上です。<br>同じ衣装が出たら ほねっこが戻ります（ノーマル ${DUPLICATE_BONES.N}・レア ${DUPLICATE_BONES.R}・スーパーレア ${DUPLICATE_BONES.SR}・ウルトラレア ${DUPLICATE_BONES.SSR}）。<br>ウルトラレアが出ないまま${PITY}回ひくと、${PITY}回目はウルトラレアです（天井）。<br>シリーズをぜんぶ集めると ほねっこボーナス、しばずかんをコンプリートすると ＋${COMPLETE_BONUS.toLocaleString()}。<br>ほねっこは演奏でたまります（良1本、フィーバー中は2本、50コンボごと・全員集合・クリアなどでボーナス）。</p></details>
    </div>
   </div>
-  <section class="zukan paper"><h2>しばずかん <span id="zukan-count"></span></h2><div class="zukan-grid" id="zukan"></div></section>
+  <section class="zukan paper"><h2>しばずかん <span id="zukan-count"></span></h2><div class="zukan-series" id="zukan"></div></section>
  </section>`;
  const $=<T extends HTMLElement>(q:string)=>root.querySelector<T>(q)!;
  const wallet=$('#wallet'),one=$<HTMLButtonElement>('#pull-1'),ten=$<HTMLButtonElement>('#pull-10'),hint=$('#gacha-hint'),machine=$('.gacha-machine'),drop=$('.drop-capsule');
@@ -56,15 +57,21 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
   wallet.textContent=festival.bones.toLocaleString();
   one.disabled=busy||festival.bones<PULL_COST;ten.disabled=busy||festival.bones<PULL_COST*TEN_PULLS;
   hint.textContent=festival.bones<PULL_COST?`あと ${PULL_COST-festival.bones}本で1回ひけます。演奏して ほねっこを集めよう！`:festival.bones<PULL_COST*TEN_PULLS?`あと ${PULL_COST*TEN_PULLS-festival.bones}本で10回まとめてひけます。`:'';
+  const since=festival.sinceSSR??0;
+  $('#pity-left').textContent=String(PITY-since);$<HTMLElement>('#pity-bar').style.width=`${since/PITY*100}%`;
  }
  async function renderZukan(){
   const {have,all}=collected(festival.owned);
   $('#zukan-count').textContent=`${have} / ${all}`;
   const grid=$('#zukan');
-  grid.innerHTML=COSTUMES.map(c=>{const n=festival.owned[c.id]??0;return `<button class="zukan-card ${n?'owned':'unknown'}" data-rarity="${c.rarity}" data-costume="${c.id}" ${n?'':'disabled'} aria-label="${n?escape(c.name):'まだ見つけていない衣装'}（${RARITY_LABEL[c.rarity]}）"><span class="zukan-pic"></span><b>${n?escape(c.name):'？？？'}</b><small>${STARS[c.rarity]}${n>1?` ×${n}`:''}</small></button>`;}).join('');
+  // Smaller cards on phones so 60+ outfits fit in a reasonable scroll.
+  const picSize=innerWidth<560?56:88;
+  const card=(c:Costume)=>{const n=festival.owned[c.id]??0;return `<button class="zukan-card ${n?'owned':'unknown'}" data-rarity="${c.rarity}" data-costume="${c.id}" ${n?'':'disabled'} aria-label="${n?escape(c.name):'まだ見つけていない衣装'}（${RARITY_LABEL[c.rarity]}）"><span class="zukan-pic"></span><b>${n?escape(c.name):'？？？'}</b><small>${STARS[c.rarity]}${n>1?` ×${n}`:''}</small></button>`;};
+  // One shelf per series: its progress, its bonus, and a gold "コンプ" when complete.
+  grid.innerHTML=seriesProgress(festival.owned).map(({series,have,all,done})=>`<section class="series-shelf ${done?'done':''}" data-series="${series.id}"><h3><span>${escape(series.name)}</span><span class="series-count">${have} / ${all}</span><span class="series-bonus">${done?'コンプ ✓':`そろえると ＋${series.bonus}`}</span></h3><div class="zukan-grid">${COSTUMES.filter(c=>c.series===series.id).map(card).join('')}</div></section>`).join('');
   for(const card of grid.querySelectorAll<HTMLElement>('.zukan-card')){
    const c=COSTUME_BY_ID.get(card.dataset.costume!)!;
-   void shibaPicture(c,96,{silhouette:!festival.owned[c.id]}).then(pic=>{if(!disposed)card.querySelector('.zukan-pic')?.append(pic);}).catch(()=>{});
+   void shibaPicture(c,picSize,{silhouette:!festival.owned[c.id]}).then(pic=>{if(!disposed)card.querySelector('.zukan-pic')?.append(pic);}).catch(()=>{});
    if(festival.owned[c.id])card.onclick=()=>void reveal([{id:c.id,rarity:c.rarity,isNew:false,refund:0}],true);
   }
  }
@@ -72,8 +79,8 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
  async function pull(count:number){
   if(busy)return;
   busy=true;refresh();
-  let result:{pulls:Pull[];festival:FestivalData};
-  try{result=await spendOnDraws(count,owned=>drawOutfits(count,cryptoRandom,owned),PULL_COST*count);}
+  let result:{pulls:Pull[];festival:FestivalData;bonuses:{label:string;bones:number}[]};
+  try{result=await spendOnDraws(count,(owned,pity)=>drawOutfits(count,cryptoRandom,owned,pity),PULL_COST*count,settleCollection);}
   catch(e){toast(e instanceof Error?e.message:'ガチャをひけませんでした');busy=false;refresh();return;}
   festival=result.festival;wallet.textContent=festival.bones.toLocaleString();
   // Turn the handle; a capsule rolls out of the chute.
@@ -85,6 +92,9 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
   await wait(620);if(disposed)return;
   drop.hidden=true;machine.classList.remove('turning');
   await reveal(result.pulls,false);
+  if(disposed)return;
+  // Series (or the whole book) completed by this draw: a celebration and its bonus.
+  if(result.bonuses.length)await celebrate(result.bonuses);
   busy=false;if(disposed)return;
   refresh();void renderZukan();
  }
@@ -116,7 +126,7 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
     layer.dataset.rarity=p.rarity;
     await wait(260);
     capsule.hidden=true;card.hidden=false;card.dataset.rarity=p.rarity;
-    card.innerHTML=`<span class="card-rarity">${RARITY_LABEL[p.rarity]} ${STARS[p.rarity]}</span><span class="card-pic"></span><h3>${escape(c.name)}</h3><p>${escape(c.blurb)}</p>${fromZukan?'':p.isNew?'<span class="card-new">NEW!</span>':`<span class="card-dup">かぶり → ほねっこ ＋${p.refund}</span>`}`;
+    card.innerHTML=`<span class="card-rarity">${RARITY_LABEL[p.rarity]} ${STARS[p.rarity]}${p.pity?' ・天井':''}</span><span class="card-pic"></span><h3>${escape(c.name)}</h3><p>${escape(c.blurb)}</p>${fromZukan?'':p.isNew?'<span class="card-new">NEW!</span>':`<span class="card-dup">かぶり → ほねっこ ＋${p.refund}</span>`}`;
     card.classList.remove('pop');void card.offsetWidth;card.classList.add('pop');
     // Super rare or better: confetti bursts out of the card.
     if((p.rarity==='SR'||p.rarity==='SSR')&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
@@ -150,6 +160,26 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
    capsule.onclick=()=>void step();next.onclick=()=>void step();
    layer.querySelector<HTMLElement>('#reveal-skip')?.addEventListener('click',()=>void showSummary());
    if(fromZukan){i=0;void showCard();}else showCapsule();
+  });
+ }
+ /** "シリーズ コンプリート！": the series (or the whole book) and the bones it paid. */
+ function celebrate(bonuses:{label:string;bones:number}[]){
+  return new Promise<void>(resolve=>{
+   const all=bonuses.some(b=>b.label.startsWith('しばずかん'));
+   const layer=document.createElement('div');layer.className='gacha-reveal complete-reveal';layer.dataset.rarity=all?'SSR':'SR';layer.setAttribute('role','dialog');layer.setAttribute('aria-modal','true');layer.setAttribute('aria-label','コンプリート');
+   layer.innerHTML=`<div class="reveal-rays" aria-hidden="true"></div><div class="complete-card"><span class="complete-kicker">${all?'おめでとう！':'シリーズ'}</span><h3>${all?'しばずかん<br>コンプリート！！':'コンプリート！'}</h3><ul>${bonuses.map(b=>`<li><b>${escape(b.label.replace(/ コンプ$/,''))}</b><span>ほねっこ ＋${b.bones.toLocaleString()}</span></li>`).join('')}</ul></div><div class="reveal-actions"><button class="primary" id="complete-close">やったね！</button></div>`;
+   if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    const colors=['#ff5fa2','#ffd23f','#39d2f2','#7ed36f','#b58cff','#ffffff'];
+    const burst=document.createElement('div');burst.className='reveal-confetti';burst.setAttribute('aria-hidden','true');
+    burst.innerHTML=Array.from({length:all?60:36},(_,k)=>`<i style="--x:${(Math.random()*2-1).toFixed(2)};--up:${(18+Math.random()*16).toFixed(0)}vh;--r:${Math.round(Math.random()*900-450)}deg;--d:${(Math.random()*.25).toFixed(2)}s;background:${colors[k%colors.length]}"></i>`).join('');
+    layer.append(burst);
+   }
+   root.append(layer);
+   uiAudio.effect(all?'allGreat':'fullCombo');
+   const saved=nav.handlers;
+   const close=()=>{nav.handlers=saved;layer.remove();resolve();};
+   nav.handlers={decide:()=>{close();return true;},move:()=>true,back:close};
+   const button=layer.querySelector<HTMLButtonElement>('#complete-close')!;button.onclick=close;button.focus({preventScroll:true});
   });
  }
  const rank=(r:Rarity)=>['N','R','SR','SSR'].indexOf(r);
