@@ -149,3 +149,47 @@ it('each friend pays for what their coat completes; リーチ when the fourth ca
  expect(c.bonuses.map(b=>b.label)).toEqual(['ペア','レア柴','3匹そろい','全員集合']);
  expect(mergeBonuses([...c.bonuses,{label:'レア柴',bones:20},{label:'クリア',bones:20}])).toEqual([{label:'ペア',bones:10},{label:'レア柴',bones:40},{label:'3匹そろい',bones:50},{label:'全員集合',bones:30},{label:'クリア',bones:20}]);
 });
+
+import {drawSlot,slotPayout,xpForRun,levelFor,nearMiss,dayKey,SLOT_SYMBOLS,LEVEL_UP_BONES,DAILY_BONES} from '../../web/src/game/festival';
+
+it('result bonus slot: two the same ×1.5, three ×2, ちゃちゃまる three ×3; the third reel is boosted after a pair',()=>{
+ expect(slotPayout(['bone','drum','flower']).mult).toBe(1);
+ expect(slotPayout(['bone','drum','bone'])).toEqual({mult:1.5,label:'2つそろい'});
+ expect(slotPayout(['drum','drum','drum']).mult).toBe(2);
+ expect(slotPayout(['chacha','chacha','chacha'])).toEqual({mult:3,label:'ちゃちゃまる3つ！'});
+ const random=lcg(5),N=100000,hits={1:0,1.5:0,2:0,3:0} as Record<number,number>;
+ for(let n=0;n<N;n++){const s=drawSlot(random);expect(s.every(x=>(SLOT_SYMBOLS as readonly string[]).includes(x))).toBe(true);hits[slotPayout(s).mult]++;}
+ expect(hits[1.5]/N).toBeGreaterThan(.3);expect(hits[2]/N).toBeGreaterThan(.08);expect(hits[2]/N).toBeLessThan(.2);
+ expect(hits[3]/N).toBeGreaterThan(.002);expect(hits[3]/N).toBeLessThan(.02);
+});
+
+it('太鼓レベル: experience per run and the level curve; near-miss lines; local day key',()=>{
+ expect(xpForRun({score:1000000,gauge:100,fullCombo:true,allGreat:true})).toBe(170);
+ expect(xpForRun({score:512345,gauge:40,fullCombo:false,allGreat:false})).toBe(51);
+ expect(levelFor(0)).toEqual({level:1,into:0,need:100});
+ expect(levelFor(99).level).toBe(1);expect(levelFor(100)).toEqual({level:2,into:0,need:120});
+ expect(levelFor(100+120+5)).toEqual({level:3,into:5,need:140});
+ const base={score:900000,gauge:90,fullCombo:false,allGreat:false,miss:1,ok:3};
+ expect(nearMiss(base,null)).toBe('フルコンボまで あと1ミス！');
+ expect(nearMiss({...base,miss:0,fullCombo:true,ok:2},null)).toBe('全良まで あと 可2つ！');
+ expect(nearMiss({...base,miss:9,gauge:65},null)).toBe('クリアまで あと5%！');
+ expect(nearMiss({...base,miss:9},912345)).toBe('自己ベストまで あと12,345点！');
+ expect(nearMiss({...base,miss:9},null)).toBe(null);
+ expect(dayKey(new Date(2026,0,5,23,59))).toBe('2026-01-05');
+});
+
+it('an award with extras: slot bonus on the bones from play, the first run of the day, level ups pay; paid once',async()=>{
+ const day=new Date(2026,8,26,10);
+ const a=await awardBones('r1',100,[{label:'クリア',bones:20}],{slot:['drum','drum','drum'],xp:120,now:day});
+ expect(a.slot).toEqual({symbols:['drum','drum','drum'],mult:2,bones:100});
+ expect(a.daily).toBe(true);expect(a.xp).toEqual({gain:120,before:0});
+ expect(a.items.map(i=>i.label)).toEqual(['クリア','スロット 3つそろい！','きょうの初プレイ','レベルアップ']);
+ expect(a.total).toBe(100+20+100+DAILY_BONES+LEVEL_UP_BONES);
+ const b=await awardBones('r2',40,[],{slot:['bone','drum','flower'],xp:10,now:new Date(2026,8,26,18)});
+ expect([b.daily,b.slot?.bones,b.total]).toEqual([undefined,0,40]);
+ expect(await awardBones('r1',999,[],{slot:['chacha','chacha','chacha'],xp:999,now:day})).toEqual(a);
+ const f=await loadFestival();
+ expect([f.xp,f.lastDay,f.bones]).toEqual([130,'2026-09-26',a.total+b.total]);
+ expect(validFestival(f)).toBe(true);
+ expect(validFestival({...f,awards:[{...a,slot:{symbols:['x','y','z'],mult:9,bones:1}}]})).toBe(false);
+});

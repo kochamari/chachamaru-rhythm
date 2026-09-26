@@ -9,7 +9,7 @@ import {saveRun,saveSettings} from '../storage/Database';
 import {adoptDrum} from '../app/drumMode';
 import {lockZoom} from '../app/zoom';
 import {outputOptions,useOutput,setTiming,clampDelay,signedMs} from '../app/output';
-import {BoneCounter,inFever,finishBones,drawFriends,mergeBonuses} from './festival';
+import {BoneCounter,inFever,finishBones,drawFriends,mergeBonuses,drawSlot,xpForRun} from './festival';
 import {cryptoRandom} from './gacha';
 import {awardBones,loadFestival} from '../storage/festival';
 
@@ -264,7 +264,8 @@ export class Session {
   const cleared=stats.gauge>=70;
   if(!this.celebrated){this.celebrated=true;this.renderer.celebrate(cleared?'clear':'finish');this.audio.effect(cleared?'clear':'fail');}
   // ほねっこ are paid once per finished normal run, before the result screen reads them.
-  const award=this.rewards?awardBones(this.runId,this.boneCounter.play,mergeBonuses([...this.boneCounter.bonuses,...finishBones(stats)])).catch(()=>null):Promise.resolve(null);
+  // The bonus slot on the result screen is drawn here and only shown there.
+  const award=this.rewards?awardBones(this.runId,this.boneCounter.play,mergeBonuses([...this.boneCounter.bonuses,...finishBones(stats)]),{slot:drawSlot(cryptoRandom),xp:xpForRun(stats)}).catch(()=>null):Promise.resolve(null);
   const save=Promise.all([saveRun(result),award]).catch(()=>toast('結果を保存できませんでした。ストレージ容量を確認してください'));
   this.finishTimer=window.setTimeout(()=>{void save.then(()=>{this.audio.stop();this.status='RESULT';if(!this.disposed)this.onResult(result);});},1500);
  }

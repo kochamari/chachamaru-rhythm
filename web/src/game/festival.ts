@@ -118,3 +118,53 @@ export class BoneCounter {
   }
  }
 }
+
+// ------------------------------------------------------------ result screen --
+
+/** Result-screen bonus slot: three reels of festival symbols multiply the bones from play. */
+export const SLOT_SYMBOLS=['bone','flower','drum','chacha'] as const;
+export type SlotSymbol=typeof SLOT_SYMBOLS[number];
+const SLOT_WEIGHTS:Record<SlotSymbol,number>={bone:.34,flower:.3,drum:.24,chacha:.12};
+/** When the first two reels match, the third matches this much more often (リーチ). */
+export const SLOT_REACH_BOOST=.25;
+function slotSymbol(u:number):SlotSymbol{
+ let acc=0;
+ for(const s of SLOT_SYMBOLS){acc+=SLOT_WEIGHTS[s];if(u<acc)return s;}
+ return 'chacha';
+}
+export function drawSlot(random:()=>number):SlotSymbol[]{
+ const a=slotSymbol(random()),b=slotSymbol(random());
+ const c=a===b&&random()<SLOT_REACH_BOOST?a:slotSymbol(random());
+ return [a,b,c];
+}
+/** ちゃちゃまる three times ×3, any three the same ×2, two the same ×1.5. */
+export function slotPayout(symbols:readonly SlotSymbol[]):{mult:number;label:string}{
+ const [a,b,c]=symbols;
+ if(a===b&&b===c)return a==='chacha'?{mult:3,label:'ちゃちゃまる3つ！'}:{mult:2,label:'3つそろい！'};
+ if(a===b||b===c||a===c)return {mult:1.5,label:'2つそろい'};
+ return {mult:1,label:''};
+}
+
+/** 太鼓レベル: experience from each finished run. */
+export function xpForRun(s:Pick<GameSnapshot,'score'|'gauge'|'fullCombo'|'allGreat'>){
+ return Math.min(100,Math.round(s.score/10000))+(s.gauge>=70?20:0)+(s.allGreat?50:s.fullCombo?30:0);
+}
+/** Level for total experience: the next level needs 100 + 20 per level so far. */
+export function levelFor(xp:number){
+ let level=1,rest=Math.max(0,Math.floor(xp));
+ while(rest>=100+20*(level-1)){rest-=100+20*(level-1);level++;}
+ return {level,into:rest,need:100+20*(level-1)};
+}
+export const LEVEL_UP_BONES=50;
+export const DAILY_BONES=50;
+/** The local calendar day, for the first-run-of-the-day bonus. */
+export function dayKey(date=new Date()){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
+
+/** One line that makes "one more time" tempting, or null. */
+export function nearMiss(s:Pick<GameSnapshot,'score'|'gauge'|'fullCombo'|'allGreat'|'miss'|'ok'>,best:number|null){
+ if(!s.fullCombo&&s.miss>0&&s.miss<=2)return `フルコンボまで あと${s.miss}ミス！`;
+ if(s.fullCombo&&!s.allGreat&&s.ok>0&&s.ok<=3)return `全良まで あと 可${s.ok}つ！`;
+ if(s.gauge<70&&s.gauge>=60)return `クリアまで あと${Math.ceil(70-s.gauge)}%！`;
+ if(best!==null&&s.score<best&&best-s.score<=30000)return `自己ベストまで あと${(best-s.score).toLocaleString()}点！`;
+ return null;
+}

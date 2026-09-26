@@ -396,18 +396,18 @@ html[data-render="software"] .new-best{animation:none}
 }
 /* ほねっこ: bones earned by a run (spent on the shiba draw). */
 .bone-svg{display:block;width:100%;height:100%}
-.bone-award{display:flex;align-items:center;gap:12px;margin:10px 0;padding:8px 14px;border-radius:16px;border:2.5px solid var(--ink);background:linear-gradient(100deg,#fff2ce,#ffe39a);box-shadow:0 3px 0 var(--ink)}
+.reward-bones{display:flex;align-items:center;gap:12px;margin:10px 0;padding:8px 14px;border-radius:16px;border:2.5px solid var(--ink);background:linear-gradient(100deg,#fff2ce,#ffe39a);box-shadow:0 3px 0 var(--ink)}
 .bone-award-icon{width:46px;height:30px;flex:none}
-.bone-award b{font-size:20px;font-weight:900;font-variant-numeric:tabular-nums}
-.bone-award small{display:block;font-size:12px;color:#6b5a48;font-weight:700}
+.reward-bones b{font-size:20px;font-weight:900;font-variant-numeric:tabular-nums}
+.reward-bones small{display:block;font-size:12px;color:#6b5a48;font-weight:700}
 .bone-main{flex:1;min-width:0}
 .bone-side{display:flex;align-items:center;gap:10px}
 .bone-total{font-size:12px;font-weight:800;color:#6b5a48;text-align:right;line-height:1.2}
 .bone-total b{display:block;font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums}
-.bone-award b{white-space:nowrap}
+.reward-bones b{white-space:nowrap}
 @media (max-width:480px){
- .bone-award{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:8px 12px}
- .bone-award-icon{width:36px;height:24px}.bone-award b{font-size:18px}
+ .reward-bones{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:8px 12px}
+ .bone-award-icon{width:36px;height:24px}.reward-bones b{font-size:18px}
  .bone-side{grid-column:1/-1;justify-content:space-between;border-top:1.5px dashed #d9b86a;padding-top:6px}
  .bone-total{display:flex;align-items:baseline;gap:6px;text-align:left}.bone-total b{display:inline}
  .result-actions{grid-template-columns:1.45fr 1fr}.result-actions .primary{white-space:nowrap;font-size:16px;padding-left:10px;padding-right:10px}
@@ -427,7 +427,7 @@ html[data-render="software"] .new-best{animation:none}
  .result-stats{margin:2px 0;gap:6px}.result-stats div{padding:2px 4px;border-width:2px}.result-stats span{font-size:11px}.result-stats strong{font-size:16px}
  .result-gauge{height:14px;margin:4px 0 2px}
  .result-sub{display:none}
- .bone-award{margin:6px 0;padding:4px 10px;gap:8px}.bone-award-icon{width:34px;height:22px}.bone-award b{font-size:16px}.bone-award small{font-size:11px}
+ .reward-bones{margin:6px 0;padding:4px 10px;gap:8px}.bone-award-icon{width:34px;height:22px}.reward-bones b{font-size:16px}.reward-bones small{font-size:11px}
  .result-actions{margin-top:6px}.result-actions .primary,.result-actions .button{min-height:40px;padding:6px 12px;font-size:15px}
 }
 /* しばガチャ (#/gacha) and しばずかん */
@@ -515,3 +515,61 @@ html[data-render="software"] .new-best{animation:none}
 /* iPhone Safari zooms into a focused select or text field whose text is
    smaller than 16px and stays zoomed; phones get 16px in every field. */
 @media (pointer:coarse){select,textarea,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]){font-size:16px!important}}
+/* Result rewards: bones, the bonus slot and 太鼓レベル, beside the score (under it on narrow screens). */
+.result-dog{grid-area:dog}.result-card{grid-area:card}.result-rewards{grid-area:rewards}
+.result-page{grid-template-areas:"dog card"}
+.result-page.has-rewards{grid-template-areas:"dog card" "rewards card";align-content:center}
+.result-page.has-rewards .result-card{align-self:center}
+.result-rewards{display:grid;gap:8px;width:100%;max-width:520px;justify-self:center;cursor:pointer;position:relative}
+.result-rewards .reward-bones{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:4px 10px}
+.reward-bones .bone-main{display:grid;gap:1px;min-width:0}
+.reward-bones .bone-total{text-align:left;font-size:12px}.reward-bones .bone-total b{display:inline;font-size:15px}
+.bone-items{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px}
+.bone-items:empty{display:none}
+.bone-items span{font-size:11px;font-weight:800;padding:1px 8px;border-radius:999px;background:#fffaf0;border:1.5px solid #e0c080;color:#6b5a48;white-space:nowrap}
+.bone-items span:last-child{animation:reward-pop .4s cubic-bezier(.2,1.6,.4,1)}
+.bone-items .daily{background:#dff5d6;border-color:#7ed36f}.bone-items .slot{background:#fff0c2;border-color:#f0b429}
+.reward-slot,.reward-level{display:flex;align-items:center;gap:10px;padding:6px 12px;border-radius:14px;border:2.5px solid var(--ink);background:#fff8e6;box-shadow:0 3px 0 var(--ink);color:var(--ink)}
+.slot-label{font-size:11px;font-weight:900;line-height:1.15;color:#8a4a2a;flex:none}
+.slot-reels{--sym:40px;display:flex;gap:4px;padding:3px;border-radius:10px;background:#2b1b2e;border:2px solid var(--ink)}
+.reel{display:block;width:var(--sym);height:var(--sym);overflow:hidden;border-radius:7px;background:#fffaf0}
+.strip{display:flex;flex-direction:column;will-change:transform}
+.sym{display:grid;place-items:center;width:var(--sym);height:var(--sym);flex:none;padding:4px}
+.sym svg{width:100%;height:100%}
+.slot-result{flex:1;min-width:0;text-align:center;font-size:16px;font-weight:900;white-space:nowrap}
+.slot-result.reach{color:#d9482b;animation:hint-nudge .5s ease-in-out infinite alternate}
+.slot-result.win{color:#1b7f98}.slot-result.big{color:#d9482b}.slot-result.jackpot{background:linear-gradient(90deg,#ff5fa2,#ffb13b,#2cbbd5,#9b6bff);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:19px}
+.slot-result.miss{color:#8a7658;font-weight:800}
+.slot-result .what{display:block;font-size:12px}.slot-result .what:empty{display:none}.slot-result .mult{display:block}
+.slot-result.pop,.daily-chip.pop,.level-up.pop{animation:reward-pop .45s cubic-bezier(.2,1.6,.4,1)}
+@keyframes reward-pop{0%{transform:scale(.3);opacity:0}100%{transform:none;opacity:1}}
+.level-badge{flex:none;font-size:12px;font-weight:900;color:#5a4a3a}.level-badge b{font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+.level-bar{flex:1;height:12px;border-radius:999px;background:#3a2626;border:2px solid var(--ink);overflow:hidden}
+.level-bar i{display:block;height:100%;background:linear-gradient(90deg,#7ed36f,#ffd86b);transition:width .9s ease-out}
+.level-xp{flex:none;font-size:12px;font-weight:800;color:#6b5a48}
+.level-up{flex:none;padding:1px 10px;border-radius:999px;background:var(--don);color:#fff;font-size:13px;font-weight:900;border:2px solid var(--ink)}
+.bone-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.daily-chip{padding:0 8px;border-radius:999px;background:#7ed36f;color:var(--ink);font-size:11px;font-weight:900;border:1.5px solid var(--ink);white-space:nowrap}
+.near-miss{margin:6px 0 0;display:inline-block;padding:3px 12px;border-radius:999px;background:#fff0c2;border:2px dashed #e0a100;color:#8a4a0a;font-size:14px;font-weight:900;animation:best-pulse 1.4s ease-in-out infinite}
+@media (max-width:720px){.result-page.has-rewards{grid-template-areas:"dog" "card" "rewards"}.result-page.has-rewards .result-character{max-width:180px}}
+@media (max-height:500px) and (orientation:landscape){
+ /* The shiba beside the title, so the rewards fit under them. */
+ .result-page.has-rewards .result-dog{display:grid;grid-template-columns:auto auto;justify-content:center;align-items:center;gap:6px}
+ .result-page.has-rewards .result-character{width:min(72px,22svh);margin:0;grid-column:1;grid-row:1}
+ .result-page.has-rewards .result-dog h1{font-size:30px;grid-column:2;grid-row:1}
+ .daily-chip .long{display:none}
+ .slot-result .what{display:none}.slot-result .mult{font-size:17px}
+ .bone-gacha{min-height:34px;padding:4px 10px;font-size:13px}
+ .daily-chip{font-size:10px;padding:0 6px}
+ .reward-level{padding:2px 8px}.level-badge b{font-size:15px}.level-xp{font-size:11px}
+ .result-page.has-rewards .celebration{display:none}
+ .result-rewards{gap:5px}
+ .result-rewards .reward-bones{padding:4px 10px;gap:2px 8px}
+ .bone-items{display:none}
+ .reward-slot,.reward-level{padding:3px 8px;gap:6px}
+ .slot-reels{--sym:28px}
+ .slot-result{font-size:13px}
+ .level-bar{height:10px}
+ .near-miss{font-size:12px;padding:1px 10px;margin-top:2px}
+}
+@media (prefers-reduced-motion:reduce){.near-miss,.slot-result.reach{animation:none}}

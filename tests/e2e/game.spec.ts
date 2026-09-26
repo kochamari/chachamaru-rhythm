@@ -163,18 +163,22 @@ test('U29 a normal run earns ほねっこ (paid once, kept); the example run ear
  };
  const stored=()=>page.evaluate(async()=>(await(await window.__chacha.db()).get('settings','festival')) as {bones:number;awards:{runId:string;total:number}[]}|undefined);
  await play(false);
- await expect(page.locator('.bone-award')).toBeVisible();
+ await expect(page.locator('.result-rewards')).toBeVisible();
  const f=(await stored())!;
  expect(f.awards).toHaveLength(1);
  expect(f.awards[0].total).toBeGreaterThan(0);
  expect(f.bones).toBe(f.awards[0].total);
- await expect(page.locator('#bone-count')).toHaveText(String(f.awards[0].total));
- await expect(page.locator('.bone-total b')).toHaveText(String(f.bones));
+ // The rewards count up one after another; a tap shows the final numbers at once.
+ await page.locator('.result-rewards .bone-main').click();
+ await expect(page.locator('#bone-count')).toHaveText(f.awards[0].total.toLocaleString('en-US'));
+ await expect(page.locator('#bone-total')).toHaveText(f.bones.toLocaleString('en-US'));
+ await expect(page.locator('#slot-result')).not.toBeEmpty();
+ await expect(page.locator('#level-num')).not.toBeEmpty();
  // Showing the same result again does not pay twice.
  await page.reload();await expect(page.locator('.result-card')).toBeVisible();
  expect((await stored())!.bones).toBe(f.bones);
  await play(true);
- await expect(page.locator('.bone-award')).toHaveCount(0);
+ await expect(page.locator('.result-rewards')).toHaveCount(0);
  expect((await stored())!.bones).toBe(f.bones);
 });
 test('U30 しばガチャ spends ほねっこ, opens capsules and fills the collection',async({page})=>{
