@@ -92,6 +92,8 @@ export class PlayRenderer {
  private gaugeHead:Sprite|null=null;private gaugeSweep:Sprite|null=null;private gaugeShown=0;
  private readonly ambientRoot=new Container();private ambient:Ambient[]=[];private ambientSpare:Sprite[]=[];private ambientDue=0;
  private rollBurst:Graphics|null=null;
+ // The end of a great run: friends hop, the sunburst glows, a gold light runs along the lane.
+ private cheerAt=-1e9;private sweeps:{s:Sprite;t0:number;dur:number}[]=[];
  private readonly noteTime=new Map<string,number>();
  private readonly syllables:Map<string,string>;
  private readonly downbeats:number[];
@@ -673,7 +675,10 @@ export class PlayRenderer {
  private drawStage(now:number,time:number,beat:number,s:GameSnapshot){
   const L=this.layout,mix=this.chorusMix;
   this.nightTint.alpha=mix;this.nightTint.visible=mix>.01;
-  this.sunburst.alpha=mix*.85;this.sunburst.visible=mix>.01;this.sunburst.rotation=now*.00006;
+  // After a clear / full combo / all 良 the sunburst glows for a few seconds too.
+  const gAge=now-this.cheerAt,glory=gAge<3400?Math.min(1,gAge/300)*Math.min(1,(3400-gAge)/700):0;
+  const burstAlpha=Math.max(mix*.85,glory*.9);
+  this.sunburst.alpha=burstAlpha;this.sunburst.visible=burstAlpha>.01;this.sunburst.rotation=now*.00006;
   const theme=this.opts.theme??'day';
   const lit=theme==='night'||theme==='evening'?.55:0;
   for(const l of this.lanterns){
@@ -715,7 +720,9 @@ export class PlayRenderer {
     const k=Math.min(1,(now-f.joined)/420);
     const pop=k<1?1+Math.sin(k*Math.PI)*.18:1;
     f.ch.view.alpha=Math.min(1,k*2);
-    f.ch.place(p.x,p.y-Math.sin(k*Math.PI)*30*(1-k),p.height*pop,f.mirror);
+    // Hops of joy at the end of a great run (each friend a little after the last).
+    const cAge=now-this.cheerAt-i*90,cheer=cAge>0&&cAge<1100?Math.abs(Math.sin(cAge/1100*Math.PI*2))*p.height*.16*(1-cAge/1100):0;
+    f.ch.place(p.x,p.y-Math.sin(k*Math.PI)*30*(1-k)-cheer,p.height*pop,f.mirror);
     f.ch.apply(dancerPose(time,beat,.5+mix*.5,f.mirror));
    }else if(f.ch.view.visible){
     const k=Math.min(1,(now-f.left)/360);
@@ -1229,6 +1236,11 @@ export class PlayRenderer {
    const e=k*k*(3-2*k),arc=Math.sin(k*Math.PI)*-90;
    b.s.position.set(b.x0+(b.x1-b.x0)*e,b.y0+(b.y1-b.y0)*e+arc);b.s.rotation=k*Math.PI*2;b.s.scale.set(.9-.35*k);
   }
+  for(let i=this.sweeps.length-1;i>=0;i--){
+   const w=this.sweeps[i],k=(now-w.t0)/w.dur,L=this.layout;
+   if(k>=1){this.give(w.s);this.sweeps.splice(i,1);continue;}
+   w.s.x=L.lane.x+(L.W-L.lane.x)*k*k*(3-2*k);w.s.alpha=.8*Math.sin(k*Math.PI);
+  }
   for(let i=this.rings.length-1;i>=0;i--){
    const r=this.rings[i],k=(now-r.t0)/r.dur;
    if(k<0){r.s.visible=false;continue;}
@@ -1265,6 +1277,21 @@ export class PlayRenderer {
  }
 
  // --------------------------------------------------------------- public --
+ /** A soft gold light running along the lane. */
+ private sweepLane(now:number){
+  const L=this.layout,s=this.take('glowWhite');if(!s)return;
+  s.blendMode='add';s.tint=0xffe27a;s.alpha=0;s.scale.set(2.4,L.lane.h/60*.95);s.position.set(L.lane.x,L.laneY);
+  this.laneFx.addChild(s);this.sweeps.push({s,t0:now,dur:700});
+ }
+ /** One count of the count-in: the circle pulses and ちゃちゃまる taps the drum. */
+ countBeat(){
+  if(!this.initialized)return;
+  const L=this.layout,now=performance.now();
+  this.punchAt=now;this.punchSize=.08;
+  this.drummerState.hit('don',this.lastSongTime);
+  if(this.effects!=='off')this.ring(L.hitX,L.laneY,'ring',now,360,1,1.9,.8,0xfff2ce);
+ }
+
  /** The song starts ("はじめ！"): a burst from the judge circle. */
  startBurst(){
   if(!this.initialized||this.effects==='off')return;
@@ -1282,10 +1309,19 @@ export class PlayRenderer {
  /** End-of-song banner: full combo / all great / clear. */
  celebrate(kind:'allGreat'|'fullCombo'|'clear'|'finish'){
   if(!this.initialized)return;
-  const L=this.layout;
+  const L=this.layout,now=performance.now();
   this.celebration=kind;
   this.drawBanner(kind);
-  this.bannerAt=performance.now();
+  this.bannerAt=now;
+  if(kind!=='finish'){
+   // Everyone cheers: friends hop, ちゃちゃまる jumps, the sunburst glows.
+   this.cheerAt=now;this.drummerState.jump(this.lastSongTime);this.drummerState.react('happy',this.lastSongTime);
+   if(this.effects!=='off'&&kind!=='clear'){
+    // A gold light runs along the lane, and fireworks go up over the stage.
+    this.sweepLane(now);window.setTimeout(()=>{if(this.alive)this.sweepLane(performance.now());},380);
+    const st=L.stage;[0,240,480,720,960].forEach((d,k)=>window.setTimeout(()=>{if(this.alive)this.firework(st.x+st.w*(.18+.16*k),st.y+st.h*(.12+.1*(k%2)));},d));
+   }
+  }
   if(this.effects!=='off'&&kind!=='finish'){
    const colors=[0xff6b5a,0xffd86b,0x6ee7ff,0x7ed36f,0xffffff];
    for(let i=0;i<(this.effects==='reduced'?30:90);i++)window.setTimeout(()=>{if(!this.alive)return;this.particle('confetti',Math.random()*L.W,L.stage.y-10,(Math.random()-.5)*2,1+Math.random()*2,2400,colors[i%colors.length],{gravity:.02,spin:.12,fade:true});},i*18);

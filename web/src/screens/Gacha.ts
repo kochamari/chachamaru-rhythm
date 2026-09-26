@@ -118,6 +118,13 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
     capsule.hidden=true;card.hidden=false;card.dataset.rarity=p.rarity;
     card.innerHTML=`<span class="card-rarity">${RARITY_LABEL[p.rarity]} ${STARS[p.rarity]}</span><span class="card-pic"></span><h3>${escape(c.name)}</h3><p>${escape(c.blurb)}</p>${fromZukan?'':p.isNew?'<span class="card-new">NEW!</span>':`<span class="card-dup">かぶり → ほねっこ ＋${p.refund}</span>`}`;
     card.classList.remove('pop');void card.offsetWidth;card.classList.add('pop');
+    // Super rare or better: confetti bursts out of the card.
+    if((p.rarity==='SR'||p.rarity==='SSR')&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+     const colors=['#ff5fa2','#ffd23f','#39d2f2','#7ed36f','#b58cff','#ffffff'];
+     const burst=document.createElement('div');burst.className='reveal-confetti';burst.setAttribute('aria-hidden','true');
+     burst.innerHTML=Array.from({length:p.rarity==='SSR'?40:20},(_,k)=>`<i style="--x:${(Math.random()*2-1).toFixed(2)};--up:${(18+Math.random()*16).toFixed(0)}vh;--r:${Math.round(Math.random()*900-450)}deg;--d:${(Math.random()*.2).toFixed(2)}s;background:${colors[k%colors.length]}"></i>`).join('');
+     layer.append(burst);window.setTimeout(()=>burst.remove(),2000);
+    }
     try{const pic=await shibaPicture(c,Math.min(220,innerHeight*.34));card.querySelector('.card-pic')?.append(pic);}catch{/* the name is enough */}
     next.textContent=i+1<pulls.length?'つぎへ':pulls.length>1?'まとめて見る':'とじる';
    };

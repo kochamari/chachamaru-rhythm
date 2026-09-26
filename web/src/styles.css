@@ -645,3 +645,6 @@ html[data-render="software"] .new-best{animation:none}
 .daily-badge b{font-size:15px;color:#d8ffb8}
 @keyframes badge-bob{50%{transform:translateX(-50%) rotate(-4deg) translateY(-3px)}}
 @media (prefers-reduced-motion:reduce){.daily-badge{animation:none}}
+.reveal-confetti{position:absolute;left:50%;top:45%;width:0;height:0;pointer-events:none;z-index:2}
+.reveal-confetti i{position:absolute;width:9px;height:14px;margin:-7px -4.5px;border-radius:2px;opacity:0;animation:gacha-confetti 1.6s linear var(--d) both}
+@keyframes gacha-confetti{0%{opacity:1;transform:translate(0,0) rotate(0)}30%{opacity:1;transform:translate(calc(var(--x) * 30vw),calc(var(--up) * -1)) rotate(calc(var(--r) * .4))}100%{opacity:0;transform:translate(calc(var(--x) * 44vw),40vh) rotate(var(--r))}}
