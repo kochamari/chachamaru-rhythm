@@ -195,3 +195,9 @@ it('an award with extras: slot bonus on the bones from play, the first run of th
  expect(validFestival(f)).toBe(true);
  expect(validFestival({...f,awards:[{...a,slot:{symbols:['x','y','z'],mult:9,bones:1}}]})).toBe(false);
 });
+
+import {fortuneFor} from '../../web/src/game/festival';
+it('おみくじ by score for a cleared run; none for a failed one',()=>{
+ expect([fortuneFor(1000000,true),fortuneFor(949999,true),fortuneFor(850000,true),fortuneFor(760000,true),fortuneFor(600000,true),fortuneFor(420000,true)]).toEqual(['大吉','中吉','中吉','小吉','吉','末吉']);
+ expect(fortuneFor(990000,false)).toBe(null);
+});

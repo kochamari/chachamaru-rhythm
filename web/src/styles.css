@@ -573,3 +573,36 @@ html[data-render="software"] .new-best{animation:none}
  .near-miss{font-size:12px;padding:1px 10px;margin-top:2px}
 }
 @media (prefers-reduced-motion:reduce){.near-miss,.slot-result.reach{animation:none}}
+/* The festival curtain between menus and play (app/shutter.ts). */
+.shutter{position:fixed;inset:0;z-index:200;pointer-events:none;overflow:hidden}
+.shutter .door{position:absolute;top:0;bottom:0;width:50.5%;background:repeating-linear-gradient(90deg,#0000 0 46px,#0000001a 46px 48px),linear-gradient(#c4382c,#8f1f18);border:0 solid var(--gold);transition:transform .21s cubic-bezier(.55,0,.8,.4)}
+.shutter .door.left{left:0;border-right-width:5px;transform:translateX(-101%)}
+.shutter .door.right{right:0;border-left-width:5px;transform:translateX(101%)}
+.shutter .crest{position:absolute;left:50%;top:50%;width:min(24vmin,150px);aspect-ratio:1;transform:translate(-50%,-50%) scale(0) rotate(-90deg);transition:transform .21s cubic-bezier(.2,1.4,.4,1);filter:none}
+.shutter .crest svg{width:100%;height:100%}
+.shutter.closing .door{transform:none}
+.shutter.closing .crest{transform:translate(-50%,-50%) scale(1) rotate(0)}
+.shutter.opening .door{transition:transform .34s cubic-bezier(.2,.6,.3,1)}
+.shutter.opening .door.left{transform:translateX(-101%)}
+.shutter.opening .door.right{transform:translateX(101%)}
+.shutter.opening .crest{transition:transform .3s ease-in,opacity .3s;transform:translate(-50%,-50%) scale(1.8) rotate(40deg);opacity:0}
+/* おみくじ stamp on the result card: slams in after the score, ink splashes out. */
+.result-card{position:relative}
+.fortune{--d:1.3s;position:absolute;z-index:2;top:-22px;right:-10px;width:92px;height:92px;border-radius:50%;display:grid;place-items:center;align-content:center;gap:0;color:#fff;font-weight:900;
+ background:radial-gradient(circle at 38% 32%,#e4503f,#b3231d 72%);border:3px solid #fff4d8;box-shadow:0 0 0 3px #8a1616,0 6px 0 #0006;
+ opacity:0;transform:rotate(-14deg);animation:stamp-in .34s cubic-bezier(.2,1.5,.45,1) var(--d) forwards;pointer-events:none}
+.fortune small{font-size:9px;letter-spacing:.2em;opacity:.9;line-height:1}
+.fortune span{font-size:30px;line-height:1.05;font-family:"Hiragino Mincho ProN","Yu Mincho",serif;letter-spacing:.02em}
+.fortune.kichi span,.fortune.suekichi span{font-size:26px}
+.fortune.daikichi{background:radial-gradient(circle at 38% 32%,#fff3b0,#f0b429 60%,#c98a00);color:#7a2a00;box-shadow:0 0 0 3px #a86b00,0 0 26px #ffd86baa,0 6px 0 #0006}
+.fortune.daikichi::after{content:'';position:absolute;inset:-12px;border-radius:50%;border:2px dashed #ffd86b;animation:fortune-spin 6s linear infinite;opacity:.8}
+.fortune.suekichi{background:radial-gradient(circle at 38% 32%,#9b7bd8,#5b3d9a 72%)}
+.fortune b{position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px;border-radius:50%;background:#c52a20;opacity:0;animation:fortune-ink .55s ease-out calc(var(--d) + .2s) both}
+.fortune.daikichi b{background:#ffd23f}
+@keyframes stamp-in{0%{opacity:0;transform:rotate(-34deg) scale(2.8)}62%{opacity:1;transform:rotate(-11deg) scale(.88)}100%{opacity:1;transform:rotate(-14deg) scale(1)}}
+@keyframes fortune-ink{0%{opacity:.95;transform:rotate(var(--a)) translateY(-40px) scale(1.1)}100%{opacity:0;transform:rotate(var(--a)) translateY(-86px) scale(.3)}}
+@keyframes fortune-spin{to{transform:rotate(360deg)}}
+/* Keep a long title clear of the stamp; on sideways phones it sits beside the score instead of the corner. */
+.result-card:has(.fortune) h2{padding-right:70px}
+@media (max-height:500px) and (orientation:landscape){.result-card:has(.fortune) h2{padding-right:0}.fortune{width:56px;height:56px;top:44px;right:12px;border-width:2px}.fortune.daikichi::after{inset:-6px}.fortune span{font-size:19px}.fortune.kichi span,.fortune.suekichi span{font-size:16px}.fortune small{font-size:6px}}
+@media (prefers-reduced-motion:reduce){.fortune{animation-duration:.01s}.fortune b{display:none}.fortune.daikichi::after{animation:none}}

@@ -215,7 +215,7 @@ export class Session {
   if(this.status==='COUNT_IN'){
    const left=Math.ceil((this.pausedAt-t)/1000);
    if(left!==this.countShown&&left>0){this.countShown=left;this.renderer.showMessage(String(left),this.pausedAt>0?'つづきから':'音に合わせて、ドン・カッ！');}
-   if(t>=this.pausedAt){this.status='PLAYING';this.engine.active=true;this.renderer.showMessage('はじめ！','');}
+   if(t>=this.pausedAt){this.status='PLAYING';this.engine.active=true;this.renderer.showMessage('はじめ！','');this.renderer.startBurst();}
   }
   if(this.status==='PLAYING'){
    if(this.autoplay)this.autoPlay(t);

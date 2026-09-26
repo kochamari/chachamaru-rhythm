@@ -172,3 +172,10 @@ export function nearMiss(s:Pick<GameSnapshot,'score'|'gauge'|'fullCombo'|'allGre
  if(best!==null&&s.score<best&&best-s.score<=30000)return `自己ベストまで あと${(best-s.score).toLocaleString()}点！`;
  return null;
 }
+
+/** おみくじ for a cleared normal run, by score (none for AUTO, practice or a failed run). */
+export type Fortune='大吉'|'中吉'|'小吉'|'吉'|'末吉';
+export function fortuneFor(score:number,cleared:boolean):Fortune|null{
+ if(!cleared)return null;
+ return score>=950000?'大吉':score>=850000?'中吉':score>=750000?'小吉':score>=600000?'吉':'末吉';
+}

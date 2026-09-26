@@ -30,8 +30,11 @@ export interface RendererOptions {chart:Chart;manifest:Manifest;settings:Setting
 /** Stage mood per bundled song; imported songs use the daytime festival. */
 export function stageThemeFor(packId:string):StageTheme{return ({'chachamaru-ondo':'evening','yuuyake-shippo':'sunset','hanabi-rush':'night'} as Record<string,StageTheme>)[packId]??'day';}
 interface Particle {s:Sprite;vx:number;vy:number;life:number;max:number;spin:number;gravity:number;grow:number;fade:boolean}
-interface Flyer {s:Sprite;t0:number;dur:number;x0:number;y0:number;cx:number;cy:number;x1:number;y1:number;scale0:number}
+interface Flyer {s:Sprite;t0:number;dur:number;x0:number;y0:number;cx:number;cy:number;x1:number;y1:number;scale0:number;trail:Sprite|null}
+/** An expanding, fading sprite; it may start a little later (t0 in the future). */
 interface Ring {s:Sprite;t0:number;dur:number;scale0:number;scale1:number;alpha:number}
+/** Festival sparkles and confetti drifting over the stage in FEVER. */
+interface Ambient {s:Sprite;vx:number;vy:number;life:number;max:number;phase:number;spin:number;peak:number}
 interface Friend {ch:PixiCharacter;joined:number;left:number;active:boolean;mirror:boolean;name:string;coat:string;
  /** Slot reel over their spot: starts when the gauge first reaches their step, stops at revealAt (then they appear). */
  reelStart:number;revealAt:number;revealed:boolean;reel:Container;reelFace:Sprite;reelSeq:string[];reelIndex:number;tease:boolean;reach:boolean}
@@ -81,6 +84,15 @@ export class PlayRenderer {
  private rollBodies:Sprite[]=[];private rollTails:Sprite[]=[];
  private particles:Particle[]=[];private spare:Sprite[]=[];
  private flyers:Flyer[]=[];private rings:Ring[]=[];
+ // Hit feel: the judge circle punches, the HUD drum bounces, a broken combo
+ // falls away, the gauge front glows, sparkles rise over the stage in FEVER.
+ private judgeCircle=new Container();private punchAt=-1e9;private punchSize=0;
+ private hudDrum:Sprite|null=null;private lastHitAt=-1e9;private lastLandFlash=-1e9;
+ private comboBreak:BitmapText|null=null;private comboBreakAt=-1e9;
+ private gaugeHead:Sprite|null=null;private gaugeSweep:Sprite|null=null;private gaugeShown=0;
+ private readonly ambientRoot=new Container();private ambient:Ambient[]=[];private ambientSpare:Sprite[]=[];private ambientDue=0;
+ private rollBurst:Graphics|null=null;
+ private readonly noteTime=new Map<string,number>();
  private readonly syllables:Map<string,string>;
  private readonly downbeats:number[];
  private readonly taps:Tap[];
@@ -114,6 +126,7 @@ export class PlayRenderer {
   this.syllables=noteSyllables(opts.chart.notes,opts.manifest.beatTimesMs);
   this.downbeats=downbeatTimes(opts.manifest.beatTimesMs,opts.manifest.downbeatIndices);
   this.taps=opts.chart.notes.filter((n):n is Tap=>n.kind==='tap');
+  for(const n of opts.chart.notes)this.noteTime.set(n.id,n.timeMs);
   this.resizeObserver=new ResizeObserver(()=>this.resize());
  }
 
@@ -144,7 +157,7 @@ export class PlayRenderer {
   this.installFonts();
   // Hit effects sit above the HUD so rings are not cut by the left panel.
   this.world.addChild(this.stageRoot,this.bandRoot,this.laneRoot,this.hud,this.laneFx,this.topFx);
-  this.stageRoot.addChild(this.stageBack,this.stageChars,this.stageFx);
+  this.stageRoot.addChild(this.stageBack,this.ambientRoot,this.stageChars,this.stageFx);
   this.laneRoot.addChild(this.laneStatic,this.barLayer,this.noteLayer,this.syllableLayer);
   this.app.stage.addChild(this.world);
   this.drummer=new PixiCharacter(DRUMMER,this.atlas);
@@ -172,7 +185,7 @@ export class PlayRenderer {
    donleft:b(art.drumHalfGraphic(64,'skin','left',0xff5a36)),donright:b(art.drumHalfGraphic(64,'skin','right',0xff5a36)),
    kaleft:b(art.drumHalfGraphic(64,'rim','left',0x39d2f2)),karight:b(art.drumHalfGraphic(64,'rim','right',0x39d2f2)),
    great:b(art.judgementGraphic('great')),ok:b(art.judgementGraphic('ok')),miss:b(art.judgementGraphic('miss')),
-   lantern:b(lanternGraphic()),confetti:b(new Graphics().rect(-5,-3,10,6).fill(0xffffff)),bone:b(boneIcon()),
+   lantern:b(lanternGraphic()),confetti:b(new Graphics().rect(-5,-3,10,6).fill(0xffffff)),bone:b(boneIcon()),rays:b(art.raysGraphic(60)),shard:b(art.shardGraphic(9)),
   };
   for(const text of new Set(this.syllables.values())){
    this.tex['syl:'+text]=b(new Text({text,style:{fontFamily:art.FONT,fontSize:text.length>2?17:19,fontWeight:'900',fill:C.ink,letterSpacing:1}}));
@@ -197,6 +210,8 @@ export class PlayRenderer {
   this.fastLate=new Text({text:'',style:{fontFamily:art.FONT,fontSize:15,fontWeight:'800',fill:0xfff2ce,stroke:{color:C.ink,width:4}}});this.fastLate.anchor.set(.5);this.laneFx.addChild(this.fastLate);
   const cap=PARTICLE_CAP[this.effects];
   for(let i=0;i<Math.max(cap,24)+24;i++){const s=new Sprite();s.anchor.set(.5);s.visible=false;this.spare.push(s);}
+  const ambientCap=this.effects==='standard'?36:this.effects==='reduced'?12:0;
+  for(let i=0;i<ambientCap;i++){const s=new Sprite();s.anchor.set(.5);s.visible=false;this.ambientSpare.push(s);this.ambientRoot.addChild(s);}
  }
 
  private async loadFriends(){
@@ -493,14 +508,16 @@ export class PlayRenderer {
   this.laneStatic.addChild(hz);
   this.judgeGlow=this.sprite('glowWhite');this.judgeGlow.position.set(L.hitX,L.laneY);this.judgeGlow.alpha=0;this.judgeGlow.blendMode='add';this.judgeGlow.scale.set(1.2);
   this.laneStatic.addChild(this.judgeGlow);
+  // The judge circle has its own container so a hit can punch it (scaled about its centre).
   const jc=new Graphics();
-  jc.circle(L.hitX,L.laneY,L.judgeR+3).stroke({color:C.ink,width:3,alpha:.6});
-  jc.circle(L.hitX,L.laneY,L.judgeR).stroke({color:0xd9d2c4,width:4});
-  jc.circle(L.hitX,L.laneY,L.judgeR*.7).fill({color:0x000000,alpha:.25}).stroke({color:0x8f8a86,width:3});
-  this.laneStatic.addChild(jc);
+  jc.circle(0,0,L.judgeR+3).stroke({color:C.ink,width:3,alpha:.6});
+  jc.circle(0,0,L.judgeR).stroke({color:0xd9d2c4,width:4});
+  jc.circle(0,0,L.judgeR*.7).fill({color:0x000000,alpha:.25}).stroke({color:0x8f8a86,width:3});
+  this.judgeCircle=new Container();this.judgeCircle.position.set(L.hitX,L.laneY);this.judgeCircle.addChild(jc);
+  this.laneStatic.addChild(this.judgeCircle);
   this.flames=[];
   this.judgeFire=this.sprite('glowRed');this.judgeFire.position.set(L.hitX,L.laneY);this.judgeFire.scale.set(1.35);this.judgeFire.blendMode='add';this.judgeFire.alpha=0;
-  this.laneStatic.addChildAt(this.judgeFire,this.laneStatic.getChildIndex(jc));
+  this.laneStatic.addChildAt(this.judgeFire,this.laneStatic.getChildIndex(this.judgeCircle));
   for(let i=0;i<7;i++){const f=this.sprite('flame');f.anchor.set(.5,1);f.blendMode='add';f.alpha=0;this.flames.push(f);this.laneStatic.addChild(f);}
   // Syllable strip.
   const syl=new Graphics();
@@ -525,15 +542,22 @@ export class PlayRenderer {
   this.gaugeFlower=this.sprite('sunflower');this.gaugeFlower.position.set(gauge.x+gauge.w-gauge.h*.72,gauge.y+gauge.h/2);this.gaugeFlower.scale.set(.5);
   this.laneStatic.addChild(this.gaugeFlower);
   this.gaugeValue=-1;
+  // The gauge's front edge glows, and a shine sweeps across it when it is full.
+  this.gaugeHead=this.sprite('glowGold');this.gaugeHead.blendMode='add';this.gaugeHead.visible=false;this.gaugeHead.scale.set(gauge.h/60);
+  this.gaugeSweep=this.sprite('glowWhite');this.gaugeSweep.blendMode='add';this.gaugeSweep.visible=false;this.gaugeSweep.scale.set(gauge.h/60*.7,gauge.h/60*.8);
+  this.laneStatic.addChild(this.gaugeHead,this.gaugeSweep);
   // Drum, score and combo (HUD).
   const drum=this.sprite('drum');drum.position.set(L.drum.x,L.drum.y);drum.scale.set(L.drum.r/64);
-  this.hud.addChild(drum);
+  this.hud.addChild(drum);this.hudDrum=drum;
   for(const key of ['donleft','donright','kaleft','karight'] as const){const s=this.sprite(key);s.position.set(L.drum.x,L.drum.y);s.scale.set(L.drum.r/64);s.alpha=0;s.blendMode='add';this.hud.addChild(s);this.drumHalves[key]={s,at:-1e9};}
   this.shownScore=-1;
   this.scoreText=new BitmapText({text:'0',style:{fontFamily:'ChachaScore',fontSize:L.score.size}});
   this.scoreText.anchor.set(1,.5);this.scoreText.position.set(L.score.x,L.score.y+6);
   this.comboText=new BitmapText({text:'',style:{fontFamily:'ChachaCombo',fontSize:L.drum.r*.78}});
   this.comboText.anchor.set(.5);this.comboText.position.set(L.drum.x,L.drum.y-L.drum.r*.14);
+  // A broken combo: the old number turns grey and falls away.
+  this.comboBreak=new BitmapText({text:'',style:{fontFamily:'ChachaCombo',fontSize:L.drum.r*.78}});
+  this.comboBreak.anchor.set(.5);this.comboBreak.tint=0x8d96a3;this.comboBreak.visible=false;
   this.comboLabel=new Text({text:'コンボ',style:{fontFamily:art.FONT,fontSize:13*L.textScale,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:4}}});
   this.comboLabel.anchor.set(.5);this.comboLabel.position.set(L.drum.x,L.drum.y+L.drum.r*.5);this.comboLabel.visible=false;
   const diff=DIFFICULTY_STYLE[this.opts.difficulty];
@@ -541,7 +565,7 @@ export class PlayRenderer {
   tag.anchor.set(.5);tag.position.set(L.diffTag.x,L.diffTag.y);
   const tagH=22*L.textScale;
   const tagBg=new Graphics().roundRect(L.diffTag.x-tag.width/2-10,L.diffTag.y-tagH/2,tag.width+20,tagH,tagH/2).fill(diff.color).stroke({color:0xffffff,width:1.5,alpha:.7});
-  this.hud.addChild(this.scoreText,this.comboText,this.comboLabel,tagBg,tag);
+  this.hud.addChild(this.scoreText,this.comboBreak,this.comboText,this.comboLabel,tagBg,tag);
   // Balloons and messages live in HUD/stage layers.
   this.buildBalloons();
  }
@@ -559,7 +583,7 @@ export class PlayRenderer {
   this.balloon.addChild(bg,this.balloonText);this.balloon.position.set(L.balloon.x+96,L.balloon.y-10);this.balloon.visible=false;
   this.stageFx.addChild(this.balloon);
   this.rollBalloon.destroy({children:true});this.rollBalloon=new Container();
-  const burst=new Graphics().poly(art.burstPoints(58)).fill(0xffd84a).stroke({color:C.ink,width:3});
+  const burst=new Graphics().poly(art.burstPoints(58)).fill(0xffffff).stroke({color:C.ink,width:3});burst.tint=0xffd84a;this.rollBurst=burst;
   this.rollText=new Text({text:'',style:{fontFamily:art.FONT,fontSize:30,fontWeight:'900',fill:C.ink,stroke:{color:0xffffff,width:4},align:'center'}});
   this.rollText.anchor.set(.5);this.rollText.text=this.labels.roll;
   this.rollBalloon.addChild(burst,this.rollText);
@@ -612,6 +636,7 @@ export class PlayRenderer {
   const s=side??(color==='don'?'left':'right');
   const key=`${color}${s}` as 'donleft';
   if(this.drumHalves[key])this.drumHalves[key].at=now;
+  this.lastHitAt=now;
   this.drummerState.hit(color,time,side);
   const dot=this.hintDots[color==='don'?0:1];if(dot)dot.alpha=1;
  }
@@ -634,6 +659,7 @@ export class PlayRenderer {
   this.drawLane(visible,now,beat,s);
   this.drawHud(now,s,time);
   this.stepEffects(now,dt);
+  this.stepAmbient(now,dt);
   this.app.render();
   this.trackFrames(now);
  }
@@ -654,7 +680,7 @@ export class PlayRenderer {
    const sway=Math.sin(beat*Math.PI+l.phase)*.05;
    l.s.rotation=sway;
    const pulse=.75+.25*Math.max(0,Math.cos(beat*Math.PI*2));
-   l.glow.alpha=Math.min(1,.18+lit+mix*.72)*pulse;
+   l.glow.alpha=Math.min(1,.18+lit+mix*.72+this.fever*.18)*pulse;
    l.s.tint=mix>.05||lit?0xffffff:0xe8d8c8;
   }
   for(const star of this.stars)star.s.alpha=.45+.55*Math.abs(Math.sin(now*.0012+star.phase));
@@ -909,20 +935,29 @@ export class PlayRenderer {
   const jAge=now-this.judgeAt;
   for(const [k,sp] of Object.entries(this.judgement)){sp.visible=k===this.judgeKind&&jAge<320;}
   const j=this.judgement[this.judgeKind];
-  if(j.visible){j.position.set(L.hitX,(L.portrait?L.laneY-L.judgeR-4:L.lane.y-6)-Math.min(1,jAge/120)*12);j.scale.set(L.portrait?.8:1);j.alpha=jAge>220?1-(jAge-220)/100:1;j.scale.set((L.portrait?.8:L.textScale)*(jAge<60?.8+jAge/300:1));}
+  if(j.visible){
+   j.position.set(L.hitX,(L.portrait?L.laneY-L.judgeR-4:L.lane.y-6)-Math.min(1,jAge/120)*12);
+   j.alpha=jAge>220?1-(jAge-220)/100:1;
+   // 良 stamps in: big, then snaps to size with a slight undershoot; 可 and 不可 just pop.
+   const k=jAge/120,stamp=this.judgeKind==='great'?(k<1?1+.5*Math.pow(1-k,3)*Math.cos(k*Math.PI*1.2):1):(jAge<60?.8+jAge/300:1);
+   j.scale.set((L.portrait?.8:L.textScale)*stamp);
+  }
   const fAge=now-this.fastLateAt;this.fastLate.visible=fAge<420&&this.settings.fastLate;
   if(this.fastLate.visible){this.fastLate.position.set(L.hitX,L.lane.y+L.lane.h-12);this.fastLate.alpha=fAge>300?1-(fAge-300)/120:1;}
   this.judgeGlow.alpha=Math.max(0,this.judgeGlow.alpha-.08);
+  // The circle punches out on a hit and settles back.
+  const pAge=now-this.punchAt;
+  this.judgeCircle.scale.set(1+(pAge<150?this.punchSize*Math.pow(1-pAge/150,2):0));
  }
 
  private setTex(s:Sprite,key:string){const t=this.tex[key];if(!t)return;if(s.texture!==t.texture){s.texture=t.texture;s.anchor.set(t.anchorX,t.anchorY);}}
 
  private drawHud(now:number,s:GameSnapshot,time:number){
-  const L=this.layout;
+  const L=this.layout,hudDt=Math.min(50,Math.max(0,now-this.lastHud));
   // The score rolls up to its value; each gain floats off as "+points".
   if(s.score>this.scoreTarget){this.floatScore(s.score-this.scoreTarget,now);this.scoreTarget=s.score;}
   else if(s.score<this.scoreTarget){this.scoreTarget=this.scoreShown=s.score;}
-  this.scoreShown+=(this.scoreTarget-this.scoreShown)*Math.min(1,(now-this.lastHud)/70);
+  this.scoreShown+=(this.scoreTarget-this.scoreShown)*Math.min(1,hudDt/70);
   if(Math.abs(this.scoreTarget-this.scoreShown)<1)this.scoreShown=this.scoreTarget;
   const shownScore=Math.round(this.scoreShown);
   if(shownScore!==this.shownScore){this.shownScore=shownScore;this.scoreText.text=shownScore.toLocaleString('en-US');}
@@ -941,18 +976,32 @@ export class PlayRenderer {
   if(!this.clearLineShown&&s.gauge>=70){this.clearLineShown=true;this.clearLineAt=now;this.onClearLine();}
   const cAge=now-this.clearLineAt;this.clearLineText.visible=cAge<1500;
   if(this.clearLineText.visible){const k=Math.min(1,cAge/200);this.clearLineText.scale.set(.5+.5*easeOutBack(k));this.clearLineText.alpha=cAge>1200?1-(cAge-1200)/300:1;}
-  // Combo on the drum.
-  if(s.combo!==this.lastCombo){if(s.combo>this.lastCombo)this.comboPopAt=now;this.lastCombo=s.combo;}
+  // Combo on the drum: every hit pops it (harder as the run grows), every 10 sends a ring off the drum.
+  if(s.combo!==this.lastCombo){
+   if(s.combo>this.lastCombo){
+    this.comboPopAt=now;
+    if(s.combo>=10&&Math.floor(s.combo/10)>Math.floor(this.lastCombo/10)&&this.effects!=='off')this.ring(L.drum.x,L.drum.y,'ring',now,340,L.drum.r/40*.95,L.drum.r/40*1.7,.9,s.combo>=100?rainbow(now):s.combo>=50?0xffd23f:0xffffff);
+   }else if(this.lastCombo>=10&&this.comboBreak){this.comboBreak.text=String(this.lastCombo);this.comboBreakAt=now;}
+   this.lastCombo=s.combo;
+  }
+  if(this.comboBreak){
+   const bAge=now-this.comboBreakAt;this.comboBreak.visible=bAge<520;
+   if(this.comboBreak.visible){const k=bAge/520,fit=Math.min(1,(L.drum.r*1.35)/Math.max(1,this.comboBreak.width/this.comboBreak.scale.x));this.comboBreak.scale.set(fit*(1-.15*k));this.comboBreak.position.set(L.drum.x+k*6,L.drum.y-L.drum.r*.14+k*k*34);this.comboBreak.rotation=k*.35;this.comboBreak.alpha=1-k;}
+  }
   const showCombo=s.combo>=3;
   this.comboText.visible=this.comboLabel.visible=showCombo;
   if(showCombo){
    if(this.comboText.text!==String(s.combo))this.comboText.text=String(s.combo);
-   const age=now-this.comboPopAt,pop=age<110?1+.16*Math.sin(age/110*Math.PI):1;
+   const strength=s.combo>=100?.26:s.combo>=50?.21:.16;
+   const age=now-this.comboPopAt,pop=age<110?1+strength*Math.sin(age/110*Math.PI):1;
    const fit=Math.min(1,(L.drum.r*1.35)/Math.max(1,this.comboText.width/this.comboText.scale.x));
    this.comboText.scale.set(fit*pop);
    this.comboText.tint=s.combo>=100?rainbow(now):s.combo>=50?0xffd23f:0xffffff;
   }
-  for(const h of Object.values(this.drumHalves)){const age=now-h.at;h.s.alpha=age<150?1-age/150:0;}
+  // The drum on the panel bounces a little on every hit.
+  const hAge=now-this.lastHitAt,drumScale=L.drum.r/64*(1+(hAge<110?.06*Math.pow(1-hAge/110,2):0));
+  if(this.hudDrum)this.hudDrum.scale.set(drumScale);
+  for(const h of Object.values(this.drumHalves)){const age=now-h.at;h.s.alpha=age<150?1-age/150:0;h.s.scale.set(drumScale);}
   // Gauge (redrawn only when the value changes).
   const value=Math.round(s.gauge*2)/2;
   if(value!==this.gaugeValue){this.gaugeValue=value;this.drawGauge(value);}
@@ -961,6 +1010,19 @@ export class PlayRenderer {
   this.gaugeFlower.scale.set((L.gauge.h/80)*(full?1.75+.1*Math.sin(now*.012):1.35));
   this.gaugeFlower.rotation=full?now*.002:0;
   this.gaugeFlower.tint=full?0xffffff:s.gauge>=70?0xe8d7a8:0x9c8f7a;
+  // The front edge of the gauge glows as it grows (it glides to the value).
+  {
+   const g=L.gauge,x0=g.x+4,w=g.w-g.h*1.6-8;
+   this.gaugeShown+=(s.gauge-this.gaugeShown)*Math.min(1,hudDt/90);
+   if(this.gaugeHead){
+    const on=this.gaugeShown>.5&&this.effects!=='off';this.gaugeHead.visible=on;
+    if(on){this.gaugeHead.position.set(x0+w*Math.min(1,this.gaugeShown/100),g.y+g.h/2);this.gaugeHead.alpha=.55+.35*Math.max(0,Math.sin(now*.011));this.gaugeHead.tint=full?rainbow(now):s.gauge>=70?0xffe27a:0xff9a5a;}
+   }
+   if(this.gaugeSweep){
+    const on=full&&this.effects!=='off';this.gaugeSweep.visible=on;
+    if(on){const k=(now/1300)%1;this.gaugeSweep.position.set(x0+w*k,g.y+g.h/2);this.gaugeSweep.alpha=.55*Math.sin(k*Math.PI);}
+   }
+  }
   // Song progress under the syllable strip.
   const p=Math.max(0,Math.min(1,time/this.opts.manifest.durationMs));
   this.progressBar.width=L.progress.w*p;
@@ -975,7 +1037,12 @@ export class PlayRenderer {
   // Roll balloon.
   const rAge=now-this.rollAt;
   this.rollBalloon.visible=this.rollCount>0&&rAge<700;
-  if(this.rollBalloon.visible){this.rollBalloon.scale.set(rAge<80?1.12-rAge/80*.12:1);this.rollBalloon.alpha=rAge>500?1-(rAge-500)/200:1;}
+  if(this.rollBalloon.visible){
+   // It swells with the count and warms up: yellow, orange from 20, rainbow from 40.
+   const grow=1+Math.min(.3,this.rollCount*.008);
+   this.rollBalloon.scale.set(grow*(rAge<80?1.12-rAge/80*.12:1));this.rollBalloon.alpha=rAge>500?1-(rAge-500)/200:1;
+   if(this.rollBurst)this.rollBurst.tint=this.rollCount>=40?rainbow(now):this.rollCount>=20?0xffa94a:0xffd84a;
+  }
  }
 
  /** Friend slots: faces of those who came, ? for the rest; the next one's ring fills toward its gauge step. */
@@ -1022,13 +1089,33 @@ export class PlayRenderer {
   const L=this.layout,cap=PARTICLE_CAP[this.effects];
   if(e.kind==='great'||e.kind==='ok'){
    this.judgeKind=e.kind;this.judgeAt=now;
-   this.judgeGlow.alpha=e.kind==='great'?.9:.5;this.judgeGlow.tint=e.color==='ka'?0x7fe8ff:0xffc27a;
-   const large=e.size==='large';
-   this.ring(L.hitX,L.laneY,e.kind==='great'?'glowGold':'glowWhite',now,e.kind==='great'?220:160,large?1.1:.8,large?2.4:1.8,.9);
-   this.ring(L.hitX,L.laneY,'ring',now,e.kind==='great'?220:140,1,large?2.1:1.7,.85,e.kind==='great'?0xffd86b:0xffffff);
-   const count=cap===0?0:e.kind==='great'?10:4;
-   for(let i=0;i<count;i++){const a=i/count*Math.PI*2+Math.random()*.3;this.particle('spark',L.hitX,L.laneY,Math.cos(a)*(3+Math.random()*2),Math.sin(a)*(3+Math.random()*2),260,e.kind==='great'?0xffd86b:0xffffff,{gravity:.05,spin:.2});}
-   if(this.effects!=='off')this.fly(e.color==='ka'?(large?'kaL':'ka'):(large?'donL':'don'),now,L.noteR/30);
+   const great=e.kind==='great',large=e.size==='large',ka=e.color==='ka';
+   // Right on the beat (within 8 ms): a little extra shine.
+   const just=great&&e.delta!==undefined&&Math.abs(e.delta)<=8;
+   this.judgeGlow.alpha=great?.9:.5;this.judgeGlow.tint=ka?0x7fe8ff:0xffc27a;
+   // The circle punches out (more for 良 and big notes) while rings burst from it.
+   this.punchAt=now;this.punchSize=(great?.13:.06)*(large?1.6:1);
+   this.ring(L.hitX,L.laneY,great?'glowGold':'glowWhite',now,great?220:160,large?1.1:.8,large?2.4:1.8,.9);
+   this.ring(L.hitX,L.laneY,'ring',now,great?220:140,1,large?2.1:1.7,.85,great?0xffd86b:0xffffff);
+   if(large)this.ring(L.hitX,L.laneY,'ring',now+70,260,1.2,2.8,.7,ka?0x9ff0ff:0xffb070);
+   if(just)this.ring(L.hitX,L.laneY,'glowWhite',now,120,.7,1.5,.8);
+   // Intensity grows with the run: FEVER, 50 combo, SUPER FEVER (rainbow).
+   const tier=this.fever>=2?3:s.combo>=50?2:this.fever?1:0;
+   if(cap&&great&&this.effects==='standard'){
+    // Impact rays snap outward, like a drum hit drawn in a manga.
+    const rayTint=tier>=3?rainbow(now):ka?0xa8f0ff:0xffd27a;
+    this.ring(L.hitX,L.laneY,'rays',now,170,L.judgeR/60*.9,L.judgeR/60*(large?2.1:just?1.9:1.6),.95,rayTint,Math.random()*Math.PI);
+   }
+   const sparks=cap===0?0:great?5:3;
+   for(let i=0;i<sparks;i++){const a=i/sparks*Math.PI*2+Math.random()*.4;this.particle('spark',L.hitX,L.laneY,Math.cos(a)*(3+Math.random()*2),Math.sin(a)*(3+Math.random()*2),260,great?0xffd86b:0xffffff,{gravity:.05,spin:.2});}
+   // Coloured shards fountain up and fall (more with a longer run).
+   const shards=cap===0?0:Math.round((great?5:2)*(large?1.6:1)+(great?tier*2:0));
+   const colors=tier>=3?[0xff5fa2,0xffd23f,0x39d2f2,0x7ed36f,0xb58cff]:ka?[0x39d2f2,0xa8f0ff,0xffffff]:[0xff5a36,0xffb13b,0xfff1a8];
+   for(let i=0;i<shards;i++){const a=-Math.PI/2+(Math.random()-.5)*Math.PI*1.5,v=5+Math.random()*4;this.particle('shard',L.hitX,L.laneY,Math.cos(a)*v,Math.sin(a)*v,380+Math.random()*120,colors[i%colors.length],{gravity:.32,spin:.35});}
+   // A glint on the judgement word.
+   if(great&&cap)this.particle('spark',L.hitX+L.judgeR*.62,L.lane.y+6,0,-.4,320,0xffffff,{spin:.25});
+   // The note that was hit flies to the gauge from where it was (early hits leave from before the circle).
+   if(this.effects!=='off')this.fly(ka?(large?'kaL':'ka'):(large?'donL':'don'),now,L.noteR/30,this.noteXFor(e.noteId));
    if(this.settings.fastLate&&e.delta!==undefined&&(e.kind==='ok'||Math.abs(e.delta)>=25)){this.fastLate.text=e.delta<0?'はやい':'おそい';this.fastLate.style.fill=e.delta<0?0x8fe3ff:0xffb38a;this.fastLateAt=now;}
   }else if(e.kind==='miss'){
    this.judgeKind='miss';this.judgeAt=now;
@@ -1041,6 +1128,13 @@ export class PlayRenderer {
    this.rollCount++;this.rollAt=now;
    this.labels.roll=this.rollText.text=`${this.rollCount}\n連打！`;
    this.ring(L.hitX,L.laneY,'glowGold',now,120,.7,1.3,.7);
+   if(cap)for(let i=0;i<2;i++){const a=-Math.PI/2+(Math.random()-.5)*2,v=4+Math.random()*3;this.particle('shard',L.hitX,L.laneY,Math.cos(a)*v,Math.sin(a)*v,340,e.color==='ka'?0x39d2f2:0xff7a3d,{gravity:.3,spin:.35});}
+   // Every 10 roll hits: the balloon bursts with sparks and a pluck.
+   if(this.rollCount%10===0){
+    this.opts.onSound?.('balloon');
+    const bx=this.rollBalloon.x,by=this.rollBalloon.y;
+    if(cap)for(let i=0;i<10;i++){const a=i/10*Math.PI*2;this.particle('spark',bx,by,Math.cos(a)*4.5,Math.sin(a)*3.2,420,this.rollCount>=40?[0xff5fa2,0xffd23f,0x39d2f2][i%3]:0xffd86b,{gravity:.06,spin:.2});}
+   }
    if(this.effects!=='off')this.fly(e.color==='ka'?'ka':'don',now,.7*L.noteR/30);
   }else if(e.kind==='combo'){
    const v=e.value??0;
@@ -1068,16 +1162,26 @@ export class PlayRenderer {
  }
 
  /** Fly a hit note up to the gauge flower. */
- private fly(key:string,now:number,scale:number){
+ private fly(key:string,now:number,scale:number,x0=this.layout.hitX){
   const L=this.layout,s=this.take(key);if(!s)return;
   s.scale.set(scale);s.alpha=1;s.blendMode='normal';
   const x1=L.gauge.x+L.gauge.w-L.gauge.h*.72,y1=L.gauge.y+L.gauge.h/2;
-  this.flyers.push({s,t0:now,dur:420,x0:L.hitX,y0:L.laneY,cx:L.hitX+(x1-L.hitX)*.35,cy:L.gauge.y-(L.portrait?150:120),x1,y1,scale0:scale});
+  // A faint copy trails just behind the flying note.
+  const trail=this.effects==='standard'?this.take(key):null;
+  if(trail){trail.scale.set(scale);trail.alpha=.32;trail.blendMode='normal';this.laneFx.addChild(trail);}
+  this.flyers.push({s,t0:now,dur:420,x0,y0:L.laneY,cx:x0+(x1-x0)*.35,cy:L.gauge.y-(L.portrait?150:120),x1,y1,scale0:scale,trail});
   this.laneFx.addChild(s);
  }
- private ring(x:number,y:number,key:string,now:number,dur:number,scale0:number,scale1:number,alpha:number,tint=0xffffff){
+ /** Where a note is on the lane now (a hit note flies from there), kept on the lane. */
+ private noteXFor(id:string|undefined){
+  const L=this.layout,t=id===undefined?undefined:this.noteTime.get(id);
+  if(t===undefined)return L.hitX;
+  const travel=TRAVEL_MS/(this.settings.scrollSpeed??1);
+  return Math.max(L.lane.x,Math.min(L.hitX+L.judgeR*2,noteX(L,t+this.opts.chart.offsetMs,this.lastSongTime,travel)));
+ }
+ private ring(x:number,y:number,key:string,now:number,dur:number,scale0:number,scale1:number,alpha:number,tint=0xffffff,rotation=0){
   const s=this.take(key);if(!s)return;
-  s.position.set(x,y);s.scale.set(scale0);s.alpha=alpha;s.tint=tint;s.blendMode='add';
+  s.position.set(x,y);s.scale.set(scale0);s.alpha=alpha;s.tint=tint;s.blendMode='add';s.rotation=rotation;s.visible=now<=performance.now();
   this.rings.push({s,t0:now,dur,scale0,scale1,alpha});this.laneFx.addChild(s);
  }
  private particle(key:string,x:number,y:number,vx:number,vy:number,life:number,tint:number,o:{gravity?:number;spin?:number;fade?:boolean;grow?:number}={}){
@@ -1105,10 +1209,17 @@ export class PlayRenderer {
   }
   for(let i=this.flyers.length-1;i>=0;i--){
    const fl=this.flyers[i],k=(now-fl.t0)/fl.dur;
-   if(k>=1){this.give(fl.s);this.flyers.splice(i,1);this.gaugeFlower.scale.set(this.gaugeFlower.scale.x*1.04);continue;}
-   const e=k*k*(3-2*k),u=1-e;
-   fl.s.position.set(u*u*fl.x0+2*u*e*fl.cx+e*e*fl.x1,u*u*fl.y0+2*u*e*fl.cy+e*e*fl.y1);
-   fl.s.scale.set(fl.scale0*(1-.45*k));fl.s.alpha=k>.85?(1-k)/.15:1;
+   if(k>=1){
+    this.give(fl.s);if(fl.trail)this.give(fl.trail);this.flyers.splice(i,1);
+    this.gaugeFlower.scale.set(this.gaugeFlower.scale.x*1.04);
+    // A small flash where it lands (at most every 70 ms in dense runs).
+    if(now-this.lastLandFlash>70&&this.effects!=='off'){this.lastLandFlash=now;this.ring(fl.x1,fl.y1,'glowGold',now,170,.25,.75,.85);}
+    continue;
+   }
+   const at=(t:number)=>{const e=t*t*(3-2*t),u=1-e;return [u*u*fl.x0+2*u*e*fl.cx+e*e*fl.x1,u*u*fl.y0+2*u*e*fl.cy+e*e*fl.y1] as const;};
+   const [x,y]=at(k),fade=k>.85?(1-k)/.15:1;
+   fl.s.position.set(x,y);fl.s.scale.set(fl.scale0*(1-.45*k));fl.s.alpha=fade;
+   if(fl.trail){const kt=Math.max(0,k-.09),[tx,ty]=at(kt);fl.trail.position.set(tx,ty);fl.trail.scale.set(fl.scale0*(1-.45*kt)*.92);fl.trail.alpha=.3*fade;}
   }
   for(let i=this.boneFlyers.length-1;i>=0;i--){
    const b=this.boneFlyers[i],k=(now-b.t0)/b.dur;
@@ -1120,12 +1231,48 @@ export class PlayRenderer {
   }
   for(let i=this.rings.length-1;i>=0;i--){
    const r=this.rings[i],k=(now-r.t0)/r.dur;
+   if(k<0){r.s.visible=false;continue;}
+   r.s.visible=true;
    if(k>=1){this.give(r.s);this.rings.splice(i,1);continue;}
    r.s.scale.set(r.scale0+(r.scale1-r.scale0)*easeOut(k));r.s.alpha=r.alpha*(1-k);
   }
  }
 
+ /** Festival sparkles rise over the stage in FEVER; confetti drifts down in SUPER FEVER. */
+ private stepAmbient(now:number,dt:number){
+  const f=dt/16.67,st=this.layout.stage;
+  if(this.fever&&this.effects!=='off'&&this.ambientSpare.length){
+   this.ambientDue+=(this.effects==='standard'?6:2)*(this.fever>=2?1.7:1)*dt/1000;
+   while(this.ambientDue>=1&&this.ambientSpare.length){
+    this.ambientDue-=1;
+    // Soft glowing orbs and twinkling stars rise; in SUPER FEVER confetti also drifts down.
+    const s=this.ambientSpare.pop()!,confetti=this.fever>=2&&Math.random()<.45,orb=!confetti&&Math.random()<.6;
+    const t=this.tex[confetti?'confetti':orb?'glowGold':'spark'];s.texture=t.texture;s.anchor.set(.5);s.visible=true;s.blendMode=confetti?'normal':'add';
+    const x=st.x+Math.random()*st.w;
+    if(confetti){s.position.set(x,st.y-4);s.tint=[0xff6b5a,0xffd86b,0x6ee7ff,0x7ed36f,0xffffff][Math.floor(Math.random()*5)];s.scale.set(.7+Math.random()*.5);}
+    else if(orb){s.position.set(x,st.y+st.h*(.72+Math.random()*.26));s.tint=Math.random()<.5?0xffffff:0xffd0a0;s.scale.set(.1+Math.random()*.13);}
+    else{s.position.set(x,st.y+st.h*(.72+Math.random()*.26));s.tint=0xfff1a8;s.scale.set(.7+Math.random()*.7);}
+    const life=confetti?2800:2200+Math.random()*1200;
+    this.ambient.push({s,vx:(Math.random()-.5)*.3,vy:confetti?.8+Math.random()*.7:-(.5+Math.random()*.7),life,max:life,phase:Math.random()*6.28,spin:confetti?(Math.random()-.5)*.2:orb?0:.04,peak:confetti?.95:orb?.85:1});
+   }
+  }else this.ambientDue=0;
+  for(let i=this.ambient.length-1;i>=0;i--){
+   const a=this.ambient[i];a.life-=dt;
+   if(a.life<=0||a.s.y>st.y+st.h+10||a.s.y<st.y-24){a.s.visible=false;this.ambientSpare.push(a.s);this.ambient.splice(i,1);continue;}
+   a.s.x+=(a.vx+Math.sin(now*.002+a.phase)*.35)*f;a.s.y+=a.vy*f;a.s.rotation+=a.spin*f;
+   const k=a.life/a.max;a.s.alpha=a.peak*Math.min(1,(1-k)*5,k*2.5);
+  }
+ }
+
  // --------------------------------------------------------------- public --
+ /** The song starts ("はじめ！"): a burst from the judge circle. */
+ startBurst(){
+  if(!this.initialized||this.effects==='off')return;
+  const L=this.layout,now=performance.now();
+  this.ring(L.hitX,L.laneY,'glowGold',now,420,.6,3,.9);
+  this.ring(L.hitX,L.laneY,'ring',now,380,1,3.2,.9,0xffd86b);
+  for(let i=0;i<14;i++){const a=i/14*Math.PI*2;this.particle('shard',L.hitX,L.laneY,Math.cos(a)*7,Math.sin(a)*7,420,[0xff5a36,0xffd23f,0x39d2f2][i%3],{gravity:.2,spin:.3});}
+ }
  showMessage(text:string,sub='',hold=false){
   if(!this.initialized)return;
   this.labels.message=this.messageText.text=text;this.labels.messageSub=this.messageSub.text=sub;this.messageAt=performance.now();this.messageHold=hold;

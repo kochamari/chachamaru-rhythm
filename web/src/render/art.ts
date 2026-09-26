@@ -155,6 +155,20 @@ export function petalGraphic(r:number,color:number):Container{
  return new Graphics().ellipse(0,0,r*.45,r).fill(color).stroke({color:darken(color,.3),width:1});
 }
 export function dotGraphic(r:number,color:number):Container{return new Graphics().circle(0,0,r).fill(color);}
+/** Impact rays: thin tapered spikes around a hole, white (tinted when used). */
+export function raysGraphic(r:number,count=16):Container{
+ const g=new Graphics();
+ for(let i=0;i<count;i++){
+  const a=i/count*Math.PI*2,w=r*(i%2?.05:.08),inner=r*(i%2?.5:.4),outer=r*(i%2?.82:1);
+  const cx=Math.cos(a),cy=Math.sin(a),px=-cy,py=cx;
+  g.poly([cx*inner+px*w,cy*inner+py*w,cx*outer,cy*outer,cx*inner-px*w,cy*inner-py*w]).fill(0xffffff);
+ }
+ return g;
+}
+/** A long thin diamond: a shard flying off a hit note (white, tinted when used). */
+export function shardGraphic(r:number):Container{
+ return new Graphics().poly([0,-r,r*.34,0,0,r,-r*.34,0]).fill(0xffffff);
+}
 
 export function textGraphic(text:string,style:TextStyleOptions):Container{
  const t=new Text({text,style});return t;

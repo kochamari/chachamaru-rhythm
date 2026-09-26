@@ -6,8 +6,9 @@ import {recordEligible} from '../storage/Database';
 import {previousBest,crownOf} from '../app/records';
 import {nav,uiAudio,memory} from '../app/context';
 import {loadFestival} from '../storage/festival';
-import {nearMiss} from '../game/festival';
+import {nearMiss,fortuneFor} from '../game/festival';
 import {rewardsHtml,playRewards} from './rewards';
+import {closeShutter} from '../app/shutter';
 
 function timingSummary(values:readonly number[]){
  if(!values.length)return '命中した音符のタイミングデータがありません。';
@@ -30,6 +31,9 @@ export async function resultScreen(root:HTMLElement,r:RunResult):Promise<()=>voi
  const award=festival?.awards.find(a=>a.runId===r.runId)??null;
  // One line that makes another try tempting (normal play only).
  const near=eligible?nearMiss(s,prev):null;
+ // The おみくじ stamp lands after the score has counted up (normal runs that cleared).
+ const fortune=!r.autoplay&&!r.practice?fortuneFor(s.score,cleared):null;
+ const fortuneCls={大吉:'daikichi',中吉:'chukichi',小吉:'shokichi',吉:'kichi',末吉:'suekichi'} as const;
  const tag=r.autoplay?'AUTO · 参考記録':r.practice?'練習 · 参考記録':r.inputMode==='mixed'?'操作を途中で変更 · 参考記録':r.timingUnstable?'配送遅延あり · 参考記録':`通常プレイ · ${r.inputMode==='touch'?'タッチ':r.inputMode==='midi'?'電子ドラム':'キーボード'}`;
  const confetti=crown!=='none'&&crown!=='clear'?`<div class="confetti" aria-hidden="true">${Array.from({length:32},(_,i)=>`<i style="left:${(i*37)%100}%;background:${['#ff6b5a','#ffd86b','#6ee7ff','#7ed36f','#fff'][i%5]};animation-delay:${-(i%9)*.45}s;animation-duration:${3+i%4}s"></i>`).join('')}</div>`:'';
  root.innerHTML=`${header()}<section class="result-page ${cleared?'':'failed'} ${award?'has-rewards':''}">${confetti}
@@ -38,7 +42,7 @@ export async function resultScreen(root:HTMLElement,r:RunResult):Promise<()=>voi
    <div class="result-character">${crown==='ag'?`<div class="winner-crown" aria-label="全良の王冠">${crownSvg()}</div>`:''}${crown==='fc'||crown==='ag'?`<div class="sunflower-wreath" aria-hidden="true">${Array.from({length:12},(_,i)=>`<span style="--i:${i}">${flowerSvg()}</span>`).join('')}</div>`:''}<div class="result-rig"></div></div>
    <p class="celebration">${crown==='ag'?'すべて「良」！ 完ぺきなリズムです。':crown==='fc'?'ミスなし！ 見事なリズム！':cleared?'お祭りゲージ 70% 突破！':'ゲージ70%でクリア。次はきっと！'}</p>
   </div>
-  <div class="result-card"><span class="eyebrow">演奏結果 ／ ${difficultyNames[r.difficulty]}</span>
+  <div class="result-card">${fortune?`<div class="fortune ${fortuneCls[fortune]}" role="img" aria-label="おみくじ ${fortune}"><small>おみくじ</small><span>${fortune}</span>${Array.from({length:10},(_,i)=>`<b style="--a:${i*36+(i%2?9:0)}deg"></b>`).join('')}</div>`:''}<span class="eyebrow">演奏結果 ／ ${difficultyNames[r.difficulty]}</span>
    <h2>${escape(r.title)}</h2><span class="tag">${escape(tag)}</span> ${newBest?'<span class="new-best">自己ベスト更新！</span>':''}
    ${near?`<p class="near-miss">${escape(near)}</p>`:''}
    <div class="result-score"><span id="score-count">0</span><small>基本点 ${s.baseScore.toLocaleString()} ＋ 連打 ${s.rollBonus.toLocaleString()}${prev!==null?`　／　これまでのベスト ${prev.toLocaleString()}`:''}</small></div>
@@ -51,9 +55,9 @@ export async function resultScreen(root:HTMLElement,r:RunResult):Promise<()=>voi
  memory.selected=r.packId;memory.difficulty=r.difficulty;
  // After an example (AUTO) run, "retry" means playing yourself; the example
  // has its own button, so a drum decision never loops into AUTO.
- const retry=()=>{location.hash=`/play/${r.packId}/${r.chartId}${!r.autoplay&&r.practice?'?practice=1':''}`;};
+ const retry=()=>{closeShutter();location.hash=`/play/${r.packId}/${r.chartId}${!r.autoplay&&r.practice?'?practice=1':''}`;};
  root.querySelector<HTMLElement>('#retry')!.onclick=retry;
- root.querySelector<HTMLElement>('#retry-auto')?.addEventListener('click',()=>{location.hash=`/play/${r.packId}/${r.chartId}?auto=1`;});
+ root.querySelector<HTMLElement>('#retry-auto')?.addEventListener('click',()=>{closeShutter();location.hash=`/play/${r.packId}/${r.chartId}?auto=1`;});
  const character=new Character(root.querySelector('.result-rig')!);
  const stopAnimation=character.animate(cleared?'resultWin':'idle');
  // Tally: score rolls up, counts follow, gauge fills.
@@ -61,8 +65,11 @@ export async function resultScreen(root:HTMLElement,r:RunResult):Promise<()=>voi
  const scoreEl=root.querySelector<HTMLElement>('#score-count')!;
  const counts=[...root.querySelectorAll<HTMLElement>('[data-count]')];
  const gauge=root.querySelector<HTMLElement>('.result-gauge i')!;
+ let lastTick=0;
  const tick=(now:number)=>{
   const k=Math.min(1,(now-start)/dur),e=1-Math.pow(1-k,3);
+  // A soft tick while the score counts up.
+  if(k<1&&now-lastTick>60){lastTick=now;uiAudio.effect('reel');}
   scoreEl.textContent=Math.round(s.score*e).toLocaleString();
   counts.forEach((c,i)=>{const kk=Math.min(1,Math.max(0,(now-start-120*i)/700));c.textContent=String(Math.round(Number(c.dataset.count)*kk));});
   gauge.style.width=`${s.gauge*e}%`;
@@ -71,10 +78,12 @@ export async function resultScreen(root:HTMLElement,r:RunResult):Promise<()=>voi
  };
  raf=requestAnimationFrame(tick);
  const stopRewards=award&&festival?playRewards(root,award,festival):()=>{};
+ // The stamp lands with a drum hit (its CSS animation starts at 1.3 s and lands at about 1.53 s).
+ const stampTimer=fortune?window.setTimeout(()=>{uiAudio.hit('don',true);if(fortune==='大吉')uiAudio.effect('gachaRare');else uiAudio.effect('combo10');},1530):0;
  void uiAudio.unlock().then(()=>uiAudio.chime(crown==='ag'?3:crown==='fc'?2:1)).catch(()=>{});
  root.querySelector<HTMLElement>('#retry')!.focus({preventScroll:true});
  const key=(e:KeyboardEvent)=>{if(e.code==='Enter'&&!(e.target instanceof HTMLButtonElement)&&!(e.target instanceof HTMLAnchorElement)){e.preventDefault();retry();}};
  window.addEventListener('keydown',key);
  nav.handlers={back:()=>{location.hash='/songs';}};
- return ()=>{stopAnimation();stopRewards();cancelAnimationFrame(raf);window.removeEventListener('keydown',key);nav.reset();};
+ return ()=>{stopAnimation();stopRewards();clearTimeout(stampTimer);cancelAnimationFrame(raf);window.removeEventListener('keydown',key);nav.reset();};
 }

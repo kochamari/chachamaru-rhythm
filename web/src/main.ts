@@ -19,6 +19,7 @@ import {showcaseScreen} from './testing/showcase';
 import {flowerSvg} from './render/Character';
 import {markRenderer} from './app/gpu';
 import {adoptDrum} from './app/drumMode';
+import {closeShutter,openShutter} from './app/shutter';
 
 declare const __TEST__:boolean;
 document.documentElement.style.setProperty('--festival',`url("${import.meta.env.BASE_URL}original-assets/festival.webp")`);
@@ -54,7 +55,7 @@ async function route(){
    const chart=pack?.charts.find(c=>c.chartId===parts[2]);
    if(!pack||!chart)throw Error('データがありません。曲を選び直してください');
    session=new Session(app,pack,chart,input,{autoplay:params.get('auto')==='1',practice:params.get('practice')==='1',startMs:Number(params.get('start')??0),decoded:preview.take(pack.manifest.packId)});
-   session.onResult=r=>{memory.lastResult=r;location.hash=`/result/${r.runId}`;};
+   session.onResult=r=>{memory.lastResult=r;closeShutter();location.hash=`/result/${r.runId}`;};
    await session.init();
   }else if(parts[0]==='result'){
    const r=memory.lastResult?.runId===parts[1]?memory.lastResult:await(await db()).get('runs',parts[1]) as RunResult|undefined;
@@ -65,6 +66,8 @@ async function route(){
   else throw Error('このページはありません。曲一覧から始めてください');
   if(!current())cleanup();
  }catch(e){if(current())fail(app,e);}
+ // The curtain (if one closed for this move) opens on the new screen.
+ if(current())openShutter();
 }
 window.addEventListener('hashchange',()=>void route());
 

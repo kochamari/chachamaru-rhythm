@@ -8,6 +8,7 @@ import {bestsFor,crownSvg,type ChartBest} from '../app/records';
 import {nav,preview,memory} from '../app/context';
 import {BUNDLED_ORDER,songColor,chartLevel,bpmOf} from '../app/songinfo';
 import {outputOptions,useOutput} from '../app/output';
+import {closeShutter} from '../app/shutter';
 
 const DIFFS:Difficulty[]=['easy','normal','hard'];
 const kindOf=(m:Manifest,source?:string)=>m.packId==='himawari-demo'||source==='demo'||m.generator?.startsWith('original-composition')?'demo':source==='studio'?'studio':'mine';
@@ -107,6 +108,7 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
   if(!pack)return;
   const chart=pack.charts.find(c=>c.difficulty===memory.difficulty)??pack.charts[0];
   preview.stop(120);
+  closeShutter();
   location.hash=`/play/${pack.manifest.packId}/${chart.chartId}${auto?'?auto=1':''}`;
  }
 
