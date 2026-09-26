@@ -2,6 +2,7 @@ import {BRAND} from '../app/brand';
 import {Character,flowerSvg} from '../render/Character';
 import {nav} from '../app/context';
 import {boneSvg} from '../app/ui';
+import {dailyWaiting} from '../app/progress';
 
 const icon={
  plus:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
@@ -36,5 +37,8 @@ export function homeScreen(root:HTMLElement):()=>void{
  const drummer=window.setInterval(()=>{const c=pattern[beat++%pattern.length];if(c)character.hit(c,performance.now(),beat%2?'left':'right');},500);
  nav.handlers={decide:()=>{const focused=document.activeElement as HTMLElement|null;if(focused?.dataset.nav!==undefined&&focused!==root.querySelector('#start-game'))return false;location.hash='/songs';return true;}};
  root.querySelector<HTMLElement>('#start-game')?.focus({preventScroll:true});
- return ()=>{stop();clearInterval(drummer);nav.reset();};
+ // Until the first finished run of the day, the start drum wears a bonus tag.
+ let alive=true;
+ void dailyWaiting().then(w=>{if(w&&alive)root.querySelector('#start-game')?.insertAdjacentHTML('beforeend','<span class="daily-badge" aria-label="きょうの初プレイでほねっこ＋50">きょうの<b>＋50</b></span>');});
+ return ()=>{alive=false;stop();clearInterval(drummer);nav.reset();};
 }

@@ -606,3 +606,42 @@ html[data-render="software"] .new-best{animation:none}
 .result-card:has(.fortune) h2{padding-right:70px}
 @media (max-height:500px) and (orientation:landscape){.result-card:has(.fortune) h2{padding-right:0}.fortune{width:56px;height:56px;top:44px;right:12px;border-width:2px}.fortune.daikichi::after{inset:-6px}.fortune span{font-size:19px}.fortune.kichi span,.fortune.suekichi span{font-size:16px}.fortune small{font-size:6px}}
 @media (prefers-reduced-motion:reduce){.fortune{animation-duration:.01s}.fortune b{display:none}.fortune.daikichi::after{animation:none}}
+/* Song select: progress chips, NEW, best おみくじ, and small moves when picking. */
+.progress-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lv-chip,.bone-chip,.daily-hint{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:4px 12px;border-radius:999px;background:#1e1726cc;border:2px solid #ffd86b88;color:#fff4d8;font-size:13px;font-weight:800;white-space:nowrap}
+.lv-chip b,.bone-chip b{font-size:17px;color:#fff;font-variant-numeric:tabular-nums}
+.lv-chip i{position:relative;width:46px;height:6px;border-radius:999px;background:#3a2626;overflow:hidden}
+.lv-chip i::after{content:'';position:absolute;inset:0;width:calc(var(--p,0) * 100%);background:linear-gradient(90deg,#7ed36f,#ffd86b)}
+.bone-chip{text-decoration:none}.bone-chip svg{width:30px;height:20px}
+.daily-hint{background:#2f5a2acc;border-color:#7ed36f;color:#eaffe0;animation:daily-glow 2.4s ease-in-out infinite}
+.daily-hint b{color:#b8ff9a}
+@keyframes daily-glow{50%{box-shadow:0 0 0 3px #7ed36f55,0 0 16px #7ed36f66}}
+.new-tag{position:absolute;z-index:1;top:-7px;left:-5px;padding:0 6px;border-radius:6px;background:#ff5f5f;color:#fff;font-style:normal;font-size:11px;font-weight:900;letter-spacing:.04em;border:1.5px solid var(--ink);transform:rotate(-8deg)}
+.mini-fortune{position:absolute;top:-9px;left:-7px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:900;color:#fff;background:radial-gradient(circle at 38% 32%,#e4503f,#b3231d 72%);border:2px solid #fff4d8;box-shadow:0 0 0 2px #8a1616;transform:rotate(-12deg);font-family:"Hiragino Mincho ProN","Yu Mincho",serif;line-height:1}
+.mini-fortune.daikichi{background:radial-gradient(circle at 38% 32%,#fff3b0,#f0b429 60%,#c98a00);color:#7a2a00;box-shadow:0 0 0 2px #a86b00,0 0 10px #ffd86baa}
+.mini-fortune.suekichi{background:radial-gradient(circle at 38% 32%,#9b7bd8,#5b3d9a 72%)}
+.mini-fortune.kichi,.mini-fortune.suekichi{font-size:11px}
+.song-bar.selected{animation:bar-pick .32s cubic-bezier(.2,1.5,.4,1)}
+.song-bar.selected .bar-icon svg{animation:icon-spin .55s cubic-bezier(.2,1.2,.4,1)}
+@keyframes bar-pick{0%{transform:translateX(0) scale(.98)}60%{transform:translateX(11px) scale(1.02)}100%{transform:translateX(8px) scale(1)}}
+@keyframes icon-spin{from{transform:rotate(-120deg) scale(.7)}}
+.song-detail[data-enter] .art-title{animation:art-in .36s cubic-bezier(.2,.9,.3,1)}
+.song-detail[data-enter] .art-dog{animation:dog-hop .55s cubic-bezier(.2,1.5,.4,1)}
+@keyframes art-in{from{opacity:0;transform:translateX(-18px)}}
+@keyframes dog-hop{0%{transform:translateY(30%)}55%{transform:translateY(-6%)}100%{transform:none}}
+.difficulty-cards button.active{animation:card-pick .28s cubic-bezier(.2,1.6,.4,1)}
+@keyframes card-pick{0%{transform:scale(.92)}70%{transform:scale(1.05)}100%{transform:none}}
+.start-row .primary{animation:play-breathe 2.2s ease-in-out infinite}
+@keyframes play-breathe{50%{box-shadow:0 4px 0 var(--ink),0 0 0 4px #ffd86b99,0 0 22px #ffb34777}}
+@media (max-height:500px) and (orientation:landscape){
+ .library-head{gap:8px}
+ .library-head .search,.library-head .button{min-height:30px;padding-top:2px;padding-bottom:2px}
+ .lv-chip,.bone-chip,.daily-hint{min-height:30px;padding:0 10px;font-size:12px;line-height:1}
+ .lv-chip b,.bone-chip b{font-size:15px}.lv-chip i{width:34px}.bone-chip svg{width:26px;height:17px}
+}
+@media (max-width:520px){.progress-chips{width:100%}.daily-hint{font-size:12px}}
+@media (prefers-reduced-motion:reduce){.song-bar.selected,.song-bar.selected .bar-icon svg,.song-detail[data-enter] .art-title,.song-detail[data-enter] .art-dog,.difficulty-cards button.active,.start-row .primary,.daily-hint{animation:none}}
+.daily-badge{position:absolute;top:-12px;left:50%;display:flex;align-items:baseline;gap:3px;white-space:nowrap;padding:2px 10px;border-radius:999px;background:#2f8a3a;color:#fff;font-size:11px;font-weight:900;border:2.5px solid var(--ink);box-shadow:0 3px 0 var(--ink);transform:translateX(-50%) rotate(-4deg);animation:badge-bob 1.6s ease-in-out infinite}
+.daily-badge b{font-size:15px;color:#d8ffb8}
+@keyframes badge-bob{50%{transform:translateX(-50%) rotate(-4deg) translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){.daily-badge{animation:none}}

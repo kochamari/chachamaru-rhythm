@@ -5,7 +5,8 @@ import {listSongEntries,getSong,deleteSong,saveSettings} from '../storage/Databa
 import {exportPack} from '../packs/zip';
 import {characterSvg,flowerSvg} from '../render/Character';
 import {bestsFor,crownSvg,type ChartBest} from '../app/records';
-import {nav,preview,memory} from '../app/context';
+import {nav,preview,memory,uiAudio} from '../app/context';
+import {progressChips,miniFortune} from '../app/progress';
 import {BUNDLED_ORDER,songColor,chartLevel,bpmOf} from '../app/songinfo';
 import {outputOptions,useOutput} from '../app/output';
 import {closeShutter} from '../app/shutter';
@@ -34,10 +35,13 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
  let previewTimer=0;let alive=true;
  const allBests=new Map<string,Partial<Record<Difficulty,ChartBest>>>();
  await Promise.all(all.map(async m=>allBests.set(m.packId,await bestsFor(m))));
+ const chips=await progressChips('#/songs');
  if(!isCurrent())return ()=>{};
+ // The detail panel animates in only when the song changes (not on a difficulty change).
+ let shownSong='';
 
  root.innerHTML=`${header('songs')}<section class="library">
-  <div class="library-head"><h1>曲をえらぶ</h1><input class="search" type="search" placeholder="曲名・アーティストでさがす" aria-label="曲を検索"><a class="button" href="#/import">＋ 曲を追加</a></div>
+  <div class="library-head"><h1>曲をえらぶ</h1>${chips}<input class="search" type="search" placeholder="曲名・アーティストでさがす" aria-label="曲を検索"><a class="button" href="#/import">＋ 曲を追加</a></div>
   <div class="library-body">
    <div class="song-column"><ol class="song-bars" aria-label="曲の一覧"></ol><p class="library-note">カッ（D・K／↑↓）でえらぶ・ドン（F・J）で決定。自分の曲はこのブラウザに保存されます。元のZIPも大切に保管してください。</p></div>
    <div id="selection" class="song-detail" aria-live="polite"></div>
@@ -51,9 +55,10 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
   list.innerHTML=songs.map(m=>{
    const kind=kindOf(m,sources.get(m.packId)),b=allBests.get(m.packId)??{};
    const crowns=DIFFS.filter(d=>m.charts.some(c=>c.difficulty===d)).map(d=>`<i class="${b[d]?.crown??'none'}"></i>`).join('');
-   return `<li><button class="song-bar ${memory.selected===m.packId?'selected':''}" data-song="${escape(m.packId)}" data-kind="${kind}" style="--genre:${songColor(m.packId)}"><span class="bar-icon" aria-hidden="true">${flowerSvg()}</span><span><strong>${escape(m.title)}</strong><small>${escape(m.artist)} · ${duration(m.durationMs)} · ${kindLabel[kind]}</small></span><span class="bar-crowns" aria-hidden="true">${crowns}</span></button></li>`;
+   const fresh=!Object.keys(b).length?'<em class="new-tag" aria-label="まだ遊んでいない曲">NEW</em>':'';
+   return `<li><button class="song-bar ${memory.selected===m.packId?'selected':''}" data-song="${escape(m.packId)}" data-kind="${kind}" style="--genre:${songColor(m.packId)}">${fresh}<span class="bar-icon" aria-hidden="true">${flowerSvg()}</span><span><strong>${escape(m.title)}</strong><small>${escape(m.artist)} · ${duration(m.durationMs)} · ${kindLabel[kind]}</small></span><span class="bar-crowns" aria-hidden="true">${crowns}</span></button></li>`;
   }).join('')||'<li class="empty">曲が見つかりませんでした</li>';
-  list.querySelectorAll<HTMLElement>('[data-song]').forEach(b=>b.onclick=()=>{if(memory.selected===b.dataset.song){zone='detail';focusDetail();return;}select(b.dataset.song!);zone='list';});
+  list.querySelectorAll<HTMLElement>('[data-song]').forEach(b=>b.onclick=()=>{uiAudio.effect('move');if(memory.selected===b.dataset.song){zone='detail';focusDetail();return;}select(b.dataset.song!);zone='list';});
  }
  function select(id:string){
   memory.selected=id;
@@ -74,9 +79,10 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
   const bpm=bpmOf(m),kind=kindOf(m,p.source);
   const mode=state.settings.inputMode==='mixed'?'keyboard':state.settings.inputMode;
   detail.style.setProperty('--theme',songColor(m.packId));
+  detail.toggleAttribute('data-enter',shownSong!==m.packId);shownSong=m.packId;
   detail.innerHTML=`<div class="detail-art" ${p.cover?'data-cover':''}><div class="art-title"><span class="eyebrow">${kindLabel[kind]}</span><h2>${escape(m.title)}</h2><p>${escape(m.artist)} ／ ${duration(m.durationMs)}${bpm?` ／ BPM ${bpm}`:''}</p></div><div class="art-dog">${characterSvg()}</div></div>
    <div class="detail-body">
-    <div class="difficulty-cards" role="group" aria-label="難易度">${DIFFS.filter(d=>p.charts.some(c=>c.difficulty===d)).map(d=>{const b=bests[d];return `<button data-difficulty="${d}" data-nav class="${memory.difficulty===d?'active':''}" aria-pressed="${memory.difficulty===d}">${b?crownSvg(b.crown):''}<span class="d-name">${difficultyNames[d]}</span><span class="d-stars" aria-label="レベル ${chartLevel(p.charts.find(c=>c.difficulty===d)!)}">★${chartLevel(p.charts.find(c=>c.difficulty===d)!)}</span><span class="d-best">${b?`ベスト ${b.score.toLocaleString()}`:'まだ遊んでいません'}</span></button>`;}).join('')}</div>
+    <div class="difficulty-cards" role="group" aria-label="難易度">${DIFFS.filter(d=>p.charts.some(c=>c.difficulty===d)).map(d=>{const b=bests[d];return `<button data-difficulty="${d}" data-nav class="${memory.difficulty===d?'active':''}" aria-pressed="${memory.difficulty===d}">${b?crownSvg(b.crown)+miniFortune(b.score,b.crown!=='none'):''}<span class="d-name">${difficultyNames[d]}</span><span class="d-stars" aria-label="レベル ${chartLevel(p.charts.find(c=>c.difficulty===d)!)}">★${chartLevel(p.charts.find(c=>c.difficulty===d)!)}</span><span class="d-best">${b?`ベスト ${b.score.toLocaleString()}`:'まだ遊んでいません'}</span></button>`;}).join('')}</div>
     <div class="chart-meta"><span>音符 <b>${taps}</b></span>${rolls?`<span>連打 <b>${rolls}</b></span>`:''}${m.sections.some(s=>s.kind==='chorus')?'<span>サビで夜祭り演出</span>':''}</div>
     <div class="play-choices"><label class="input-choice">操作 <select id="input-mode"><option value="touch">タッチ（画面の太鼓）</option><option value="keyboard">キーボード（D F J K）</option><option value="midi">電子ドラム（MIDI）</option></select></label>
      <div class="input-choice"><label for="output-profile">音の出力</label><select id="output-profile">${outputOptions(state.settings,escape)}</select><a class="button sync-mini" href="#/sync?back=%23%2Fsongs">ズレ合わせ</a></div></div>
@@ -85,13 +91,13 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
     <p class="detail-note">${m.generator?.startsWith('chacha-generator')?'自動下書きの譜面です。譜面工房でリズムを調整できます。':'大きい音符も1回叩けばOK（大音符アシスト）。'}</p>
    </div>`;
   if(p.cover){const url=URL.createObjectURL(p.cover);detail.querySelector<HTMLElement>('.detail-art')!.style.backgroundImage=`url("${url}")`;window.setTimeout(()=>URL.revokeObjectURL(url),60000);}
-  detail.querySelectorAll<HTMLElement>('[data-difficulty]').forEach(b=>b.onclick=()=>{memory.difficulty=b.dataset.difficulty as Difficulty;zone='detail';void renderDetail().then(focusDetail);});
+  detail.querySelectorAll<HTMLElement>('[data-difficulty]').forEach(b=>b.onclick=()=>{uiAudio.effect('move');memory.difficulty=b.dataset.difficulty as Difficulty;zone='detail';void renderDetail().then(focusDetail);});
   const select=detail.querySelector<HTMLSelectElement>('#input-mode')!;select.value=mode;
   select.onchange=()=>{state.settings.inputMode=select.value as InputMode;void saveSettings(state.settings);};
   const output=detail.querySelector<HTMLSelectElement>('#output-profile')!;
   output.onchange=()=>{useOutput(state.settings,output.value);void saveSettings(state.settings);output.innerHTML=outputOptions(state.settings,escape);};
-  detail.querySelector<HTMLElement>('#play-song')!.onclick=()=>play(false);
-  detail.querySelector<HTMLElement>('#auto-song')!.onclick=()=>play(true);
+  detail.querySelector<HTMLElement>('#play-song')!.onclick=()=>{uiAudio.effect('select');play(false);};
+  detail.querySelector<HTMLElement>('#auto-song')!.onclick=()=>{uiAudio.effect('select');play(true);};
   detail.querySelector<HTMLElement>('#export-song')!.onclick=async()=>{try{download(await exportPack(p),`${m.title}.zip`);}catch(e){toast((e as Error).message);}};
   detail.querySelector<HTMLElement>('#delete-song')!.onclick=async()=>{
    if(!await confirmDialog('この曲を削除しますか？',`「${m.title}」をこのブラウザから削除します。元のZIPは削除されません。`,'削除する'))return;
