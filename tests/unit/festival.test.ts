@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import {beforeEach,it,expect} from 'vitest';
-import {boneGain,finishBones,BoneCounter,inFever,FEVER_COMBO,ALL_FRIENDS_BONES,ALL_FRIENDS_GAUGE} from '../../web/src/game/festival';
+import {boneGain,finishBones,BoneCounter,inFever,FEVER_COMBO,ALL_FRIENDS_BONES,ALL_FRIENDS_GAUGE,drawFriends,joinBonuses,isReach,mergeBonuses,RARE_COATS,COMMON_COATS} from '../../web/src/game/festival';
 import {awardBones,loadFestival,validFestival,emptyFestival} from '../../web/src/storage/festival';
 import {db} from '../../web/src/storage/Database';
 import type {EffectEvent} from '../../contracts/public-types';
@@ -18,14 +18,14 @@ it('ほねっこ: 良 1 (big note 2), doubled in FEVER, +10 every 50 combo; 可 
 });
 
 it('counts a run live: FEVER from the 31st hit on, ends on a miss; all four friends pay once',()=>{
- const c=new BoneCounter();
+ const c=new BoneCounter();c.setFriends(['kuro','shiro','goma','aka']);
  c.add(Array.from({length:30},()=>hit('great')),40);
  expect(c.bones).toBe(30);
  c.add([hit('great'),hit('great')],50);
  expect(c.bones).toBe(34);
  c.add([hit('miss'),hit('great')],60);
  expect(c.bones).toBe(35);
- c.add([],ALL_FRIENDS_GAUGE);expect(c.bones).toBe(35+ALL_FRIENDS_BONES);
+ c.add([],ALL_FRIENDS_GAUGE);expect(c.bones).toBe(35+ALL_FRIENDS_BONES);expect(c.play).toBe(35);
  c.add([],ALL_FRIENDS_GAUGE-20);c.add([],ALL_FRIENDS_GAUGE);expect(c.bones).toBe(35+ALL_FRIENDS_BONES);
  expect(finishBones({gauge:72,fullCombo:false,allGreat:false})).toEqual([{label:'クリア',bones:20}]);
  expect(finishBones({gauge:100,fullCombo:true,allGreat:true}).map(i=>i.bones)).toEqual([20,100]);
@@ -109,4 +109,43 @@ it('backups carry ほねっこ and collected outfits; a broken one is refused',a
  // Older backups without the festival part still restore and leave it alone.
  const {festival:_ignored,...older}=b;
  await restore(older);expect((await loadFestival()).bones).toBe(200);
+});
+
+/** Deterministic random numbers. */
+function lcg(seed:number){return ()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};}
+
+it('the four friends are a slot draw: rare coats get likelier friend by friend, and more so when found in the draw',()=>{
+ const N=40000,rare=[0,0,0,0],rareOwned=[0,0,0,0],sets={pair:0,twoPair:0,three:0,four:0,none:0};
+ const random=lcg(11);
+ for(let n=0;n<N;n++){
+  const coats=drawFriends(random,{});
+  expect(coats).toHaveLength(4);
+  coats.forEach((c,i)=>{expect([...COMMON_COATS,...RARE_COATS]).toContain(c);if((RARE_COATS as readonly string[]).includes(c))rare[i]++;});
+  let best:ReturnType<typeof joinBonuses>['set']=null;
+  coats.forEach((c,i)=>{const {set}=joinBonuses(coats.slice(0,i),c);if(set)best=set;});
+  sets[best??'none']++;
+  drawFriends(random,{kin:1,sakura:1}).forEach((c,i)=>{if((RARE_COATS as readonly string[]).includes(c))rareOwned[i]++;});
+ }
+ const rate=(x:number)=>x/N;
+ // 3 rare coats: 6% → 10.5% → 18% → 30% (before the リーチ boost on the fourth).
+ expect(rate(rare[0])).toBeCloseTo(.06,1);expect(rate(rare[1])).toBeGreaterThan(rate(rare[0]));expect(rate(rare[2])).toBeGreaterThan(rate(rare[1]));expect(rate(rare[3])).toBeGreaterThan(rate(rare[2]));
+ expect(rate(rareOwned[2])).toBeGreaterThan(rate(rare[2])*1.4);
+ // Sets: a pair is common, three of a kind now and then, four rare but real.
+ expect(rate(sets.pair+sets.twoPair)).toBeGreaterThan(.4);
+ expect(rate(sets.three)).toBeGreaterThan(.08);expect(rate(sets.three)).toBeLessThan(.3);
+ expect(rate(sets.four)).toBeGreaterThan(.005);expect(rate(sets.four)).toBeLessThan(.05);
+});
+
+it('each friend pays for what their coat completes; リーチ when the fourth can complete a set',()=>{
+ expect(joinBonuses([],'kuro')).toEqual({items:[],set:null,rare:false});
+ expect(joinBonuses(['kuro'],'kuro').items).toEqual([{label:'ペア',bones:10}]);
+ expect(joinBonuses(['kuro','kuro','shiro'],'shiro')).toMatchObject({set:'twoPair',items:[{label:'ダブルペア',bones:30}]});
+ expect(joinBonuses(['kin','kin'],'kin')).toEqual({set:'three',rare:true,items:[{label:'3匹そろい',bones:50},{label:'レア柴',bones:20}]});
+ expect(joinBonuses(['aka','aka','aka'],'aka').items[0]).toEqual({label:'4匹そろい',bones:200});
+ expect([isReach(['kuro','shiro','goma']),isReach(['kuro','shiro','kuro']),isReach(['gin','gin','gin']),isReach(['kuro','kuro'])]).toEqual([false,true,true,false]);
+ const c=new BoneCounter();c.setFriends(['kuro','kuro','kin','kuro']);
+ c.add([],30);c.add([],50);expect(c.bonuses).toEqual([{label:'ペア',bones:10}]);
+ c.add([],100);
+ expect(c.bonuses.map(b=>b.label)).toEqual(['ペア','レア柴','3匹そろい','全員集合']);
+ expect(mergeBonuses([...c.bonuses,{label:'レア柴',bones:20},{label:'クリア',bones:20}])).toEqual([{label:'ペア',bones:10},{label:'レア柴',bones:40},{label:'3匹そろい',bones:50},{label:'全員集合',bones:30},{label:'クリア',bones:20}]);
 });

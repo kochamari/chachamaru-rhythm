@@ -10,8 +10,9 @@ import {beatPhase,downbeatTimes,inSection,friendsForGauge,FRIEND_STEPS} from './
 import {DRUMMER,DANCER,DrummerState,drummerPose,dancerPose,ATLAS_FILES,REGIONS,type Side} from './rig';
 import {PixiCharacter,type AtlasTextures} from './PixiCharacter';
 import {FRIEND_VARIANTS,recolorAtlas} from './recolor';
-import {inFever,ALL_FRIENDS_GAUGE} from '../game/festival';
-import {COSTUMES} from './costumes';
+import {inFever,joinBonuses,isReach,isRare,COMMON_COATS,RARE_COATS,ALL_FRIENDS_BONES,type Bonus} from '../game/festival';
+import {COSTUMES,COATS} from './costumes';
+import type {EffectName} from '../audio/synth';
 import * as art from './art';
 
 const {C}=art;
@@ -22,14 +23,19 @@ export type StageTheme='day'|'evening'|'sunset'|'night';
 export interface RendererOptions {chart:Chart;manifest:Manifest;settings:Settings;difficulty:Difficulty;title:string;artist:string;showPads:boolean;tag?:string;inputHint?:'keyboard'|'midi'|'touch';theme?:StageTheme;
  /** Show the bone counter (runs that earn ほねっこ). */
  rewards?:boolean;
- /** Outfits and coats found in the draw (しばガチャ): the friends wear them. */
- collection?:()=>Promise<Readonly<Record<string,number>>>}
+ /** The run's four friends (coats drawn at the start) and the outfits found in しばガチャ, which they wear. */
+ friends?:()=>Promise<{coats:string[];owned:Readonly<Record<string,number>>}>;
+ /** Sounds that belong to moments only the renderer times (slot reels, sets). */
+ onSound?:(name:EffectName)=>void}
 /** Stage mood per bundled song; imported songs use the daytime festival. */
 export function stageThemeFor(packId:string):StageTheme{return ({'chachamaru-ondo':'evening','yuuyake-shippo':'sunset','hanabi-rush':'night'} as Record<string,StageTheme>)[packId]??'day';}
 interface Particle {s:Sprite;vx:number;vy:number;life:number;max:number;spin:number;gravity:number;grow:number;fade:boolean}
 interface Flyer {s:Sprite;t0:number;dur:number;x0:number;y0:number;cx:number;cy:number;x1:number;y1:number;scale0:number}
 interface Ring {s:Sprite;t0:number;dur:number;scale0:number;scale1:number;alpha:number}
-interface Friend {ch:PixiCharacter;joined:number;left:number;active:boolean;mirror:boolean;name:string;face:Texture}
+interface Friend {ch:PixiCharacter;joined:number;left:number;active:boolean;mirror:boolean;name:string;coat:string;
+ /** Slot reel over their spot: starts when the gauge first reaches their step, stops at revealAt (then they appear). */
+ reelStart:number;revealAt:number;revealed:boolean;reel:Container;reelFace:Sprite;reelSeq:string[];reelIndex:number;tease:boolean;reach:boolean}
+interface BoneFlyer {s:Sprite;t0:number;dur:number;x0:number;y0:number;x1:number;y1:number;bones:number}
 /** Friends shown in the band: four slots, one per gauge step. */
 const FRIEND_SLOTS=4;
 
@@ -61,8 +67,10 @@ export class PlayRenderer {
  private readonly drummerState=new DrummerState();
  private friends:Friend[]=[];
  // Festival rewards: the four friends (their slots in the band), FEVER and the bone counter.
- private allFriendsShown=false;
- private friendPlate=new Container();private friendSlots:{bg:Graphics;face:Sprite|null;q:Text}[]=[];private friendsShown=-1;private nextRing=new Graphics();private lastOne=new Container();
+ private allFriendsShown=false;private coatFaces=new Map<string,Texture>();private coatNames=new Map<string,string>();
+ /** Bonus bones shown so far (they land on the counter from the friends); the award itself is counted by the session. */
+ private landedBonus=0;private boneFlyers:BoneFlyer[]=[];private setLabel=new Container();private setLabelText!:Text;private setLabelAt=-1e9;private setLabelIndex=0;
+ private friendPlate=new Container();private friendSlots:{bg:Graphics;face:Sprite|null;q:Text}[]=[];private friendsShown=-1;private nextRing=new Graphics();private lastOne=new Container();private lastOneText!:Text;
  private friendBanner=new Container();private friendBannerText!:Text;private friendBannerAt=-1e9;private friendBannerIndex=0;
  private fever=false;private feverAt=-1e9;private feverRails=new Graphics();
  private rewardsRoot=new Container();private feverBadge=new Container();private boneText:BitmapText|null=null;
@@ -162,7 +170,7 @@ export class PlayRenderer {
    donleft:b(art.drumHalfGraphic(64,'skin','left',0xff5a36)),donright:b(art.drumHalfGraphic(64,'skin','right',0xff5a36)),
    kaleft:b(art.drumHalfGraphic(64,'rim','left',0x39d2f2)),karight:b(art.drumHalfGraphic(64,'rim','right',0x39d2f2)),
    great:b(art.judgementGraphic('great')),ok:b(art.judgementGraphic('ok')),miss:b(art.judgementGraphic('miss')),
-   lantern:b(lanternGraphic()),confetti:b(new Graphics().rect(-5,-3,10,6).fill(0xffffff)),
+   lantern:b(lanternGraphic()),confetti:b(new Graphics().rect(-5,-3,10,6).fill(0xffffff)),bone:b(boneIcon()),
   };
   for(const text of new Set(this.syllables.values())){
    this.tex['syl:'+text]=b(new Text({text,style:{fontFamily:art.FONT,fontSize:text.length>2?17:19,fontWeight:'900',fill:C.ink,letterSpacing:1}}));
@@ -192,25 +200,47 @@ export class PlayRenderer {
  private async loadFriends(){
   try{
    const img=this.atlas.character.source.resource as CanvasImageSource&{width:number;height:number};
-   const owned:Readonly<Record<string,number>>=await this.opts.collection?.().catch(()=>({}))??{};
+   const drawn=await this.opts.friends?.().catch(()=>null);
+   const owned=drawn?.owned??{};
+   const coats=drawn?.coats??FRIEND_VARIANTS.map(v=>v.id);
    let seed=(Date.now()%2147483646)+1;const random=()=>(seed=(seed*16807)%2147483647)/2147483647;
-   // Who comes last is a small surprise: a rare coat found in the draw may take the fourth place.
-   const variants=[...FRIEND_VARIANTS];
-   const rare=COSTUMES.filter(c=>c.coat&&owned[c.id]).map(c=>c.coat!);
-   if(rare.length&&random()<.35)variants[FRIEND_SLOTS-1]=rare[Math.floor(random()*rare.length)];
+   // Every coat's picture (the reels show them all), then the four drawn friends.
+   const variantOf=(id:string)=>FRIEND_VARIANTS.find(v=>v.id===id)??COATS[id as keyof typeof COATS]??FRIEND_VARIANTS[0];
+   const canvases=new Map<string,HTMLCanvasElement|null>();
+   for(const id of [...COMMON_COATS,...RARE_COATS]){
+    const canvas=await recolorAtlas(img,variantOf(id),'chachamaru-anime-v1',.5);
+    if(!this.alive)return;
+    canvases.set(id,canvas);
+    const [fx,fy,fw,fh]=REGIONS.head,k=canvas?.5:1;
+    this.coatFaces.set(id,new Texture({source:(canvas?Texture.from(canvas):this.atlas.character).source,frame:new Rectangle(fx*k,fy*k,fw*k,fh*k)}));
+    this.coatNames.set(id,variantOf(id).name);
+   }
+   const variants=coats.map(variantOf);
    // Outfits found in the draw: each friend wears a different one while they last.
    const outfits=COSTUMES.filter(c=>c.outfit&&owned[c.id]).map(c=>c.outfit!);
    for(let i=outfits.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[outfits[i],outfits[j]]=[outfits[j],outfits[i]];}
    for(const [i,variant] of variants.entries()){
-    const canvas=await recolorAtlas(img,variant,'chachamaru-anime-v1',.5);
-    if(!this.alive)return;
+    const canvas=canvases.get(coats[i])??null;
     const texture=canvas?Texture.from(canvas):this.atlas.character;
     const ch=new PixiCharacter(DANCER,{character:texture,arms:this.atlas.arms},{showFlower:false,scales:{character:canvas?.5:1}});
     const outfit=outfits.length&&random()<.8?outfits[i%outfits.length]:undefined;
     if(outfit)ch.dress(outfit);
     ch.view.visible=false;ch.view.alpha=0;
-    const k=canvas?.5:1,[fx,fy,fw,fh]=REGIONS.head;
-    this.friends.push({ch,joined:-1e9,left:-1e9,active:false,mirror:i%2===1,name:variant.name,face:new Texture({source:texture.source,frame:new Rectangle(fx*k,fy*k,fw*k,fh*k)})});
+    // The reel: a window over their spot where coats roll by and stop on theirs.
+    const reel=new Container();reel.visible=false;
+    reel.addChild(new Graphics().roundRect(-58,-58,116,116,22).fill({color:0x1c1420,alpha:.92}).stroke({color:C.gold,width:4}));
+    const reelFace=new Sprite(this.coatFaces.get(coats[i]));reelFace.anchor.set(.5);reelFace.height=84;reelFace.scale.x=reelFace.scale.y;
+    // A caption over the window: "だれが来る？", or "リーチ！" when the last one can complete a set.
+    const caption=new Text({text:'だれが来る？',style:{fontFamily:art.FONT,fontSize:20,fontWeight:'900',fill:0xfff2ce,stroke:{color:C.ink,width:5,join:'round'}}});
+    caption.anchor.set(.5,1);caption.position.set(0,-64);caption.label='caption';
+    reel.addChild(reelFace,caption);this.stageFx.addChild(reel);
+    // What rolls by: a shuffled mix of every coat (rare ones now and then), ending on theirs.
+    const pool=[...COMMON_COATS,...COMMON_COATS,...RARE_COATS],seq:string[]=[];
+    for(let n=0;n<(i===FRIEND_SLOTS-1?22:14);n++)seq.push(pool[Math.floor(random()*pool.length)]);
+    seq.push(coats[i]);
+    // A gold glow near the end hints at a rare coat: usually true, sometimes not (like a slot's hint).
+    const tease=isRare(coats[i])?random()<.8:random()<.08;
+    this.friends.push({ch,joined:-1e9,left:-1e9,active:false,mirror:i%2===1,name:variant.name,coat:coats[i],reelStart:-1,revealAt:0,revealed:false,reel,reelFace,reelSeq:seq,reelIndex:-1,tease,reach:false});
     this.stageChars.addChildAt(ch.view,0);
    }
    this.placeCharacters();
@@ -319,16 +349,17 @@ export class PlayRenderer {
    const cx=6+slotW*i+slotW/2,bg=new Graphics().circle(cx,h/2,13).fill({color:0x3a2c3f}).stroke({color:0xffffff,width:1.5,alpha:.35});
    const q=new Text({text:'?',style:{fontFamily:art.FONT,fontSize:15,fontWeight:'900',fill:0xb9a8c2}});q.anchor.set(.5);q.position.set(cx,h/2+1);
    const f=this.friends[i];let face:Sprite|null=null;
-   if(f){face=new Sprite(f.face);face.anchor.set(.5);face.height=28;face.scale.x=face.scale.y;face.position.set(cx,h/2);face.visible=false;}
+   const tex=f&&this.coatFaces.get(f.coat);
+   if(tex){face=new Sprite(tex);face.anchor.set(.5);face.height=28;face.scale.x=face.scale.y;face.position.set(cx,h/2);face.visible=false;}
    this.friendPlate.addChild(bg,q);if(face)this.friendPlate.addChild(face);
    this.friendSlots.push({bg,face,q});
   }
   this.nextRing=new Graphics();this.friendPlate.addChild(this.nextRing);
   // "あと1匹！" on a dark tag under the last slot (readable over the bunting).
   this.lastOne=new Container();
-  const tagText=new Text({text:'あと1匹！',style:{fontFamily:art.FONT,fontSize:13,fontWeight:'900',fill:0xffd23f}});tagText.anchor.set(.5);
-  const tagBg=new Graphics().roundRect(-tagText.width/2-8,-11,tagText.width+16,22,11).fill({color:0x1c1420,alpha:.92}).stroke({color:0xffd23f,width:1.5});
-  this.lastOne.addChild(tagBg,tagText);this.lastOne.position.set(plateW-6-slotW/2,h+12);this.lastOne.visible=false;this.friendPlate.addChild(this.lastOne);
+  this.lastOneText=new Text({text:'あと1匹！',style:{fontFamily:art.FONT,fontSize:13,fontWeight:'900',fill:0xffd23f}});this.lastOneText.anchor.set(.5);
+  const tagBg=new Graphics().roundRect(-this.lastOneText.width/2-8,-11,this.lastOneText.width+16,22,11).fill({color:0x1c1420,alpha:.92}).stroke({color:0xffd23f,width:1.5});
+  this.lastOne.addChild(tagBg,this.lastOneText);this.lastOne.position.set(plateW-6-slotW/2,h+12);this.lastOne.visible=false;this.friendPlate.addChild(this.lastOne);
   this.friendPlate.pivot.set(plateW/2,h/2);this.friendPlate.position.set(x+plateW/2,h/2);
   this.rewardsRoot.addChild(this.friendPlate);x+=plateW+8;
   this.feverBadge=new Container();
@@ -346,6 +377,10 @@ export class PlayRenderer {
   const nb=new Graphics().roundRect(-120,-22,240,44,22).fill({color:0xfff6df}).stroke({color:C.ink,width:3});
   this.friendBannerText=new Text({text:'',style:{fontFamily:art.FONT,fontSize:21,fontWeight:'900',fill:C.donDark}});this.friendBannerText.anchor.set(.5);
   this.friendBanner.addChild(nb,this.friendBannerText);this.stageFx.addChild(this.friendBanner);
+  // What a friend's coat completed: big outlined words over the friend.
+  this.setLabel.destroy({children:true});this.setLabel=new Container();this.setLabel.visible=false;
+  this.setLabelText=new Text({text:'',style:{fontFamily:art.FONT,fontSize:34,fontWeight:'900',fill:0xffd23f,stroke:{color:C.ink,width:7,join:'round'}}});this.setLabelText.anchor.set(.5);
+  this.setLabel.addChild(this.setLabelText);this.stageFx.addChild(this.setLabel);
  }
 
  private buildLanterns(){
@@ -615,13 +650,22 @@ export class PlayRenderer {
   const pose=drummerPose(this.drummerState,time,beat,mood);
   this.drummer.apply(pose);
   void missAge;
-  // Friends join at festival-gauge steps and dance on the beat.
+  // Friends come at festival-gauge steps. The first time, a slot reel spins
+  // over their spot and stops on who it is; then they jump in and dance.
   const want=friendsForGauge(s.gauge);
   this.friends.forEach((f,i)=>{
-   const active=i<want;
-   if(active&&!f.active){f.active=true;f.joined=now;f.ch.view.visible=true;this.onFriendJoin(i,now);}
+   if(i<want&&f.reelStart<0){
+    const prev=this.friends[i-1];
+    f.reelStart=Math.max(now,prev&&prev.reelStart>=0?prev.revealAt+180:now);
+    f.reach=i===FRIEND_SLOTS-1&&isReach(this.friends.slice(0,3).map(x=>x.coat));
+    f.revealAt=f.reelStart+(f.reach?2300:i===FRIEND_SLOTS-1?1500:1000);
+   }
+   if(f.reelStart>=0&&!f.revealed&&now>=f.revealAt){f.revealed=true;this.onReveal(i,now);}
+   const active=i<want&&f.revealed;
+   if(active&&!f.active){f.active=true;f.joined=now;f.ch.view.visible=true;}
    if(!active&&f.active){f.active=false;f.left=now;}
    const p=L.friends[i];if(!p)return;
+   this.drawReel(f,p,now);
    if(f.active){
     const k=Math.min(1,(now-f.joined)/420);
     const pop=k<1?1+Math.sin(k*Math.PI)*.18:1;
@@ -636,11 +680,14 @@ export class PlayRenderer {
   });
   const fever=inFever(s.combo);
   if(fever!==this.fever){this.fever=fever;if(fever)this.onFeverStart(now);}
-  if(s.gauge>=ALL_FRIENDS_GAUGE&&!this.allFriendsShown){this.allFriendsShown=true;this.onAllFriends();}
+  // What a friend's coat completed ("ペア！", "3匹そろった！", "おしい！"…).
+  const lAge=now-this.setLabelAt,lp=L.friends[this.setLabelIndex];
+  this.setLabel.visible=lAge>=0&&lAge<1700&&!!lp;
+  if(this.setLabel.visible&&lp){const k=Math.min(1,lAge/200);this.setLabel.position.set(this.inStage(lp.x,this.setLabelText.width/2),lp.y-lp.height*1.12-52-(1-k)*16);this.setLabel.scale.set(.5+.5*easeOutBack(k));this.setLabel.alpha=lAge>1400?1-(lAge-1400)/300:1;}
   // The name banner over a friend who has just come.
   const nAge=now-this.friendBannerAt,np=L.friends[this.friendBannerIndex];
   this.friendBanner.visible=nAge<1500&&!!np;
-  if(this.friendBanner.visible&&np){const k=Math.min(1,nAge/240);this.friendBanner.position.set(np.x,np.y-np.height*1.12-(1-k)*20);this.friendBanner.scale.set(.6+.4*easeOutBack(k));this.friendBanner.alpha=nAge>1200?1-(nAge-1200)/300:1;}
+  if(this.friendBanner.visible&&np){const k=Math.min(1,nAge/240);this.friendBanner.position.set(this.inStage(np.x,120),np.y-np.height*1.12-(1-k)*20);this.friendBanner.scale.set(.6+.4*easeOutBack(k));this.friendBanner.alpha=nAge>1200?1-(nAge-1200)/300:1;}
   // Balloon from Chachamaru.
   const bAge=now-this.balloonAt;
   this.balloon.visible=bAge<1100;
@@ -668,15 +715,70 @@ export class PlayRenderer {
   if(this.effects!=='off')for(let i=0;i<12;i++){const a=i/12*Math.PI*2;this.particle('spark',L.hitX,L.laneY,Math.cos(a)*4,Math.sin(a)*4,420,0xffd23f,{gravity:.03});}
  }
  /** A friend arrives: name banner over them, a burst of sparks, their slot lights up. */
- private onFriendJoin(i:number,now:number){
-  const f=this.friends[i],p=this.layout.friends[i];if(!f||!p)return;
-  this.friendBannerIndex=i;this.friendBannerAt=now;this.friendBannerText.text=`${f.name}が来た！`;this.friendPopAt=now;
-  if(this.effects!=='off')for(let k=0;k<14;k++){const a=k/14*Math.PI*2;this.particle(k%2?'spark':'petal',p.x,p.y-p.height*.55,Math.cos(a)*(2.5+Math.random()*2),Math.sin(a)*(2.5+Math.random()*2)-1.5,700,k%3?0xffd86b:0xff8fb8,{gravity:.05,spin:.1});}
+ /**
+  * The slot reel over a friend's spot: coats roll by fast, slow down and stop
+  * on theirs (faster for the first ones, long for リーチ). A gold glow near the
+  * end hints at a rare coat. After it stops, the window pops away.
+  */
+ private drawReel(f:Friend,p:{x:number;y:number;height:number},now:number){
+  const pop=now-f.revealAt;
+  f.reel.visible=f.reelStart>=0&&now>=f.reelStart&&pop<320;
+  if(!f.reel.visible)return;
+  const size=Math.min(1.25,p.height/200);
+  f.reel.position.set(this.inStage(p.x,70*size),p.y-p.height*.62);
+  if(pop>=0){const k=pop/320;f.reel.scale.set(size*(1+.5*k));f.reel.alpha=1-k;return;}
+  const dur=f.revealAt-f.reelStart,k=Math.min(1,(now-f.reelStart)/dur);
+  const e=1-Math.pow(1-k,3),pos=e*(f.reelSeq.length-1),index=Math.min(f.reelSeq.length-1,Math.round(pos));
+  if(index!==f.reelIndex){f.reelIndex=index;f.reelFace.texture=this.coatFaces.get(f.reelSeq[index])??f.reelFace.texture;if(index<f.reelSeq.length-1)this.opts.onSound?.('reel');}
+  // Faces slide down as they change.
+  f.reelFace.y=(pos-Math.floor(pos))*-22;
+  f.reel.scale.set(size*(k<.08?.4+7.5*k:1));f.reel.alpha=1;
+  const frame=f.reel.children[0] as Graphics;
+  const glow=f.tease&&k>.72,reachGlow=f.reach;
+  frame.tint=glow?(Math.sin(now*.03)>0?0xfff1a8:0xffc233):reachGlow?rainbow(now):0xffffff;
+  const caption=f.reel.getChildByLabel('caption') as Text|null;
+  if(caption){
+   const word=f.reach?'リーチ！':glow?'もしかして…！？':'だれが来る？';
+   if(caption.text!==word)caption.text=word;
+   caption.style.fill=f.reach?rainbow(now+400):glow?0xffd23f:0xfff2ce;
+   caption.scale.set(f.reach||glow?1.1+.08*Math.sin(now*.02):1);
+  }
  }
- /** 全員集合: all four friends are here. */
- private onAllFriends(){
+ /** x kept inside the stage for something `half` wide on each side. */
+ private inStage(x:number,half:number){const st=this.layout.stage;return Math.max(st.x+half+8,Math.min(st.x+st.w-half-8,x));}
+ /** A friend's reel stops: they are announced, and what their coat completes pays out. */
+ private onReveal(i:number,now:number){
+  const f=this.friends[i],p=this.layout.friends[i];if(!f||!p)return;
+  const before=this.friends.slice(0,i).map(x=>x.coat),{items,set,rare}=joinBonuses(before,f.coat);
+  this.friendBannerIndex=i;this.friendBannerAt=now;this.friendBannerText.text=rare?`レア！ ${f.name}が来た！`:`${f.name}が来た！`;this.friendPopAt=now;
+  this.opts.onSound?.(rare?'gachaRare':'join');
+  if(this.effects!=='off')for(let k=0;k<(rare?24:14);k++){const a=k/(rare?24:14)*Math.PI*2;this.particle(k%2?'spark':'petal',p.x,p.y-p.height*.55,Math.cos(a)*(2.5+Math.random()*2),Math.sin(a)*(2.5+Math.random()*2)-1.5,700,rare?[0xffd23f,0xff8fb8,0x7fe8ff][k%3]:k%3?0xffd86b:0xff8fb8,{gravity:.05,spin:.1});}
+  // Sets: a label over them, a chime that grows with the set, fireworks for four.
+  // Three or four the same get the big stage message; smaller sets (or a missed リーチ) a label over the friend.
+  const label=set==='twoPair'?'ダブルペア！ ＋30':set==='pair'?'ペア！ ＋10':!set&&f.reach?'おしい！':rare&&!set?'レア！ ＋20':'';
+  if(label){this.setLabelText.text=label;this.setLabelText.style.fill=set==='four'?0xff5fa2:set==='three'?0xffd23f:set?0xfff2ce:0xb9c4d6;this.setLabelIndex=i;this.setLabelAt=now+150;}
+  if(set==='four'){this.opts.onSound?.('allGreat');this.showMessage('4匹そろった！！','大当たり！ ほねっこ ＋200');const st=this.layout.stage;if(this.effects!=='off')[0,200,400,600].forEach((d,k)=>window.setTimeout(()=>{if(this.alive)this.firework(st.x+st.w*(.2+.2*k),st.y+st.h*(.14+.08*(k%2)));},d));}
+  else if(set==='three'){this.opts.onSound?.('fullCombo');this.showMessage('3匹そろった！','ほねっこ ＋50');}
+  else if(set)this.opts.onSound?.(set==='twoPair'?'combo50':'combo10');
+  const bonus:Bonus[]=[...items];
+  if(i===FRIEND_SLOTS-1){bonus.push({label:'全員集合',bones:ALL_FRIENDS_BONES});if(!set)this.onAllFriends();else if(this.effects!=='off')this.onAllFriends(true);}
+  // The bones fly from the friend to the counter.
+  if(this.opts.rewards)for(const b of bonus)this.flyBones(p.x,p.y-p.height*.6,b.bones,now);
+ }
+ private flyBones(x:number,y:number,bones:number,now:number){
+  const L=this.layout,n=Math.max(1,Math.min(8,Math.ceil(bones/10)));
+  const x1=L.rewards.x+24,y1=L.rewards.y+17;
+  for(let k=0;k<n;k++){
+   const s=this.take('bone');if(!s){this.landedBonus+=bones-Math.floor(bones/n)*k;return;}
+   s.position.set(x,y);s.scale.set(.9);s.alpha=1;s.blendMode='normal';s.visible=false;this.topFx.addChild(s);
+   const share=k===n-1?bones-Math.floor(bones/n)*(n-1):Math.floor(bones/n);
+   this.boneFlyers.push({s,t0:now+k*70,dur:520,x0:x+(Math.random()-.5)*40,y0:y+(Math.random()-.5)*30,x1,y1,bones:share});
+  }
+ }
+ /** 全員集合: all four friends are here (quietly when a set already took the stage). */
+ private onAllFriends(quiet=false){
   const st=this.layout.stage;
-  this.showMessage('全員集合！','ちゃちゃまるの仲間が、みんなそろった！');
+  if(!this.allFriendsShown){this.allFriendsShown=true;if(!quiet){this.showMessage('全員集合！','ちゃちゃまるの仲間が、みんなそろった！');this.opts.onSound?.('fullHouse');}}
   if(this.effects!=='off')[0,260,520].forEach((d,i)=>window.setTimeout(()=>{if(this.alive)this.firework(st.x+st.w*(.3+.2*i),st.y+st.h*(.16+.06*(i%2)));},d));
  }
 
@@ -797,7 +899,8 @@ export class PlayRenderer {
   const p=Math.max(0,Math.min(1,time/this.opts.manifest.durationMs));
   this.progressBar.width=L.progress.w*p;
   // Bones, friends and FEVER counters.
-  if(this.boneText&&this.bones!==this.bonesShown){if(this.bones>this.bonesShown&&this.bonesShown>=0)this.bonePopAt=now;this.bonesShown=this.bones;this.boneText.text=this.bones.toLocaleString('en-US');}
+  const bones=this.bones+this.landedBonus;
+  if(this.boneText&&bones!==this.bonesShown){if(bones>this.bonesShown&&this.bonesShown>=0)this.bonePopAt=now;this.bonesShown=bones;this.boneText.text=bones.toLocaleString('en-US');}
   const bonePlate=this.rewardsRoot.getChildByLabel('bones');
   if(bonePlate){const age=now-this.bonePopAt;bonePlate.scale.set(age<120?1+.06*Math.sin(age/120*Math.PI):1);}
   this.drawFriendSlots(now,s);
@@ -811,11 +914,10 @@ export class PlayRenderer {
 
  /** Friend slots: faces of those who came, ? for the rest; the next one's ring fills toward its gauge step. */
  private drawFriendSlots(now:number,s:GameSnapshot){
-  const shown=this.friends.filter(f=>f.active).length;
-  if(shown!==this.friendsShown){
-   this.friendsShown=shown;this.gaugeRing=-1;
-   this.friendSlots.forEach((slot,i)=>{const on=i<shown;if(slot.face)slot.face.visible=on;slot.q.visible=!on;});
-  }
+  // A slot shows the friend once their reel has stopped (dimmed while they are away).
+  const shown=this.friends.filter(f=>f.revealed).length;
+  if(shown!==this.friendsShown){this.friendsShown=shown;this.gaugeRing=-1;}
+  this.friendSlots.forEach((slot,i)=>{const f=this.friends[i],on=!!f?.revealed;if(slot.face){slot.face.visible=on;slot.face.alpha=f?.active?1:.45;}slot.q.visible=!on;});
   const age=now-this.friendPopAt;this.friendPlate.scale.set(age<260?1+.14*Math.sin(age/260*Math.PI):1);
   // Ring toward the next friend.
   const next=shown<FRIEND_SLOTS?FRIEND_STEPS[shown]:null,prev=shown?FRIEND_STEPS[shown-1]:0;
@@ -825,9 +927,15 @@ export class PlayRenderer {
    this.gaugeRing=ring;this.nextRing.clear();
    if(next!==null&&part>0){const cx=6+34*shown+17,cy=17;this.nextRing.arc(cx,cy,14.5,-Math.PI/2,-Math.PI/2+part*Math.PI*2).stroke({color:0xffd23f,width:3});}
   }
-  // The last one: "あと1匹！" pulses while three have come.
+  // The last one: "あと1匹！" pulses while three have come; リーチ when the fourth can complete a set.
   this.lastOne.visible=shown===FRIEND_SLOTS-1;
-  if(this.lastOne.visible){this.lastOne.scale.set(1+.08*Math.sin(now*.012));const q=this.friendSlots[FRIEND_SLOTS-1]?.q;if(q)q.style.fill=Math.sin(now*.012)>0?0xffd23f:0xb9a8c2;}
+  if(this.lastOne.visible){
+   const reach=isReach(this.friends.slice(0,3).map(f=>f.coat)),word=reach?'リーチ！':'あと1匹！';
+   if(this.lastOneText.text!==word)this.lastOneText.text=word;
+   this.lastOneText.style.fill=reach?rainbow(now):0xffd23f;
+   this.lastOne.scale.set(1+(reach?.14:.08)*Math.sin(now*(reach?.018:.012)));
+   const q=this.friendSlots[FRIEND_SLOTS-1]?.q;if(q)q.style.fill=Math.sin(now*.012)>0?0xffd23f:0xb9a8c2;
+  }
  }
 
  private drawGauge(v:number){
@@ -935,6 +1043,14 @@ export class PlayRenderer {
    const e=k*k*(3-2*k),u=1-e;
    fl.s.position.set(u*u*fl.x0+2*u*e*fl.cx+e*e*fl.x1,u*u*fl.y0+2*u*e*fl.cy+e*e*fl.y1);
    fl.s.scale.set(fl.scale0*(1-.45*k));fl.s.alpha=k>.85?(1-k)/.15:1;
+  }
+  for(let i=this.boneFlyers.length-1;i>=0;i--){
+   const b=this.boneFlyers[i],k=(now-b.t0)/b.dur;
+   if(k<0)continue;
+   b.s.visible=true;
+   if(k>=1){this.give(b.s);this.boneFlyers.splice(i,1);this.landedBonus+=b.bones;this.bonePopAt=now;continue;}
+   const e=k*k*(3-2*k),arc=Math.sin(k*Math.PI)*-90;
+   b.s.position.set(b.x0+(b.x1-b.x0)*e,b.y0+(b.y1-b.y0)*e+arc);b.s.rotation=k*Math.PI*2;b.s.scale.set(.9-.35*k);
   }
   for(let i=this.rings.length-1;i>=0;i--){
    const r=this.rings[i],k=(now-r.t0)/r.dur;

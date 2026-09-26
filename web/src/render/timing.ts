@@ -22,6 +22,5 @@ export function inSection(sections:readonly {kind:string;startMs:number;endMs:nu
  return sections.some(s=>s.kind===kind&&time>=s.startMs&&time<s.endMs);
 }
 
-/** Friends that join the dance: one more at each festival-gauge step. */
-export const FRIEND_STEPS=[30,50,70,100] as const;
-export function friendsForGauge(gauge:number){return FRIEND_STEPS.filter(step=>gauge>=step).length;}
+/** Friends that join the dance: one more at each festival-gauge step (defined with the festival rewards). */
+export {FRIEND_STEPS,friendsForGauge} from '../game/festival';

@@ -73,6 +73,8 @@ const coat=(id:string,name:string,fur:(s:number,v:number)=>[number,number,number
 export const COATS={
  kin:coat('kin','きんまる',(s,v)=>[42,Math.min(1,s*1.05+.1),Math.min(1,.3+v*.78)],350),
  sakura:coat('sakura','さくらまる',(s,v)=>[344,Math.min(1,s*.42),Math.min(1,.62+v*.42)],120),
+ /** Only met on stage (not in the draw). */
+ gin:coat('gin','ぎんまる',(s,v)=>[212,s*.16,Math.min(1,.5+v*.55)],208),
 };
 
 export const COSTUMES:Costume[]=[

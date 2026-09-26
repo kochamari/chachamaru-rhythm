@@ -27,7 +27,7 @@ export function validFestival(v:unknown):v is FestivalData{
  if(f.schemaVersion!==1||!count(f.bones)||!count(f.earned)||!count(f.pulls)||!f.owned||typeof f.owned!=='object'||Array.isArray(f.owned)||!Array.isArray(f.awards)||f.awards.length>50)return false;
  const ids=Object.entries(f.owned);
  if(ids.length>500||!ids.every(([k,n])=>/^[a-z0-9-]{1,40}$/.test(k)&&count(n,1e6)))return false;
- return f.awards.every(a=>a&&typeof a.runId==='string'&&a.runId.length<=200&&typeof a.date==='string'&&count(a.play)&&count(a.total)&&Array.isArray(a.items)&&a.items.length<=10&&a.items.every(i=>i&&typeof i.label==='string'&&i.label.length<=40&&count(i.bones)));
+ return f.awards.every(a=>a&&typeof a.runId==='string'&&a.runId.length<=200&&typeof a.date==='string'&&count(a.play)&&count(a.total)&&Array.isArray(a.items)&&a.items.length<=12&&a.items.every(i=>i&&typeof i.label==='string'&&i.label.length<=40&&count(i.bones)));
 }
 
 export async function loadFestival():Promise<FestivalData>{
