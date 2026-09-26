@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import {beforeEach,it,expect} from 'vitest';
-import {boneGain,finishBones,BoneCounter,inFever,FEVER_COMBO,ALL_FRIENDS_BONES,ALL_FRIENDS_GAUGE,drawFriends,joinBonuses,isReach,mergeBonuses,RARE_COATS,COMMON_COATS} from '../../web/src/game/festival';
+import {boneGain,finishBones,BoneCounter,inFever,feverLevel,FEVER_COMBO,ALL_FRIENDS_BONES,ALL_FRIENDS_GAUGE,drawFriends,joinBonuses,isReach,mergeBonuses,RARE_COATS,COMMON_COATS} from '../../web/src/game/festival';
 import {awardBones,loadFestival,validFestival,emptyFestival} from '../../web/src/storage/festival';
 import {db} from '../../web/src/storage/Database';
 import type {EffectEvent} from '../../contracts/public-types';
@@ -8,12 +8,14 @@ import type {EffectEvent} from '../../contracts/public-types';
 beforeEach(async()=>{await (await db()).clear('settings');});
 const hit=(kind:EffectEvent['kind'],extra:Partial<EffectEvent>={}):EffectEvent=>({kind,timeMs:0,...extra});
 
-it('ほねっこ: 良 1 (big note 2), doubled in FEVER, +10 every 50 combo; 可 and misses give none',()=>{
- expect(boneGain(hit('great'),false)).toBe(1);
- expect(boneGain(hit('great',{size:'large'}),false)).toBe(2);
- expect(boneGain(hit('great',{size:'large'}),true)).toBe(4);
- expect(boneGain(hit('ok'),true)).toBe(0);expect(boneGain(hit('miss'),true)).toBe(0);
- expect(boneGain(hit('combo',{value:50}),false)).toBe(10);expect(boneGain(hit('combo',{value:10}),false)).toBe(0);
+it('ほねっこ: 良 1 (big note 2), ×2 in FEVER, ×3 in SUPER FEVER, +10 every 50 combo; 可 and misses give none',()=>{
+ expect(boneGain(hit('great'),0)).toBe(1);
+ expect(boneGain(hit('great',{size:'large'}),0)).toBe(2);
+ expect(boneGain(hit('great',{size:'large'}),1)).toBe(4);
+ expect(boneGain(hit('great',{size:'large'}),2)).toBe(6);
+ expect(boneGain(hit('ok'),2)).toBe(0);expect(boneGain(hit('miss'),1)).toBe(0);
+ expect(boneGain(hit('combo',{value:50}),0)).toBe(10);expect(boneGain(hit('combo',{value:10}),0)).toBe(0);
+ expect([feverLevel(29),feverLevel(30),feverLevel(99),feverLevel(100)]).toEqual([0,1,1,2]);
  expect(inFever(FEVER_COMBO-1)).toBe(false);expect(inFever(FEVER_COMBO)).toBe(true);
 });
 

@@ -10,7 +10,7 @@ import {beatPhase,downbeatTimes,inSection,friendsForGauge,FRIEND_STEPS} from './
 import {DRUMMER,DANCER,DrummerState,drummerPose,dancerPose,ATLAS_FILES,REGIONS,type Side} from './rig';
 import {PixiCharacter,type AtlasTextures} from './PixiCharacter';
 import {FRIEND_VARIANTS,recolorAtlas} from './recolor';
-import {inFever,joinBonuses,isReach,isRare,COMMON_COATS,RARE_COATS,ALL_FRIENDS_BONES,type Bonus} from '../game/festival';
+import {feverLevel,joinBonuses,isReach,isRare,COMMON_COATS,RARE_COATS,ALL_FRIENDS_BONES,type Bonus} from '../game/festival';
 import {COSTUMES,COATS} from './costumes';
 import type {EffectName} from '../audio/synth';
 import * as art from './art';
@@ -72,7 +72,9 @@ export class PlayRenderer {
  private landedBonus=0;private boneFlyers:BoneFlyer[]=[];private setLabel=new Container();private setLabelText!:Text;private setLabelAt=-1e9;private setLabelIndex=0;
  private friendPlate=new Container();private friendSlots:{bg:Graphics;face:Sprite|null;q:Text}[]=[];private friendsShown=-1;private nextRing=new Graphics();private lastOne=new Container();private lastOneText!:Text;
  private friendBanner=new Container();private friendBannerText!:Text;private friendBannerAt=-1e9;private friendBannerIndex=0;
- private fever=false;private feverAt=-1e9;private feverRails=new Graphics();
+ private fever=0;private feverAt=-1e9;private feverRails=new Graphics();private feverBg=new Graphics();private feverLabel!:Text;private feverX=0;
+ // Small rewards while playing: the score rolls up with +points floating off it, combo milestones, the clear line.
+ private scoreShown=0;private scoreTarget=0;private floaters:{t:BitmapText;at:number}[]=[];private milestone=0;private comboSeen=0;private milestoneBox=new Container();private milestoneText!:Text;private milestoneAt=-1e9;private clearLineShown=false;private clearLineAt=-1e9;private clearLineText!:Text;
  private rewardsRoot=new Container();private feverBadge=new Container();private boneText:BitmapText|null=null;
  private bones=0;private bonesShown=-1;private bonePopAt=-1e9;private friendPopAt=-1e9;private gaugeRing=-1;
  private notePool:Sprite[]=[];private syllablePool:Sprite[]=[];private barPool:Sprite[]=[];
@@ -105,7 +107,7 @@ export class PlayRenderer {
  private lastFrame=performance.now();private lastSongTime=-1e9;private upcoming=0;
  private frameSamples:number[]=[];private slowWindows=0;private frameWindowAt=0;private frameWindowStarted=0;
  private resizeObserver:ResizeObserver;
- private lastCombo=0;private comboPopAt=-1e9;private shownScore=-1;private progressBar!:Sprite;private sizeKey='';
+ private lastCombo=0;private comboPopAt=-1e9;private shownScore=-1;private lastHud=performance.now();private progressBar!:Sprite;private sizeKey='';
  private labels={balloon:'',roll:'',message:'',messageSub:''};private celebration:'allGreat'|'fullCombo'|'clear'|'finish'|null=null;
 
  constructor(private host:HTMLElement,private opts:RendererOptions){
@@ -177,7 +179,7 @@ export class PlayRenderer {
   }
  }
  private installFonts(){
-  const chars=[['0','9'],',',' '];
+  const chars=[['0','9'],',',' ','+'];
   // Bitmap fonts live in Pixi's global cache; each session installs its own
   // copy and uninstalls it in dispose() (textures belong to that renderer).
   BitmapFont.install({name:'ChachaScore',style:{fontFamily:art.FONT,fontSize:34,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:7,join:'round'}},chars,resolution:2,padding:4});
@@ -363,11 +365,10 @@ export class PlayRenderer {
   this.friendPlate.pivot.set(plateW/2,h/2);this.friendPlate.position.set(x+plateW/2,h/2);
   this.rewardsRoot.addChild(this.friendPlate);x+=plateW+8;
   this.feverBadge=new Container();
-  const badgeW=this.opts.rewards?150:112;
-  const badge=new Graphics().roundRect(0,0,badgeW,h,h/2).fill(0xffc233).stroke({color:C.ink,width:2.5});
-  const label=new Text({text:this.opts.rewards?'フィーバー ×2':'フィーバー',style:{fontFamily:art.FONT,fontSize:16,fontWeight:'900',fill:C.ink}});
-  label.anchor.set(.5);label.position.set(badgeW/2,h/2+1);
-  this.feverBadge.addChild(badge,label);this.feverBadge.pivot.set(badgeW/2,h/2);this.feverBadge.position.set(x+badgeW/2,h/2);this.feverBadge.visible=false;
+  this.feverBg=new Graphics();
+  this.feverLabel=new Text({text:'',style:{fontFamily:art.FONT,fontSize:16,fontWeight:'900',fill:C.ink}});this.feverLabel.anchor.set(.5);
+  this.feverBadge.addChild(this.feverBg,this.feverLabel);this.feverX=x;this.feverBadge.visible=false;
+  this.setFeverBadge(Math.max(1,this.fever));
   this.rewardsRoot.addChild(this.feverBadge);
   this.rewardsRoot.position.set(L.rewards.x,L.rewards.y);
   this.hud.addChild(this.rewardsRoot);
@@ -377,10 +378,28 @@ export class PlayRenderer {
   const nb=new Graphics().roundRect(-120,-22,240,44,22).fill({color:0xfff6df}).stroke({color:C.ink,width:3});
   this.friendBannerText=new Text({text:'',style:{fontFamily:art.FONT,fontSize:21,fontWeight:'900',fill:C.donDark}});this.friendBannerText.anchor.set(.5);
   this.friendBanner.addChild(nb,this.friendBannerText);this.stageFx.addChild(this.friendBanner);
+  // Milestones, the clear line and the score floaters.
+  this.milestoneBox.destroy({children:true});this.milestoneBox=new Container();this.milestoneBox.visible=false;
+  this.milestoneText=new Text({text:'',style:{fontFamily:art.FONT,fontSize:40,fontWeight:'900',fill:0xffd23f,stroke:{color:C.ink,width:8,join:'round'}}});this.milestoneText.anchor.set(.5);
+  this.milestoneBox.addChild(this.milestoneText);this.stageFx.addChild(this.milestoneBox);
+  this.clearLineText?.destroy();
+  this.clearLineText=new Text({text:'クリアライン突破！',style:{fontFamily:art.FONT,fontSize:18,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:5,join:'round'}}});this.clearLineText.anchor.set(.5);this.clearLineText.visible=false;
+  this.topFx.addChild(this.clearLineText);
+  for(const f of this.floaters)if(!f.t.destroyed)f.t.destroy();this.floaters=[];
+  for(let k=0;k<4;k++){const t=new BitmapText({text:'',style:{fontFamily:'ChachaScore',fontSize:Math.round(L.score.size*.5)}});t.anchor.set(1,.5);t.tint=0xffe27a;t.x=L.score.x;t.visible=false;this.hud.addChild(t);this.floaters.push({t,at:-1e9});}
   // What a friend's coat completed: big outlined words over the friend.
   this.setLabel.destroy({children:true});this.setLabel=new Container();this.setLabel.visible=false;
   this.setLabelText=new Text({text:'',style:{fontFamily:art.FONT,fontSize:34,fontWeight:'900',fill:0xffd23f,stroke:{color:C.ink,width:7,join:'round'}}});this.setLabelText.anchor.set(.5);
   this.setLabel.addChild(this.setLabelText);this.stageFx.addChild(this.setLabel);
+ }
+
+ /** FEVER badge for a level: "フィーバー ×2" or the wider rainbow-edged "スーパーフィーバー ×3". */
+ private setFeverBadge(level:number){
+  const h=34,text=(level>=2?'スーパーフィーバー':'フィーバー')+(this.opts.rewards?` ×${level+1}`:'');
+  this.feverLabel.text=text;
+  const w=Math.max(112,Math.round(this.feverLabel.width+30));
+  this.feverBg.clear().roundRect(0,0,w,h,h/2).fill(level>=2?0xff8fc8:0xffc233).stroke({color:C.ink,width:2.5});
+  this.feverLabel.position.set(w/2,h/2+1);this.feverBadge.pivot.set(w/2,h/2);this.feverBadge.position.set(this.feverX+w/2,h/2);
  }
 
  private buildLanterns(){
@@ -678,8 +697,8 @@ export class PlayRenderer {
     if(k>=1)f.ch.view.visible=false;
    }
   });
-  const fever=inFever(s.combo);
-  if(fever!==this.fever){this.fever=fever;if(fever)this.onFeverStart(now);}
+  const fever=feverLevel(s.combo);
+  if(fever!==this.fever){const up=fever>this.fever;this.fever=fever;if(fever)this.setFeverBadge(fever);if(up)this.onFeverStart(now);}
   // What a friend's coat completed ("ペア！", "3匹そろった！", "おしい！"…).
   const lAge=now-this.setLabelAt,lp=L.friends[this.setLabelIndex];
   this.setLabel.visible=lAge>=0&&lAge<1700&&!!lp;
@@ -744,6 +763,30 @@ export class PlayRenderer {
    caption.scale.set(f.reach||glow?1.1+.08*Math.sin(now*.02):1);
   }
  }
+ /** "+points" floating off the score (a few recycled texts). */
+ private floatScore(points:number,now:number){
+  if(this.effects==='off'||!this.floaters.length)return;
+  const f=this.floaters.reduce((a,b)=>a.at<b.at?a:b);
+  f.t.text='+'+points.toLocaleString('en-US');f.at=now;f.t.visible=true;
+ }
+ /** 50, 100, 150… combo: big words at the top of the stage (rainbow on hundreds), never over the notes. */
+ private onMilestone(m:number,now:number){
+  const L=this.layout,st=L.stage,hundred=m%100===0;
+  this.milestoneText.text=hundred?`${m}コンボ！！`:`${m}コンボ！`;this.milestoneText.style.fill=hundred?0xffffff:0xffd23f;
+  this.milestoneBox.position.set(st.x+st.w*.62,st.y+44);this.milestoneAt=now;
+  if(this.effects!=='off'){
+   for(let k=0;k<(hundred?20:10);k++){const a=k/(hundred?20:10)*Math.PI*2;this.particle('spark',st.x+st.w*.62,st.y+44,Math.cos(a)*(3+Math.random()*2),Math.sin(a)*(2+Math.random()*1.5),600,hundred?[0xff8fb8,0xffd23f,0x7fe8ff][k%3]:0xffd86b,{gravity:.04});}
+   if(hundred)[0,220].forEach((d,k)=>window.setTimeout(()=>{if(this.alive)this.firework(st.x+st.w*(.45+.3*k),st.y+st.h*.2);},d));
+  }
+ }
+ /** The gauge passes 70% for the first time. */
+ private onClearLine(){
+  const g=this.layout.gauge,clearX=g.x+4+(g.w-g.h*1.6-8)*.7;
+  // Over the stage (never over the notes), below the gauge's clear mark.
+  this.clearLineText.position.set(Math.max(this.layout.stage.x+120,Math.min(clearX,this.layout.W-120)),this.layout.stage.y+24);
+  this.opts.onSound?.('combo50');
+  if(this.effects!=='off')for(let k=0;k<12;k++)this.particle('spark',clearX,g.y+g.h/2,(Math.random()-.5)*5,-1-Math.random()*3,500,0xffffff,{gravity:.08});
+ }
  /** x kept inside the stage for something `half` wide on each side. */
  private inStage(x:number,half:number){const st=this.layout.stage;return Math.max(st.x+half+8,Math.min(st.x+st.w-half-8,x));}
  /** A friend's reel stops: they are announced, and what their coat completes pays out. */
@@ -803,6 +846,8 @@ export class PlayRenderer {
   // FEVER rails glow on the beat (a gentle pulse, no flashing) and fade out when it ends.
   const railTarget=this.fever&&this.effects!=='off'?.55+.3*Math.max(0,Math.cos(beat*Math.PI*2)):0;
   this.feverRails.alpha+=(railTarget-this.feverRails.alpha)*Math.min(1,.2);this.feverRails.visible=this.feverRails.alpha>.01;
+  // SUPER FEVER: the rails turn slowly through the rainbow.
+  this.feverRails.tint=this.fever>=2?rainbow(now*.6):0xffffff;
   // Walk back if time moved backwards (retry, seek).
   if(visible<this.lastSongTime)this.upcoming=0;
   this.lastSongTime=visible;
@@ -874,7 +919,28 @@ export class PlayRenderer {
 
  private drawHud(now:number,s:GameSnapshot,time:number){
   const L=this.layout;
-  if(s.score!==this.shownScore){this.shownScore=s.score;this.scoreText.text=s.score.toLocaleString('en-US');}
+  // The score rolls up to its value; each gain floats off as "+points".
+  if(s.score>this.scoreTarget){this.floatScore(s.score-this.scoreTarget,now);this.scoreTarget=s.score;}
+  else if(s.score<this.scoreTarget){this.scoreTarget=this.scoreShown=s.score;}
+  this.scoreShown+=(this.scoreTarget-this.scoreShown)*Math.min(1,(now-this.lastHud)/70);
+  if(Math.abs(this.scoreTarget-this.scoreShown)<1)this.scoreShown=this.scoreTarget;
+  const shownScore=Math.round(this.scoreShown);
+  if(shownScore!==this.shownScore){this.shownScore=shownScore;this.scoreText.text=shownScore.toLocaleString('en-US');}
+  this.lastHud=now;
+  // "+points" rise from just under the score box (the newest only, so they never pile up).
+  const newest=this.floaters.reduce((a,b)=>a.at>b.at?a:b,this.floaters[0]);
+  for(const f of this.floaters){const k=(now-f.at)/600;f.t.visible=f===newest&&k>=0&&k<1;if(f.t.visible){f.t.y=L.scoreBox.y+L.scoreBox.h+16-k*14;f.t.alpha=k<.15?k/.15:1-(k-.15)/.85;}}
+  // Combo milestones every 50 (a new one after a break counts again).
+  if(s.combo<this.comboSeen)this.milestone=Math.floor(s.combo/50)*50;
+  this.comboSeen=s.combo;
+  const m=Math.floor(s.combo/50)*50;
+  if(m>=50&&m>this.milestone){this.milestone=m;this.onMilestone(m,now);}
+  const mAge=now-this.milestoneAt;this.milestoneBox.visible=mAge<1300;
+  if(this.milestoneBox.visible){const k=Math.min(1,mAge/220);this.milestoneBox.scale.set(.4+.6*easeOutBack(k));this.milestoneBox.alpha=mAge>1000?1-(mAge-1000)/300:1;this.milestoneBox.y=L.stage.y+44-Math.min(1,mAge/1300)*14;if(this.milestone%100===0)this.milestoneText.style.fill=rainbow(now);}
+  // The first time the gauge passes the clear line.
+  if(!this.clearLineShown&&s.gauge>=70){this.clearLineShown=true;this.clearLineAt=now;this.onClearLine();}
+  const cAge=now-this.clearLineAt;this.clearLineText.visible=cAge<1500;
+  if(this.clearLineText.visible){const k=Math.min(1,cAge/200);this.clearLineText.scale.set(.5+.5*easeOutBack(k));this.clearLineText.alpha=cAge>1200?1-(cAge-1200)/300:1;}
   // Combo on the drum.
   if(s.combo!==this.lastCombo){if(s.combo>this.lastCombo)this.comboPopAt=now;this.lastCombo=s.combo;}
   const showCombo=s.combo>=3;
@@ -904,7 +970,7 @@ export class PlayRenderer {
   const bonePlate=this.rewardsRoot.getChildByLabel('bones');
   if(bonePlate){const age=now-this.bonePopAt;bonePlate.scale.set(age<120?1+.06*Math.sin(age/120*Math.PI):1);}
   this.drawFriendSlots(now,s);
-  this.feverBadge.visible=this.fever;
+  this.feverBadge.visible=this.fever>0;
   if(this.fever){const age=now-this.feverAt;this.feverBadge.scale.set(age<320?.4+.6*easeOutBack(age/320):1+.04*Math.sin(now*.012));}
   // Roll balloon.
   const rAge=now-this.rollAt;
@@ -1116,7 +1182,7 @@ export class PlayRenderer {
  /** Snapshot of renderer state for tests and diagnostics. */
  debug(){
   return {layout:this.layout,chorus:this.chorus,chorusMix:this.chorusMix,friends:this.friends.filter(f=>f.active).length,
-   fever:this.fever,bones:this.bonesShown,
+   fever:this.fever,bones:this.bonesShown,score:Math.round(this.scoreShown),milestone:this.milestone,
    notes:this.notePool.filter(s=>s.visible).length,particles:this.particles.length,flyers:this.flyers.length,
    drummer:this.drummer?.angles(),drummerState:this.drummer?this.host.dataset.state:undefined,pads:this.opts.showPads,
    pose:this.drummer?drummerPose(this.drummerState,this.lastSongTime,0,'idle').state:''};

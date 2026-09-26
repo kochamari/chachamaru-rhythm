@@ -76,10 +76,14 @@ export const ALL_FRIENDS_BONES=30;
 export const COMBO_BONES=10;
 
 export const inFever=(combo:number)=>combo>=FEVER_COMBO;
+/** SUPER FEVER from this combo on. */
+export const SUPER_FEVER_COMBO=100;
+/** 0 = none, 1 = FEVER (bones ×2), 2 = SUPER FEVER (bones ×3). */
+export const feverLevel=(combo:number)=>combo>=SUPER_FEVER_COMBO?2:combo>=FEVER_COMBO?1:0;
 
-/** Bones for one judgement event: 良 1 (big note 2), doubled in FEVER; +10 every 50 combo. */
-export function boneGain(e:Pick<EffectEvent,'kind'|'size'|'value'>,fever:boolean){
- if(e.kind==='great')return (e.size==='large'?2:1)*(fever?2:1);
+/** Bones for one judgement event: 良 1 (big note 2), ×2 in FEVER and ×3 in SUPER FEVER; +10 every 50 combo. */
+export function boneGain(e:Pick<EffectEvent,'kind'|'size'|'value'>,fever:number){
+ if(e.kind==='great')return (e.size==='large'?2:1)*(1+fever);
  if(e.kind==='combo'&&e.value&&e.value%50===0)return COMBO_BONES;
  return 0;
 }
@@ -106,7 +110,7 @@ export class BoneCounter {
  setFriends(coats:readonly string[]){this.coats=[...coats];}
  add(events:readonly EffectEvent[],gauge:number){
   for(const e of events){
-   this.play+=boneGain(e,inFever(this.combo));
+   this.play+=boneGain(e,feverLevel(this.combo));
    if(e.kind==='great'||e.kind==='ok')this.combo++;
    else if(e.kind==='miss')this.combo=0;
   }

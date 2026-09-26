@@ -9,7 +9,7 @@ import {saveRun,saveSettings} from '../storage/Database';
 import {adoptDrum} from '../app/drumMode';
 import {lockZoom} from '../app/zoom';
 import {outputOptions,useOutput,setTiming,clampDelay,signedMs} from '../app/output';
-import {BoneCounter,inFever,finishBones,drawFriends,mergeBonuses,drawSlot,xpForRun} from './festival';
+import {BoneCounter,feverLevel,finishBones,drawFriends,mergeBonuses,drawSlot,xpForRun} from './festival';
 import {cryptoRandom} from './gacha';
 import {awardBones,loadFestival} from '../storage/festival';
 
@@ -28,7 +28,7 @@ export class Session {
  /** Player hits judged so far, and whether the screen is set up for the electronic drum. */
  private judged=0;private drumUi=false;
  /** ほねっこ for this run (normal play only), and the festival moments that get a sound. */
- private readonly rewards:boolean;private readonly boneCounter=new BoneCounter();private fever=false;
+ private readonly rewards:boolean;private readonly boneCounter=new BoneCounter();private fever=0;
  /** The four friends of this run (a slot draw; rare coats found in しばガチャ come more often). */
  private readonly friendDraw:Promise<{coats:string[];owned:Readonly<Record<string,number>>}>;
  private abort=new AbortController();private wake:WakeLockSentinel|null=null;
@@ -226,8 +226,9 @@ export class Session {
    if(e.kind==='combo')this.audio.chime(e.value!>=100?3:e.value!>=50?2:1);
   }
   if(this.rewards)this.boneCounter.add(events,s.gauge);
-  const fever=inFever(s.combo);
-  if(fever&&!this.fever&&this.status==='PLAYING')this.audio.effect('fever');
+  // FEVER at 30 combo, SUPER FEVER at 100: a rising run each time it goes up.
+  const fever=feverLevel(s.combo);
+  if(fever>this.fever&&this.status==='PLAYING')this.audio.effect('fever');
   this.fever=fever;
   if(s.finished&&!this.celebrated&&this.status==='PLAYING'&&!this.practice){
    this.celebrated=true;
