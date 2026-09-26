@@ -6,13 +6,12 @@ import type {Chart,Manifest,Settings,GameSnapshot,EffectEvent,Note,Tap,Roll,Diff
 import {computeLayout,logicalSize,noteX,TRAVEL_MS,type PlayLayout} from './layout';
 import {softwareRendering} from '../app/gpu';
 import {noteSyllables} from './syllables';
-import {beatPhase,downbeatTimes,inSection,friendsForGauge} from './timing';
+import {beatPhase,downbeatTimes,inSection,friendsForGauge,FRIEND_STEPS} from './timing';
 import {DRUMMER,DANCER,DrummerState,drummerPose,dancerPose,ATLAS_FILES,REGIONS,type Side} from './rig';
 import {PixiCharacter,type AtlasTextures} from './PixiCharacter';
 import {FRIEND_VARIANTS,recolorAtlas} from './recolor';
-import {drawRig,rigCanvas,CROWD_POSES} from './portrait';
-import {crowdStep,crowdSize,inFever,CROWD_MAX} from '../game/festival';
-import {COSTUMES,type Outfit} from './costumes';
+import {inFever,ALL_FRIENDS_GAUGE} from '../game/festival';
+import {COSTUMES} from './costumes';
 import * as art from './art';
 
 const {C}=art;
@@ -23,18 +22,16 @@ export type StageTheme='day'|'evening'|'sunset'|'night';
 export interface RendererOptions {chart:Chart;manifest:Manifest;settings:Settings;difficulty:Difficulty;title:string;artist:string;showPads:boolean;tag?:string;inputHint?:'keyboard'|'midi'|'touch';theme?:StageTheme;
  /** Show the bone counter (runs that earn ほねっこ). */
  rewards?:boolean;
- /** Outfits found in the draw (しばガチャ): the crowd wears them. */
+ /** Outfits and coats found in the draw (しばガチャ): the friends wear them. */
  collection?:()=>Promise<Readonly<Record<string,number>>>}
 /** Stage mood per bundled song; imported songs use the daytime festival. */
 export function stageThemeFor(packId:string):StageTheme{return ({'chachamaru-ondo':'evening','yuuyake-shippo':'sunset','hanabi-rush':'night'} as Record<string,StageTheme>)[packId]??'day';}
 interface Particle {s:Sprite;vx:number;vy:number;life:number;max:number;spin:number;gravity:number;grow:number;fade:boolean}
 interface Flyer {s:Sprite;t0:number;dur:number;x0:number;y0:number;cx:number;cy:number;x1:number;y1:number;scale0:number}
 interface Ring {s:Sprite;t0:number;dur:number;scale0:number;scale1:number;alpha:number}
-interface Friend {ch:PixiCharacter;joined:number;left:number;active:boolean;mirror:boolean}
-interface Fan {s:Sprite;light:Sprite;joined:number;phase:number;mirror:boolean;shown:boolean;coat:number;move:number;outfit?:Outfit;tex:(Texture|undefined)[]}
-/** Height of a baked crowd texture (the whole 400 × 420 rig root). */
-const CROWD_TEX_H=160;
-const PENLIGHTS=[0xff7eb6,0x7fe8ff,0xffd86b,0x9dff8a,0xc9a2ff];
+interface Friend {ch:PixiCharacter;joined:number;left:number;active:boolean;mirror:boolean;name:string;face:Texture}
+/** Friends shown in the band: four slots, one per gauge step. */
+const FRIEND_SLOTS=4;
 
 const PARTICLE_CAP={standard:160,reduced:40,off:0} as const;
 
@@ -63,13 +60,13 @@ export class PlayRenderer {
  private drummer!:PixiCharacter;
  private readonly drummerState=new DrummerState();
  private friends:Friend[]=[];
- // Festival rewards: the cheering crowd (one more shiba every few 良), FEVER and the counters.
- private readonly crowdRoot=new Container();
- private crowd:Fan[]=[];private crowdCoats:{atlas:CanvasImageSource;scale:number}[]=[];
- private readonly crowdStep:number;private fullHouseShown=false;private fullHouseAt=-1e9;
+ // Festival rewards: the four friends (their slots in the band), FEVER and the bone counter.
+ private allFriendsShown=false;
+ private friendPlate=new Container();private friendSlots:{bg:Graphics;face:Sprite|null;q:Text}[]=[];private friendsShown=-1;private nextRing=new Graphics();private lastOne=new Container();
+ private friendBanner=new Container();private friendBannerText!:Text;private friendBannerAt=-1e9;private friendBannerIndex=0;
  private fever=false;private feverAt=-1e9;private feverRails=new Graphics();
- private rewardsRoot=new Container();private feverBadge=new Container();private boneText:BitmapText|null=null;private crowdText!:Text;private crowdPlate=new Container();
- private bones=0;private bonesShown=-1;private bonePopAt=-1e9;private crowdPopAt=-1e9;private crowdCount=-1;
+ private rewardsRoot=new Container();private feverBadge=new Container();private boneText:BitmapText|null=null;
+ private bones=0;private bonesShown=-1;private bonePopAt=-1e9;private friendPopAt=-1e9;private gaugeRing=-1;
  private notePool:Sprite[]=[];private syllablePool:Sprite[]=[];private barPool:Sprite[]=[];
  private rollBodies:Sprite[]=[];private rollTails:Sprite[]=[];
  private particles:Particle[]=[];private spare:Sprite[]=[];
@@ -107,7 +104,6 @@ export class PlayRenderer {
   this.syllables=noteSyllables(opts.chart.notes,opts.manifest.beatTimesMs);
   this.downbeats=downbeatTimes(opts.manifest.beatTimesMs,opts.manifest.downbeatIndices);
   this.taps=opts.chart.notes.filter((n):n is Tap=>n.kind==='tap');
-  this.crowdStep=crowdStep(this.taps.length);
   this.resizeObserver=new ResizeObserver(()=>this.resize());
  }
 
@@ -138,7 +134,7 @@ export class PlayRenderer {
   this.installFonts();
   // Hit effects sit above the HUD so rings are not cut by the left panel.
   this.world.addChild(this.stageRoot,this.bandRoot,this.laneRoot,this.hud,this.laneFx,this.topFx);
-  this.stageRoot.addChild(this.stageBack,this.crowdRoot,this.stageChars,this.stageFx);
+  this.stageRoot.addChild(this.stageBack,this.stageChars,this.stageFx);
   this.laneRoot.addChild(this.laneStatic,this.barLayer,this.noteLayer,this.syllableLayer);
   this.app.stage.addChild(this.world);
   this.drummer=new PixiCharacter(DRUMMER,this.atlas);
@@ -148,7 +144,6 @@ export class PlayRenderer {
   this.resize();
   this.resizeObserver.observe(this.host);
   void this.loadFriends();
-  void this.loadCrowd();
  }
 
  // ------------------------------------------------------------ textures --
@@ -197,44 +192,30 @@ export class PlayRenderer {
  private async loadFriends(){
   try{
    const img=this.atlas.character.source.resource as CanvasImageSource&{width:number;height:number};
-   for(const [i,variant] of FRIEND_VARIANTS.entries()){
+   const owned:Readonly<Record<string,number>>=await this.opts.collection?.().catch(()=>({}))??{};
+   let seed=(Date.now()%2147483646)+1;const random=()=>(seed=(seed*16807)%2147483647)/2147483647;
+   // Who comes last is a small surprise: a rare coat found in the draw may take the fourth place.
+   const variants=[...FRIEND_VARIANTS];
+   const rare=COSTUMES.filter(c=>c.coat&&owned[c.id]).map(c=>c.coat!);
+   if(rare.length&&random()<.35)variants[FRIEND_SLOTS-1]=rare[Math.floor(random()*rare.length)];
+   // Outfits found in the draw: each friend wears a different one while they last.
+   const outfits=COSTUMES.filter(c=>c.outfit&&owned[c.id]).map(c=>c.outfit!);
+   for(let i=outfits.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[outfits[i],outfits[j]]=[outfits[j],outfits[i]];}
+   for(const [i,variant] of variants.entries()){
     const canvas=await recolorAtlas(img,variant,'chachamaru-anime-v1',.5);
     if(!this.alive)return;
     const texture=canvas?Texture.from(canvas):this.atlas.character;
     const ch=new PixiCharacter(DANCER,{character:texture,arms:this.atlas.arms},{showFlower:false,scales:{character:canvas?.5:1}});
+    const outfit=outfits.length&&random()<.8?outfits[i%outfits.length]:undefined;
+    if(outfit)ch.dress(outfit);
     ch.view.visible=false;ch.view.alpha=0;
-    this.friends.push({ch,joined:-1e9,left:-1e9,active:false,mirror:i%2===1});
+    const k=canvas?.5:1,[fx,fy,fw,fh]=REGIONS.head;
+    this.friends.push({ch,joined:-1e9,left:-1e9,active:false,mirror:i%2===1,name:variant.name,face:new Texture({source:texture.source,frame:new Rectangle(fx*k,fy*k,fw*k,fh*k)})});
     this.stageChars.addChildAt(ch.view,0);
    }
    this.placeCharacters();
+   this.friendsShown=-1;this.buildRewards();
   }catch{/* Friends are decoration; the game plays without them. */}
- }
-
- /** Cheering shibas in the five coats, baked once as still pictures (cheap to draw twenty). */
- private async loadCrowd(){
-  try{
-   const img=this.atlas.character.source.resource as CanvasImageSource&{width:number;height:number};
-   const owned:Readonly<Record<string,number>>=await this.opts.collection?.().catch(()=>({}))??{};
-   // The five coats, then special coats found in the draw; outfits found in the draw.
-   const special=COSTUMES.filter(c=>c.coat&&owned[c.id]).map(c=>c.coat!);
-   const coats=await Promise.all([...FRIEND_VARIANTS,...special].map(v=>recolorAtlas(img,v,'chachamaru-anime-v1',.5)));
-   if(!this.alive)return;
-   this.crowdCoats=[{atlas:img,scale:1},...coats.filter((c):c is HTMLCanvasElement=>!!c).map(atlas=>({atlas,scale:.5}))];
-   const basic=1+FRIEND_VARIANTS.length,outfits=COSTUMES.filter(c=>c.outfit&&owned[c.id]).map(c=>c.outfit!);
-   // A different crowd each run: special coats now and then, outfits more often the more are found.
-   let seed=(Date.now()%2147483646)+1;const random=()=>(seed=(seed*16807)%2147483647)/2147483647;
-   const dressed=Math.min(.8,.3+outfits.length*.05);
-   for(let i=0;i<CROWD_MAX;i++){
-    const coat=this.crowdCoats.length>basic&&random()<.22?basic+Math.floor(random()*(this.crowdCoats.length-basic)):(i*3+1)%Math.min(basic,this.crowdCoats.length);
-    const outfit=outfits.length&&random()<dressed?outfits[Math.floor(random()*outfits.length)]:undefined;
-    const s=new Sprite();
-    s.anchor.set(.5,399/420);s.visible=false;
-    const light=this.sprite('glowWhite');light.tint=PENLIGHTS[i%PENLIGHTS.length];light.blendMode='add';light.visible=false;
-    this.crowd.push({s,light,joined:-1e9,phase:(i*.37)%1,mirror:i%2===1,shown:false,coat,move:1+i%3,outfit,tex:[]});
-   }
-   // The far row behind the near row.
-   for(const f of [...this.crowd.slice(CROWD_MAX/2),...this.crowd.slice(0,CROWD_MAX/2)])this.crowdRoot.addChild(f.s,f.light);
-  }catch{/* The crowd is decoration too. */}
  }
 
  // --------------------------------------------------------------- layout --
@@ -317,7 +298,7 @@ export class PlayRenderer {
   this.buildRewards();
  }
 
- /** Bone counter, crowd counter and FEVER badge. */
+ /** Bone counter, the four friend slots and the FEVER badge. */
  private buildRewards(){
   this.rewardsRoot.destroy({children:true});this.rewardsRoot=new Container();
   const L=this.layout,h=34;
@@ -329,13 +310,27 @@ export class PlayRenderer {
    this.boneText=new BitmapText({text:'0',style:{fontFamily:'ChachaScore',fontSize:22}});this.boneText.anchor.set(0,.5);this.boneText.position.set(44,h/2+1);
    bone.addChild(this.boneText);bone.position.set(x,0);bone.label='bones';this.rewardsRoot.addChild(bone);x+=140;
   }
-  this.crowdPlate=new Container();
-  const face=new Sprite(new Texture({source:this.atlas.character.source,frame:new Rectangle(...REGIONS.head)}));
-  face.anchor.set(.5);face.height=26;face.scale.x=face.scale.y;face.position.set(22,h/2);
-  this.crowdText=new Text({text:`0/${CROWD_MAX}`,style:{fontFamily:art.FONT,fontSize:17,fontWeight:'900',fill:0xffffff,stroke:{color:C.ink,width:3}}});
-  this.crowdText.anchor.set(0,.5);this.crowdText.position.set(40,h/2+1);
-  this.crowdPlate.addChild(plate(112),face,this.crowdText);this.crowdPlate.pivot.set(56,h/2);this.crowdPlate.position.set(x+56,h/2);
-  this.rewardsRoot.addChild(this.crowdPlate);x+=120;
+  // Four friend slots: a face once that friend has come, a ? until then; the
+  // next one fills a ring as the gauge climbs to its step.
+  this.friendPlate=new Container();this.friendSlots=[];
+  const slotW=34,plateW=12+FRIEND_SLOTS*slotW;
+  this.friendPlate.addChild(plate(plateW));
+  for(let i=0;i<FRIEND_SLOTS;i++){
+   const cx=6+slotW*i+slotW/2,bg=new Graphics().circle(cx,h/2,13).fill({color:0x3a2c3f}).stroke({color:0xffffff,width:1.5,alpha:.35});
+   const q=new Text({text:'?',style:{fontFamily:art.FONT,fontSize:15,fontWeight:'900',fill:0xb9a8c2}});q.anchor.set(.5);q.position.set(cx,h/2+1);
+   const f=this.friends[i];let face:Sprite|null=null;
+   if(f){face=new Sprite(f.face);face.anchor.set(.5);face.height=28;face.scale.x=face.scale.y;face.position.set(cx,h/2);face.visible=false;}
+   this.friendPlate.addChild(bg,q);if(face)this.friendPlate.addChild(face);
+   this.friendSlots.push({bg,face,q});
+  }
+  this.nextRing=new Graphics();this.friendPlate.addChild(this.nextRing);
+  // "あと1匹！" on a dark tag under the last slot (readable over the bunting).
+  this.lastOne=new Container();
+  const tagText=new Text({text:'あと1匹！',style:{fontFamily:art.FONT,fontSize:13,fontWeight:'900',fill:0xffd23f}});tagText.anchor.set(.5);
+  const tagBg=new Graphics().roundRect(-tagText.width/2-8,-11,tagText.width+16,22,11).fill({color:0x1c1420,alpha:.92}).stroke({color:0xffd23f,width:1.5});
+  this.lastOne.addChild(tagBg,tagText);this.lastOne.position.set(plateW-6-slotW/2,h+12);this.lastOne.visible=false;this.friendPlate.addChild(this.lastOne);
+  this.friendPlate.pivot.set(plateW/2,h/2);this.friendPlate.position.set(x+plateW/2,h/2);
+  this.rewardsRoot.addChild(this.friendPlate);x+=plateW+8;
   this.feverBadge=new Container();
   const badgeW=this.opts.rewards?150:112;
   const badge=new Graphics().roundRect(0,0,badgeW,h,h/2).fill(0xffc233).stroke({color:C.ink,width:2.5});
@@ -345,7 +340,12 @@ export class PlayRenderer {
   this.rewardsRoot.addChild(this.feverBadge);
   this.rewardsRoot.position.set(L.rewards.x,L.rewards.y);
   this.hud.addChild(this.rewardsRoot);
-  this.bonesShown=-1;this.crowdCount=-1;
+  this.bonesShown=-1;this.friendsShown=-1;this.gaugeRing=-1;
+  // Name banner for a friend who has just come.
+  this.friendBanner.destroy({children:true});this.friendBanner=new Container();this.friendBanner.visible=false;
+  const nb=new Graphics().roundRect(-120,-22,240,44,22).fill({color:0xfff6df}).stroke({color:C.ink,width:3});
+  this.friendBannerText=new Text({text:'',style:{fontFamily:art.FONT,fontSize:21,fontWeight:'900',fill:C.donDark}});this.friendBannerText.anchor.set(.5);
+  this.friendBanner.addChild(nb,this.friendBannerText);this.stageFx.addChild(this.friendBanner);
  }
 
  private buildLanterns(){
@@ -619,7 +619,7 @@ export class PlayRenderer {
   const want=friendsForGauge(s.gauge);
   this.friends.forEach((f,i)=>{
    const active=i<want;
-   if(active&&!f.active){f.active=true;f.joined=now;f.ch.view.visible=true;}
+   if(active&&!f.active){f.active=true;f.joined=now;f.ch.view.visible=true;this.onFriendJoin(i,now);}
    if(!active&&f.active){f.active=false;f.left=now;}
    const p=L.friends[i];if(!p)return;
    if(f.active){
@@ -634,7 +634,13 @@ export class PlayRenderer {
     if(k>=1)f.ch.view.visible=false;
    }
   });
-  this.drawCrowd(now,beat,s);
+  const fever=inFever(s.combo);
+  if(fever!==this.fever){this.fever=fever;if(fever)this.onFeverStart(now);}
+  if(s.gauge>=ALL_FRIENDS_GAUGE&&!this.allFriendsShown){this.allFriendsShown=true;this.onAllFriends();}
+  // The name banner over a friend who has just come.
+  const nAge=now-this.friendBannerAt,np=L.friends[this.friendBannerIndex];
+  this.friendBanner.visible=nAge<1500&&!!np;
+  if(this.friendBanner.visible&&np){const k=Math.min(1,nAge/240);this.friendBanner.position.set(np.x,np.y-np.height*1.12-(1-k)*20);this.friendBanner.scale.set(.6+.4*easeOutBack(k));this.friendBanner.alpha=nAge>1200?1-(nAge-1200)/300:1;}
   // Balloon from Chachamaru.
   const bAge=now-this.balloonAt;
   this.balloon.visible=bAge<1100;
@@ -654,46 +660,6 @@ export class PlayRenderer {
   if(this.banner.visible){const k=Math.min(1,cAge/380);this.banner.scale.set(.5+.5*easeOutBack(k));this.banner.alpha=cAge>2800?1-(cAge-2800)/400:1;}
  }
 
- /** The cheering crowd: joins one by one (every few 良), cheers on the beat, waves penlights in FEVER. */
- private drawCrowd(now:number,beat:number,s:GameSnapshot){
-  const L=this.layout;
-  const fever=inFever(s.combo);
-  if(fever!==this.fever){this.fever=fever;if(fever)this.onFeverStart(now);}
-  if(!this.crowd.length)return;
-  const want=crowdSize(s.great,this.crowdStep);
-  if(want>=CROWD_MAX&&!this.fullHouseShown){this.fullHouseShown=true;this.fullHouseAt=now;this.onFullHouse();}
-  const lights=fever&&this.effects!=='off';
-  const party=now-this.fullHouseAt<900?Math.sin((now-this.fullHouseAt)/900*Math.PI):0;
-  this.crowd.forEach((m,i)=>{
-   const p=L.crowd[i];
-   if(i<want&&!m.shown){m.shown=true;m.joined=now;m.s.visible=true;this.crowdPopAt=now;this.bakeFan(m);if(this.effects!=='off')for(let k=0;k<3;k++)this.particle('spark',p.x,p.y-p.height,(k-1)*1.4,-2-Math.random(),520,k%2?0xffd86b:0xff8fb8,{gravity:.06});}
-   if(!m.shown||!p){m.light.visible=false;return;}
-   const k=Math.min(1,(now-m.joined)/340);
-   const hop=Math.abs(Math.sin((beat+m.phase*.5)*Math.PI));
-   const amp=fever?1.7:1;
-   const size=p.height*420/395/CROWD_TEX_H*(k<1?.35+.65*easeOutBack(k):1);
-   m.s.scale.set(m.mirror?-size:size,size);
-   m.s.position.set(p.x,p.y-hop*p.height*.06*amp-(1-k)*p.height*.3-party*p.height*.35);
-   m.s.rotation=Math.sin(beat*Math.PI+m.phase*6)*.045*amp;
-   m.s.alpha=Math.min(1,k*2);
-   // Paws go up on the beat (each on its own beat); in FEVER everyone throws both paws up every beat.
-   const up=beat>=0&&(fever||party>0?beat%1<.5:Math.floor(beat+m.phase*2)%2===0&&beat%1<.55);
-   const tex=m.tex[up?(fever||party>0?3:m.move):0]??m.tex[0];
-   if(tex&&m.s.texture!==tex)m.s.texture=tex;
-   m.light.visible=lights;
-   if(lights){
-    const sway=Math.sin(beat*Math.PI+m.phase*6);
-    m.light.position.set(p.x+(m.mirror?-1:1)*p.height*.34+sway*p.height*.1,p.y-p.height*1.02-hop*p.height*.06*amp);
-    m.light.scale.set(p.height/260);m.light.alpha=.5+.3*hop;
-   }
-  });
- }
- /** A joining shiba's pictures (at rest, its own cheer, and FEVER), drawn once when it arrives. */
- private bakeFan(m:Fan){
-  const {atlas,scale}=this.crowdCoats[m.coat];
-  for(const pose of new Set([0,m.move,3]))m.tex[pose]??=Texture.from(rigCanvas(CROWD_TEX_H,g=>drawRig(g,{character:atlas},{character:scale},CROWD_POSES[pose],DANCER,{flower:false,outfit:m.outfit})));
-  m.s.texture=m.tex[0]!;
- }
  private onFeverStart(now:number){
   const L=this.layout;
   this.feverAt=now;
@@ -701,10 +667,16 @@ export class PlayRenderer {
   this.drummerState.react('happy',this.lastSongTime);
   if(this.effects!=='off')for(let i=0;i<12;i++){const a=i/12*Math.PI*2;this.particle('spark',L.hitX,L.laneY,Math.cos(a)*4,Math.sin(a)*4,420,0xffd23f,{gravity:.03});}
  }
- /** 満員御礼: every place in the crowd is taken. */
- private onFullHouse(){
+ /** A friend arrives: name banner over them, a burst of sparks, their slot lights up. */
+ private onFriendJoin(i:number,now:number){
+  const f=this.friends[i],p=this.layout.friends[i];if(!f||!p)return;
+  this.friendBannerIndex=i;this.friendBannerAt=now;this.friendBannerText.text=`${f.name}が来た！`;this.friendPopAt=now;
+  if(this.effects!=='off')for(let k=0;k<14;k++){const a=k/14*Math.PI*2;this.particle(k%2?'spark':'petal',p.x,p.y-p.height*.55,Math.cos(a)*(2.5+Math.random()*2),Math.sin(a)*(2.5+Math.random()*2)-1.5,700,k%3?0xffd86b:0xff8fb8,{gravity:.05,spin:.1});}
+ }
+ /** 全員集合: all four friends are here. */
+ private onAllFriends(){
   const st=this.layout.stage;
-  this.showMessage('満員御礼！','おうえんの柴犬が、全員そろった！');
+  this.showMessage('全員集合！','ちゃちゃまるの仲間が、みんなそろった！');
   if(this.effects!=='off')[0,260,520].forEach((d,i)=>window.setTimeout(()=>{if(this.alive)this.firework(st.x+st.w*(.3+.2*i),st.y+st.h*(.16+.06*(i%2)));},d));
  }
 
@@ -824,19 +796,38 @@ export class PlayRenderer {
   // Song progress under the syllable strip.
   const p=Math.max(0,Math.min(1,time/this.opts.manifest.durationMs));
   this.progressBar.width=L.progress.w*p;
-  // Bones, crowd and FEVER counters.
+  // Bones, friends and FEVER counters.
   if(this.boneText&&this.bones!==this.bonesShown){if(this.bones>this.bonesShown&&this.bonesShown>=0)this.bonePopAt=now;this.bonesShown=this.bones;this.boneText.text=this.bones.toLocaleString('en-US');}
   const bonePlate=this.rewardsRoot.getChildByLabel('bones');
   if(bonePlate){const age=now-this.bonePopAt;bonePlate.scale.set(age<120?1+.06*Math.sin(age/120*Math.PI):1);}
-  const shown=this.crowd.filter(m=>m.shown).length;
-  if(shown!==this.crowdCount){this.crowdCount=shown;this.crowdText.text=`${shown}/${CROWD_MAX}`;this.crowdText.style.fill=shown>=CROWD_MAX?0xffd23f:0xffffff;}
-  const cAge=now-this.crowdPopAt;this.crowdPlate.scale.set(cAge<200?1+.12*Math.sin(cAge/200*Math.PI):1);
+  this.drawFriendSlots(now,s);
   this.feverBadge.visible=this.fever;
   if(this.fever){const age=now-this.feverAt;this.feverBadge.scale.set(age<320?.4+.6*easeOutBack(age/320):1+.04*Math.sin(now*.012));}
   // Roll balloon.
   const rAge=now-this.rollAt;
   this.rollBalloon.visible=this.rollCount>0&&rAge<700;
   if(this.rollBalloon.visible){this.rollBalloon.scale.set(rAge<80?1.12-rAge/80*.12:1);this.rollBalloon.alpha=rAge>500?1-(rAge-500)/200:1;}
+ }
+
+ /** Friend slots: faces of those who came, ? for the rest; the next one's ring fills toward its gauge step. */
+ private drawFriendSlots(now:number,s:GameSnapshot){
+  const shown=this.friends.filter(f=>f.active).length;
+  if(shown!==this.friendsShown){
+   this.friendsShown=shown;this.gaugeRing=-1;
+   this.friendSlots.forEach((slot,i)=>{const on=i<shown;if(slot.face)slot.face.visible=on;slot.q.visible=!on;});
+  }
+  const age=now-this.friendPopAt;this.friendPlate.scale.set(age<260?1+.14*Math.sin(age/260*Math.PI):1);
+  // Ring toward the next friend.
+  const next=shown<FRIEND_SLOTS?FRIEND_STEPS[shown]:null,prev=shown?FRIEND_STEPS[shown-1]:0;
+  const part=next===null?0:Math.max(0,Math.min(1,(s.gauge-prev)/(next-prev)));
+  const ring=Math.round(part*40);
+  if(ring!==this.gaugeRing){
+   this.gaugeRing=ring;this.nextRing.clear();
+   if(next!==null&&part>0){const cx=6+34*shown+17,cy=17;this.nextRing.arc(cx,cy,14.5,-Math.PI/2,-Math.PI/2+part*Math.PI*2).stroke({color:0xffd23f,width:3});}
+  }
+  // The last one: "あと1匹！" pulses while three have come.
+  this.lastOne.visible=shown===FRIEND_SLOTS-1;
+  if(this.lastOne.visible){this.lastOne.scale.set(1+.08*Math.sin(now*.012));const q=this.friendSlots[FRIEND_SLOTS-1]?.q;if(q)q.style.fill=Math.sin(now*.012)>0?0xffd23f:0xb9a8c2;}
  }
 
  private drawGauge(v:number){
@@ -1009,7 +1000,7 @@ export class PlayRenderer {
  /** Snapshot of renderer state for tests and diagnostics. */
  debug(){
   return {layout:this.layout,chorus:this.chorus,chorusMix:this.chorusMix,friends:this.friends.filter(f=>f.active).length,
-   crowd:this.crowd.filter(m=>m.shown).length,fever:this.fever,bones:this.bonesShown,
+   fever:this.fever,bones:this.bonesShown,
    notes:this.notePool.filter(s=>s.visible).length,particles:this.particles.length,flyers:this.flyers.length,
    drummer:this.drummer?.angles(),drummerState:this.drummer?this.host.dataset.state:undefined,pads:this.opts.showPads,
    pose:this.drummer?drummerPose(this.drummerState,this.lastSongTime,0,'idle').state:''};
@@ -1019,7 +1010,7 @@ export class PlayRenderer {
   this.alive=false;this.resizeObserver.disconnect();
   if(this.initialized){this.app.destroy(true,{children:true});for(const name of ['ChachaScore','ChachaCombo'])try{BitmapFont.uninstall(name);}catch{/* not installed */}}
   for(const t of Object.values(this.tex??{}))t.texture.destroy(true);
-  for(const m of this.crowd)for(const t of m.tex)t?.destroy(true);
+  for(const f of this.friends)f.ch.disposeOutfit();
   this.stageBgTexture?.destroy(false);
  }
 }

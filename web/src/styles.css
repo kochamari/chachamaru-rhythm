@@ -512,3 +512,6 @@ html[data-render="software"] .new-best{animation:none}
 .bone-gacha{min-height:40px;padding:6px 12px;font-size:14px;border:2.5px solid var(--ink);box-shadow:0 3px 0 var(--ink);background:linear-gradient(#ffe38a,#ffc233);flex:none}
 /* Title screen on a sideways phone: the menu chips in two columns. */
 @media (max-height:500px) and (orientation:landscape){.title-links{grid-template-columns:repeat(2,auto);gap:8px}.title-actions{flex-wrap:nowrap}.title-links .chip-button{white-space:nowrap}}
+/* iPhone Safari zooms into a focused select or text field whose text is
+   smaller than 16px and stays zoomed; phones get 16px in every field. */
+@media (pointer:coarse){select,textarea,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]){font-size:16px!important}}

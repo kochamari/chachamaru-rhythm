@@ -4,8 +4,6 @@
 // Landscape keeps a fixed logical height of 720 and a width that follows the
 // screen aspect (960..2000). Portrait keeps a fixed logical width of 720.
 
-import {CROWD_MAX} from '../game/festival';
-
 export interface Rect {x:number;y:number;w:number;h:number}
 export interface Place {x:number;y:number;height:number}
 export interface PlayLayout {
@@ -37,9 +35,7 @@ export interface PlayLayout {
  /** Feet position and body height of the main drummer. */
  character:{x:number;y:number;height:number};
  friends:Place[];
- /** The cheering crowd behind the dancers: CROWD_MAX places in the order they fill. */
- crowd:Place[];
- /** Top-left of the bone / crowd counters (in the band in landscape, on the stage in portrait). */
+ /** Top-left of the bone / friend counters (in the band in landscape, on the stage in portrait). */
  rewards:{x:number;y:number};
  /** Where combo balloons appear (near the character's head). */
  balloon:{x:number;y:number};
@@ -91,8 +87,7 @@ function drumLayout(W:number,H:number):PlayLayout{
  const left=W*.24+charHeight*.55+friendH*.3,right=W-friendH*.42-18;
  const friends=[0,1,2,3].map(i=>({x:left+(right-left)*i/3,y:feet-(i%2?10:0),height:friendH*(i%2?.9:1)}));
  const drum={x:panelW/2,y:lane.y+lane.h*.52,r:Math.min(92,panelW*.3)};
- const crowd=crowdPlaces(W*.04,W*.98,{feet:stage.y+stage.h*.5,height:charHeight*.36},{feet:stage.y+stage.h*.38,height:charHeight*.29});
- return {W,H,portrait:false,showPads:false,drumMode:true,crowd,rewards:{x:18,y:(band.h-8-34)/2},textScale:1.5,band,title,panel,scoreBox:{x:panel.x+10,y:panel.y+8,w:panel.w-20,h:50},score:{x:panelW-18,y:blockY+33,size:42},drum,diffTag:{x:drum.x,y:drum.y+drum.r+18},gauge,lane,laneY,hitX,laneRight:W-26,noteR:48,largeR:66,judgeR:70,syllables,stage,character,friends,balloon:{x:character.x+charHeight*.34,y:feet-charHeight*.98},pads:null,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
+ return {W,H,portrait:false,showPads:false,drumMode:true,rewards:{x:18,y:(band.h-8-34)/2},textScale:1.5,band,title,panel,scoreBox:{x:panel.x+10,y:panel.y+8,w:panel.w-20,h:50},score:{x:panelW-18,y:blockY+33,size:42},drum,diffTag:{x:drum.x,y:drum.y+drum.r+18},gauge,lane,laneY,hitX,laneRight:W-26,noteR:48,largeR:66,judgeR:70,syllables,stage,character,friends,balloon:{x:character.x+charHeight*.34,y:feet-charHeight*.98},pads:null,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
 }
 
 function landscapeLayout(W:number,H:number,showPads:boolean):PlayLayout{
@@ -119,8 +114,7 @@ function landscapeLayout(W:number,H:number,showPads:boolean):PlayLayout{
  const left=W*.3+charHeight*.55+friendH*.3,right=W-friendH*.42-18;
  const friends=[0,1,2,3].map(i=>({x:left+(right-left)*i/3,y:feet-(i%2?12:0),height:friendH*(i%2?.9:1)}));
  const drum={x:panelW/2,y:blockY+112,r:Math.min(58,panelW*.26)};
- const crowd=crowdPlaces(W*.04,W*.98,{feet:stage.y+stage.h*.5,height:charHeight*.36},{feet:stage.y+stage.h*.38,height:charHeight*.29});
- return {W,H,portrait:false,showPads,drumMode:false,crowd,rewards:{x:18,y:(band.h-8-34)/2},textScale:1,band,title,panel,scoreBox:{x:panel.x+10,y:panel.y+8,w:panel.w-20,h:40},score:{x:panelW-18,y:blockY+26,size:30},drum,diffTag:{x:drum.x,y:drum.y+drum.r+14},gauge,lane,laneY,hitX,laneRight:W-26,noteR:30,largeR:42,judgeR:44,syllables,stage,character,friends,balloon:{x:character.x+charHeight*.34,y:feet-charHeight*.98},pads,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
+ return {W,H,portrait:false,showPads,drumMode:false,rewards:{x:18,y:(band.h-8-34)/2},textScale:1,band,title,panel,scoreBox:{x:panel.x+10,y:panel.y+8,w:panel.w-20,h:40},score:{x:panelW-18,y:blockY+26,size:30},drum,diffTag:{x:drum.x,y:drum.y+drum.r+14},gauge,lane,laneY,hitX,laneRight:W-26,noteR:30,largeR:42,judgeR:44,syllables,stage,character,friends,balloon:{x:character.x+charHeight*.34,y:feet-charHeight*.98},pads,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
 }
 
 // Portrait: the score/drum panel sits above a full-width lane so notes get
@@ -149,23 +143,7 @@ function portraitLayout(W:number,H:number,showPads:boolean):PlayLayout{
   {x:W*.14,y:feet-charHeight*.34,height:friendH*.86},{x:W*.86,y:feet-charHeight*.34,height:friendH*.86},
   {x:W*.2,y:Math.min(stage.y+stage.h-6,feet+charHeight*.08),height:friendH},{x:W*.8,y:Math.min(stage.y+stage.h-6,feet+charHeight*.08),height:friendH},
  ];
- const crowd=crowdPlaces(W*.05,W*.95,{feet:stage.y+stage.h*.44,height:charHeight*.36},{feet:stage.y+stage.h*.34,height:charHeight*.3});
- return {W,H,portrait:true,showPads,drumMode:false,crowd,rewards:{x:14,y:stage.y+64},textScale:1,band,title,panel,scoreBox,score:{x:W-26,y:117,size:26},drum,diffTag:{x:scoreBox.x+52,y:117},gauge,lane,laneY,hitX,laneRight:W-14,noteR:24,largeR:34,judgeR:36,syllables,stage,character,friends,balloon:{x:W*.5+charHeight*.24,y:feet-charHeight*1.02},pads,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
-}
-
-/**
- * CROWD_MAX places in two rows behind the dancers (the far row smaller and
- * higher), each row filled from the middle outwards. Slightly uneven, like a
- * real crowd.
- */
-function crowdPlaces(x0:number,x1:number,near:{feet:number;height:number},far:{feet:number;height:number}):Place[]{
- const per=CROWD_MAX/2,out:Place[]=[];
- const middleOut=Array.from({length:per},(_,i)=>i).sort((a,b)=>Math.abs(a-(per-1)/2)-Math.abs(b-(per-1)/2)||a-b);
- for(const [r,row] of [near,far].entries()){
-  const a=x0+(r?0:(x1-x0)/per/2),b=x1-(r?0:(x1-x0)/per/2);
-  for(const i of middleOut)out.push({x:a+(b-a)*i/(per-1),y:row.feet-(i%2?5:0)*(r?.7:1),height:row.height*(i%3===1?.94:1)});
- }
- return out;
+ return {W,H,portrait:true,showPads,drumMode:false,rewards:{x:14,y:stage.y+64},textScale:1,band,title,panel,scoreBox,score:{x:W-26,y:117,size:26},drum,diffTag:{x:scoreBox.x+52,y:117},gauge,lane,laneY,hitX,laneRight:W-14,noteR:24,largeR:34,judgeR:36,syllables,stage,character,friends,balloon:{x:W*.5+charHeight*.24,y:feet-charHeight*1.02},pads,progress:{x:0,y:syllables.y+syllables.h,w:W,h:6}};
 }
 
 /** x position of a note whose target is targetMs when the visual clock is nowMs. */

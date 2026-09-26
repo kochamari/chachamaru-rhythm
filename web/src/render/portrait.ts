@@ -1,5 +1,5 @@
-// Draws the rig as a still picture on a 2D canvas: the cheering crowd on the
-// play screen (as textures) and shiba cards on menus. The joints follow the
+// Draws the rig as a still picture on a 2D canvas: shiba cards on menus
+// (gacha, collection). The joints follow the
 // same rig definition as the SVG and WebGL puppets (rest angle plus pose, in
 // local coordinates around each pivot).
 import {DANCER,type RigNode,type RigSpec,type AtlasName,type BoneName} from './rig';
@@ -16,6 +16,8 @@ export const CROWD_POSES:BoneAngles[]=[
  {armLeft:-150,armRight:150,head:0,tail:16,earLeft:-5,earRight:5},
 ];
 export const ROOT={w:400,h:420};
+/** Paw grips (where the pads are) in rig root coordinates at rest. */
+export const GRIP={armLeft:[182,242],armRight:[238,242]} as const;
 
 /**
  * Draws `spec` in root coordinates (400 × 420, feet at y 399). `images` are
@@ -24,8 +26,6 @@ export const ROOT={w:400,h:420};
 export function drawRig(g:CanvasRenderingContext2D,images:Partial<Record<AtlasName,CanvasImageSource>>,scale:Partial<Record<AtlasName,number>>,angles:BoneAngles=CHEER,spec:RigSpec=DANCER,opts:{flower?:boolean;shadow?:boolean;outfit?:Outfit}={}){
  const outfit=opts.outfit??{};
  const root=g.getTransform();
- /** Paw grips (where the pads are) in each paw joint's own coordinates. */
- const GRIP={armLeft:[182,242],armRight:[238,242]} as const;
  if(opts.shadow!==false){
   const s=spec.shadow;
   g.save();g.fillStyle='rgba(42,28,18,.2)';g.beginPath();g.ellipse(s.cx,s.cy,s.rx,s.ry,0,0,Math.PI*2);g.fill();g.restore();

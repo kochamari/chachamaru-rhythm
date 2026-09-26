@@ -1,22 +1,12 @@
 import 'fake-indexeddb/auto';
 import {beforeEach,it,expect} from 'vitest';
-import {crowdStep,crowdSize,boneGain,finishBones,BoneCounter,inFever,CROWD_MAX,FEVER_COMBO,FULL_HOUSE_BONES} from '../../web/src/game/festival';
+import {boneGain,finishBones,BoneCounter,inFever,FEVER_COMBO,ALL_FRIENDS_BONES,ALL_FRIENDS_GAUGE} from '../../web/src/game/festival';
 import {awardBones,loadFestival,validFestival,emptyFestival} from '../../web/src/storage/festival';
 import {db} from '../../web/src/storage/Database';
 import type {EffectEvent} from '../../contracts/public-types';
 
 beforeEach(async()=>{await (await db()).clear('settings');});
 const hit=(kind:EffectEvent['kind'],extra:Partial<EffectEvent>={}):EffectEvent=>({kind,timeMs:0,...extra});
-
-it('the crowd fills near the end of a nine-in-ten run, whatever the song length',()=>{
- for(const taps of [120,200,400]){
-  const step=crowdStep(taps);
-  expect(crowdSize(Math.round(taps*.9),step)).toBe(CROWD_MAX);
-  expect(crowdSize(Math.round(taps*.6),step)).toBeLessThan(CROWD_MAX);
- }
- expect(crowdStep(20)).toBe(4);expect(crowdStep(2000)).toBe(14);
- expect(crowdSize(0,8)).toBe(0);expect(crowdSize(8,8)).toBe(1);expect(crowdSize(10000,8)).toBe(CROWD_MAX);
-});
 
 it('ほねっこ: 良 1 (big note 2), doubled in FEVER, +10 every 50 combo; 可 and misses give none',()=>{
  expect(boneGain(hit('great'),false)).toBe(1);
@@ -27,16 +17,16 @@ it('ほねっこ: 良 1 (big note 2), doubled in FEVER, +10 every 50 combo; 可 
  expect(inFever(FEVER_COMBO-1)).toBe(false);expect(inFever(FEVER_COMBO)).toBe(true);
 });
 
-it('counts a run live: FEVER from the 31st hit on, ends on a miss; the full crowd pays once',()=>{
- const c=new BoneCounter(4);
- c.add(Array.from({length:30},()=>hit('great')),30);
+it('counts a run live: FEVER from the 31st hit on, ends on a miss; all four friends pay once',()=>{
+ const c=new BoneCounter();
+ c.add(Array.from({length:30},()=>hit('great')),40);
  expect(c.bones).toBe(30);
- c.add([hit('great'),hit('great')],32);
+ c.add([hit('great'),hit('great')],50);
  expect(c.bones).toBe(34);
- c.add([hit('miss'),hit('great')],33);
+ c.add([hit('miss'),hit('great')],60);
  expect(c.bones).toBe(35);
- c.add([],CROWD_MAX*4);expect(c.bones).toBe(35+FULL_HOUSE_BONES);
- c.add([],CROWD_MAX*4+10);expect(c.bones).toBe(35+FULL_HOUSE_BONES);
+ c.add([],ALL_FRIENDS_GAUGE);expect(c.bones).toBe(35+ALL_FRIENDS_BONES);
+ c.add([],ALL_FRIENDS_GAUGE-20);c.add([],ALL_FRIENDS_GAUGE);expect(c.bones).toBe(35+ALL_FRIENDS_BONES);
  expect(finishBones({gauge:72,fullCombo:false,allGreat:false})).toEqual([{label:'クリア',bones:20}]);
  expect(finishBones({gauge:100,fullCombo:true,allGreat:true}).map(i=>i.bones)).toEqual([20,100]);
  expect(finishBones({gauge:40,fullCombo:false,allGreat:false})).toEqual([]);

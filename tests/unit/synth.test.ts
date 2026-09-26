@@ -30,7 +30,7 @@ describe('synthesised drum sounds',()=>{
   expect(Math.abs(don[don.length-1])).toBeLessThan(1e-3);expect(Math.abs(ka[ka.length-1])).toBeLessThan(1e-3);
  });
  it('every festival effect renders a bounded sound',()=>{
-  for(const name of ['combo10','combo50','combo100','fullCombo','allGreat','clear','fail','chorus','select','move','back','tick','balloon','count','fever','fullHouse','gachaTurn','gachaOpen','gachaRare'] as EffectName[]){
+  for(const name of ['combo10','combo50','combo100','fullCombo','allGreat','clear','fail','chorus','select','move','back','tick','balloon','count','fever','fullHouse','gachaTurn','gachaOpen','gachaRare','join'] as EffectName[]){
    const x=renderEffect(name,44100);
    expect(x.length,name).toBeGreaterThan(1000);expect(x.every(Number.isFinite),name).toBe(true);expect(peak(x),name).toBeLessThanOrEqual(1);
   }

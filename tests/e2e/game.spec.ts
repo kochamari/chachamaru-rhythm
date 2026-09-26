@@ -55,7 +55,7 @@ test('P13 a collection ZIP adds only new songs, skips the ones already here and 
  await page.locator('#to-songs').click();await expect(page.getByRole('button',{name:/まとめ試験A/})).toBeVisible();
 });
 
-test('U26 touch pads on an iPhone hit the drum with no vibration parts',async({browser},info)=>{
+test('U26 touch pads on an iPhone hit the drum with no vibration parts, and the play screen does not zoom',async({browser},info)=>{
  // Tap vibration was removed at the user's request (iPhone could only vibrate
  // on release). The pads are plain again and each tap is one hit.
  const phone=await browser.newContext({...devices['iPhone 13'],baseURL:info.project.use.baseURL});
@@ -65,10 +65,14 @@ test('U26 touch pads on an iPhone hit the drum with no vibration parts',async({b
  await p.goto('/#/play/himawari-demo/easy');await p.locator('#resume-play').click();
  await expect.poll(()=>p.evaluate(()=>window.__chacha.session?.status)).toMatch(/COUNT_IN|PLAYING/);
  await expect(p.locator('.pads input')).toHaveCount(0);
+ // The play screen never zooms (pinch, double tap, focus on a small field): the viewport is fixed while it is shown.
+ const viewport=()=>p.evaluate(()=>document.querySelector('meta[name="viewport"]')!.getAttribute('content'));
+ expect(await viewport()).toContain('maximum-scale=1');
  const before=await p.evaluate(()=>window.__chacha.input.count);
  await p.locator('[data-pad="don"]').first().tap();await p.locator('[data-pad="ka"]').first().tap();
  expect(await p.evaluate(()=>window.__chacha.input.count)).toBe(before+2);
  await p.goto('/#/settings');await expect(p.locator('#haptics')).toHaveCount(0);
+ expect(await viewport()).not.toContain('maximum-scale');
  await phone.close();
 });
 test('U27 hitting the electronic drum switches to drum play, and the snare starts the song',async({page})=>{

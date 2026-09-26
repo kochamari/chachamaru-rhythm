@@ -10,7 +10,7 @@ declare const __TEST__:boolean;
 // しばガチャ and しばずかん: spend ほねっこ on outfits. Each draw turns the
 // capsule machine, drops a capsule in the rarity's colour (a rare one may
 // first look ordinary and then change) and opens it on a tap or a drum hit.
-// Outfits found here join the cheering crowd on the play screen.
+// Outfits found here are worn by the four friends on the play screen.
 
 const STARS:Record<Rarity,string>={N:'★',R:'★★',SR:'★★★',SSR:'★★★★'};
 const wait=(ms:number)=>new Promise(r=>setTimeout(r,ms));
@@ -36,7 +36,7 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
  const back=backParam&&/^#\/(?!gacha)[\w/?=&%.-]*$/.test(backParam)?backParam:'#/';
  let festival:FestivalData=await loadFestival();
  let busy=false,disposed=false;
- root.innerHTML=`${header()}<section class="page gacha-page"><div class="page-heading"><div><span class="eyebrow">ほねっこで、お祭りの仲間をふやそう</span><h1>しばガチャ</h1><p>当たった衣装の柴犬は、演奏中のおうえん団に加わります。</p></div><a class="button" id="gacha-back" href="${escape(back)}" data-nav>もどる</a></div>
+ root.innerHTML=`${header()}<section class="page gacha-page"><div class="page-heading"><div><span class="eyebrow">ほねっこで、お祭りの仲間をふやそう</span><h1>しばガチャ</h1><p>当たった衣装は、演奏中に来てくれる仲間の柴犬が着て登場します。レアな毛色の柴犬は、4匹目として来ることがあります。</p></div><a class="button" id="gacha-back" href="${escape(back)}" data-nav>もどる</a></div>
   <div class="gacha-main">
    <div class="gacha-machine">${machineSvg()}<div class="drop-capsule" hidden></div></div>
    <div class="gacha-panel paper">
@@ -44,7 +44,7 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
     <button class="primary gacha-one" id="pull-1" data-nav>1回ひく<small>ほねっこ ${PULL_COST}</small></button>
     <button class="gacha-ten" id="pull-10" data-nav>10回ひく<small>ほねっこ ${PULL_COST*TEN_PULLS}・スーパーレア以上が1つ確定</small></button>
     <p class="gacha-hint" id="gacha-hint" role="status"></p>
-    <details class="gacha-rates"><summary>出る確率と、かぶったとき</summary><p>ノーマル 58%・レア 30%・スーパーレア 10%・ウルトラレア 2%。10回ひくと、最後の1回はスーパーレア以上です。<br>同じ衣装が出たら ほねっこが戻ります（ノーマル ${DUPLICATE_BONES.N}・レア ${DUPLICATE_BONES.R}・スーパーレア ${DUPLICATE_BONES.SR}・ウルトラレア ${DUPLICATE_BONES.SSR}）。<br>ほねっこは演奏でたまります（良1本、フィーバー中は2本、50コンボごと・満員御礼・クリアなどでボーナス）。</p></details>
+    <details class="gacha-rates"><summary>出る確率と、かぶったとき</summary><p>ノーマル 58%・レア 30%・スーパーレア 10%・ウルトラレア 2%。10回ひくと、最後の1回はスーパーレア以上です。<br>同じ衣装が出たら ほねっこが戻ります（ノーマル ${DUPLICATE_BONES.N}・レア ${DUPLICATE_BONES.R}・スーパーレア ${DUPLICATE_BONES.SR}・ウルトラレア ${DUPLICATE_BONES.SSR}）。<br>ほねっこは演奏でたまります（良1本、フィーバー中は2本、50コンボごと・全員集合・クリアなどでボーナス）。</p></details>
    </div>
   </div>
   <section class="zukan paper"><h2>しばずかん <span id="zukan-count"></span></h2><div class="zukan-grid" id="zukan"></div></section>

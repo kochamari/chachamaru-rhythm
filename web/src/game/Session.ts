@@ -7,8 +7,10 @@ import {state,difficultyNames} from '../app/store';
 import {escape,toast} from '../app/ui';
 import {saveRun,saveSettings} from '../storage/Database';
 import {adoptDrum} from '../app/drumMode';
+import {lockZoom} from '../app/zoom';
 import {outputOptions,useOutput,setTiming,clampDelay,signedMs} from '../app/output';
-import {BoneCounter,crowdStep,crowdSize,inFever,finishBones,CROWD_MAX} from './festival';
+import {BoneCounter,inFever,finishBones,ALL_FRIENDS_GAUGE} from './festival';
+import {friendsForGauge} from '../render/timing';
 import {awardBones,loadFestival} from '../storage/festival';
 
 export type SessionStatus='LOADING'|'READY'|'COUNT_IN'|'PLAYING'|'PAUSED'|'FINISHING'|'RESULT'|'LOAD_ERROR'|'SHOWCASE';
@@ -26,8 +28,10 @@ export class Session {
  /** Player hits judged so far, and whether the screen is set up for the electronic drum. */
  private judged=0;private drumUi=false;
  /** ほねっこ for this run (normal play only), and the festival moments that get a sound. */
- private readonly rewards:boolean;private readonly boneCounter:BoneCounter;private fever=false;private fullHouse=false;
+ private readonly rewards:boolean;private readonly boneCounter=new BoneCounter();private fever=false;private allFriends=false;private friends=0;
  private abort=new AbortController();private wake:WakeLockSentinel|null=null;
+ /** The play screen never zooms (pinch, double tap, focus on a small field). */
+ private readonly unlockZoom=lockZoom();
  private readonly scene:HTMLElement;
  onResult:(r:RunResult)=>void=()=>{};
  private visibility=()=>{if(document.hidden)this.pause('別の画面に移動したため一時停止しました');};
@@ -44,7 +48,6 @@ export class Session {
   this.autoplay=opts.autoplay??false;this.practice=opts.practice??false;
   this.pausedAt=Math.max(0,opts.startMs??0);
   this.rewards=!this.autoplay&&!this.practice;
-  this.boneCounter=new BoneCounter(crowdStep(chart.notes.filter(n=>n.kind==='tap').length));
   const inputMode=this.mode==='mixed'?'keyboard':this.mode;
   this.drumUi=inputMode==='midi';
   root.innerHTML=`<section class="game-scene mode-${inputMode}" aria-label="演奏画面">
@@ -218,11 +221,15 @@ export class Session {
   for(const e of events){
    if(e.kind==='combo')this.audio.chime(e.value!>=100?3:e.value!>=50?2:1);
   }
-  if(this.rewards)this.boneCounter.add(events,s.great);
+  if(this.rewards)this.boneCounter.add(events,s.gauge);
   const fever=inFever(s.combo);
   if(fever&&!this.fever&&this.status==='PLAYING')this.audio.effect('fever');
   this.fever=fever;
-  if(!this.fullHouse&&crowdSize(s.great,this.boneCounter.step)>=CROWD_MAX){this.fullHouse=true;this.audio.effect('fullHouse');}
+  // A friend comes at each gauge step; all four together get a fanfare.
+  const friends=friendsForGauge(s.gauge);
+  if(friends>this.friends&&this.status==='PLAYING')this.audio.effect(friends>=4&&!this.allFriends?'fullHouse':'join');
+  this.friends=friends;
+  if(!this.allFriends&&s.gauge>=ALL_FRIENDS_GAUGE)this.allFriends=true;
   if(s.finished&&!this.celebrated&&this.status==='PLAYING'&&!this.practice){
    this.celebrated=true;
    if(s.allGreat){this.renderer.celebrate('allGreat');this.audio.effect('allGreat');}
@@ -273,6 +280,7 @@ export class Session {
  }
 
  dispose(){
+  this.unlockZoom();
   this.disposed=true;cancelAnimationFrame(this.frame);clearTimeout(this.finishTimer);this.abort.abort();
   document.removeEventListener('visibilitychange',this.visibility);
   this.input.onHit=()=>{};this.input.onPause=()=>{};this.input.clear();
