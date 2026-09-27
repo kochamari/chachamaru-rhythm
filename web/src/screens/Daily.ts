@@ -1,6 +1,6 @@
 import {header,escape,toast,boneSvg} from '../app/ui';
 import {nav,memory,uiAudio} from '../app/context';
-import {loadFestival,setTitle,type FestivalData} from '../storage/festival';
+import {loadFestival,setTitle,featuredToday,type FestivalData} from '../storage/festival';
 import {db,listSongs} from '../storage/Database';
 import {dayKey} from '../game/festival';
 import {todayDaily,featuredSong,nextStreakGoal,runStats,festivalStats,tierFor,unlockedTitles,titleName,MISSION_BY_ID,ALL_MISSIONS_BONES,ACHIEVEMENTS,TIER_NAMES,TIER_BONES,FEATURED_MULT,type LifeStats} from '../game/daily';
@@ -16,7 +16,8 @@ export async function dailyScreen(root:HTMLElement,backParam:string|null):Promis
  await showLoginBonus();
  const today=dayKey();
  const [songs,runs]=await Promise.all([listSongs().catch(()=>[] as Manifest[]),db().then(d=>d.getAll('runs') as Promise<RunResult[]>).catch(()=>[] as RunResult[])]);
- const featuredId=featuredSong(today,songs.map(m=>m.packId)),featured=songs.find(m=>m.packId===featuredId);
+ const packIds=songs.map(m=>m.packId);
+ const featuredId=await featuredToday(packIds).catch(()=>featuredSong(today,packIds)),featured=songs.find(m=>m.packId===featuredId);
  const played=runStats(runs);
  let f:FestivalData=await loadFestival();
 

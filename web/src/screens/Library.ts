@@ -9,6 +9,7 @@ import {nav,preview,memory,uiAudio} from '../app/context';
 import {progressChips,miniFortune} from '../app/progress';
 import {showLoginBonus} from '../app/loginBonus';
 import {featuredSong,FEATURED_MULT} from '../game/daily';
+import {featuredToday} from '../storage/festival';
 import {dayKey} from '../game/festival';
 import {BUNDLED_ORDER,songColor,chartLevel,bpmOf} from '../app/songinfo';
 import {outputOptions,useOutput} from '../app/output';
@@ -41,7 +42,8 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
  // The login bonus first (once a day), so the chips show what it paid.
  await showLoginBonus();
  const chips=await progressChips('#/songs');
- const featured=featuredSong(dayKey(),all.map(m=>m.packId));
+ const packIds=all.map(m=>m.packId);
+ const featured=await featuredToday(packIds).catch(()=>featuredSong(dayKey(),packIds));
  if(!isCurrent())return ()=>{};
  // The detail panel animates in only when the song changes (not on a difficulty change).
  let shownSong='';

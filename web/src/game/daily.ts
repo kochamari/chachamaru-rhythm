@@ -87,7 +87,8 @@ export function missionsFor(day:string){
  const random=seeded(seedOf('missions:'+day));
  return (['easy','mid','fun'] as const).map(tier=>{const pool=MISSIONS.filter(m=>m.tier===tier);return pool[Math.floor(random()*pool.length)].id;});
 }
-export interface DailyState {day:string;ids:string[];progress:Record<string,number>;paid:string[];allPaid:boolean}
+/** Today's missions and their progress; `featured` is the day's featured song once chosen (see featuredToday). */
+export interface DailyState {day:string;ids:string[];progress:Record<string,number>;paid:string[];allPaid:boolean;featured?:string}
 /** Today's missions: the saved ones if they are today's, otherwise a new set. */
 export function todayDaily(state:DailyState|undefined,day:string):DailyState{
  return state&&state.day===day?state:{day,ids:missionsFor(day),progress:{},paid:[],allPaid:false};

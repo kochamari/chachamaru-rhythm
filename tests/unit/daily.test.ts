@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import {beforeEach,it,expect} from 'vitest';
 import {daysBetween,nextLogin,nextStreakGoal,missionsFor,todayDaily,advanceMissions,featuredSong,newTiers,tierFor,unlockedTitles,titleName,runStats,festivalStats,MISSIONS,MISSION_BY_ID,ACHIEVEMENTS,LOGIN_REWARDS,ALL_MISSIONS_BONES,TIER_BONES,DEFAULT_TITLE,type RunFacts} from '../../web/src/game/daily';
-import {claimLogin,awardBones,spendOnDraws,loadFestival,saveFestival,setTitle,validFestival,emptyFestival} from '../../web/src/storage/festival';
+import {claimLogin,awardBones,spendOnDraws,loadFestival,saveFestival,setTitle,validFestival,emptyFestival,featuredToday} from '../../web/src/storage/festival';
 import {db,saveRun} from '../../web/src/storage/Database';
 import {PULL_COST} from '../../web/src/game/gacha';
 import {COSTUMES} from '../../web/src/render/costumes';
@@ -121,4 +121,23 @@ it('one free draw a day; a draw advances the gacha mission',async()=>{
  await expect(spendOnDraws(1,()=>[{id:'uchiwa',refund:0}],PULL_COST,undefined,{free:true,now:noon('2026-10-01')})).rejects.toThrow('きょうの無料ガチャは、もうひきました');
  const next=await spendOnDraws(1,()=>[{id:'uchiwa',refund:0}],PULL_COST,undefined,{free:true,now:noon('2026-10-02')});
  expect(next.festival.owned).toEqual({hachimaki:1,uchiwa:1});
+});
+
+it('the featured song is chosen once a day and kept while songs are installed or added',async()=>{
+ // The very first start: only one song installed so far.
+ expect(await featuredToday(['himawari-demo'],noon('2026-10-01'))).toBe('himawari-demo');
+ expect(await featuredToday(['himawari-demo','b-song','c-song','d-song'],noon('2026-10-01'))).toBe('himawari-demo');
+ // Deleted: chosen again, then kept.
+ const again=await featuredToday(['b-song','c-song'],noon('2026-10-01'));
+ expect(['b-song','c-song']).toContain(again);
+ expect(await featuredToday(['b-song','c-song','d-song'],noon('2026-10-01'))).toBe(again);
+ // It stays through the login claim and today's missions.
+ await claimLogin(noon('2026-10-01'));
+ await awardBones('r1',10,[],{slot:['bone','drum','flower'],xp:1,now:noon('2026-10-01'),run:facts()});
+ expect((await loadFestival()).daily?.featured).toBe(again);
+ // A new day: a new choice from all the songs.
+ const ids=['b-song','c-song','d-song'];
+ expect(await featuredToday(ids,noon('2026-10-02'))).toBe(featuredSong('2026-10-02',ids));
+ expect(await featuredToday([],noon('2026-10-03'))).toBe(null);
+ expect(validFestival(await loadFestival())).toBe(true);
 });

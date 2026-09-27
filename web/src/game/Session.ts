@@ -9,10 +9,10 @@ import {saveRun,saveSettings,listSongs} from '../storage/Database';
 import {adoptDrum} from '../app/drumMode';
 import {lockZoom} from '../app/zoom';
 import {outputOptions,useOutput,setTiming,clampDelay,signedMs} from '../app/output';
-import {BoneCounter,feverLevel,finishBones,drawFriends,mergeBonuses,drawSlot,xpForRun,dayKey} from './festival';
-import {featuredSong,type RunFacts} from './daily';
+import {BoneCounter,feverLevel,finishBones,drawFriends,mergeBonuses,drawSlot,xpForRun} from './festival';
+import type {RunFacts} from './daily';
 import {cryptoRandom} from './gacha';
-import {awardBones,loadFestival} from '../storage/festival';
+import {awardBones,loadFestival,featuredToday} from '../storage/festival';
 
 export type SessionStatus='LOADING'|'READY'|'COUNT_IN'|'PLAYING'|'PAUSED'|'FINISHING'|'RESULT'|'LOAD_ERROR'|'SHOWCASE';
 const AUTO_ROLL_INTERVAL_MS=80;
@@ -55,7 +55,7 @@ export class Session {
   this.rewards=!this.autoplay&&!this.practice;
   this.friendDraw=loadFestival().then(f=>f.owned).catch(()=>({})).then(owned=>({owned,coats:drawFriends(cryptoRandom,owned)}));
   void this.friendDraw.then(d=>this.boneCounter.setFriends(d.coats));
-  this.featured=this.rewards?listSongs().then(ms=>featuredSong(dayKey(),ms.map(m=>m.packId))===pack.manifest.packId).catch(()=>false):Promise.resolve(false);
+  this.featured=this.rewards?listSongs().then(ms=>featuredToday(ms.map(m=>m.packId))).then(id=>id===pack.manifest.packId).catch(()=>false):Promise.resolve(false);
   const inputMode=this.mode==='mixed'?'keyboard':this.mode;
   this.drumUi=inputMode==='midi';
   root.innerHTML=`<section class="game-scene mode-${inputMode}" aria-label="演奏画面">

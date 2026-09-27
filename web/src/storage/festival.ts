@@ -1,7 +1,7 @@
 import {db} from './Database';
 import type {RunResult} from '../../../contracts/public-types';
 import {slotPayout,levelFor,dayKey,SLOT_SYMBOLS,LEVEL_UP_BONES,DAILY_BONES,type SlotSymbol} from '../game/festival';
-import {nextLogin,advanceMissions,todayDaily,newTiers,runStats,festivalStats,LOGIN_REWARDS,type LoginState,type DailyState,type RunFacts,type MissionMove,type Item,type Unlock} from '../game/daily';
+import {nextLogin,advanceMissions,todayDaily,newTiers,runStats,festivalStats,featuredSong,LOGIN_REWARDS,type LoginState,type DailyState,type RunFacts,type MissionMove,type Item,type Unlock} from '../game/daily';
 
 // ほねっこ (dog-bone treats) and the shibas collected with them, kept in the
 // settings store under its own key. One award per finished run (by runId), so
@@ -55,7 +55,7 @@ const counts=(v:unknown,max:number,top=1e9)=>!!v&&typeof v==='object'&&!Array.is
 function validExtras(f:FestivalData){
  const l=f.login,d=f.daily;
  if(l!==undefined&&!(l&&isDay(l.day)&&count(l.count)&&Number.isInteger(l.card)&&l.card>=1&&l.card<=LOGIN_REWARDS.length&&count(l.streak)&&count(l.best)))return false;
- if(d!==undefined&&!(d&&isDay(d.day)&&ids(d.ids,5)&&counts(d.progress,10)&&ids(d.paid,5)&&typeof d.allPaid==='boolean'))return false;
+ if(d!==undefined&&!(d&&isDay(d.day)&&ids(d.ids,5)&&counts(d.progress,10)&&ids(d.paid,5)&&typeof d.allPaid==='boolean'&&(d.featured===undefined||(typeof d.featured==='string'&&d.featured.length>0&&d.featured.length<=200))))return false;
  if(f.achieved!==undefined&&!counts(f.achieved,50,3))return false;
  if(f.title!==undefined&&!(typeof f.title==='string'&&/^[a-z0-9-]{1,40}:[123]$/.test(f.title)))return false;
  return (f.freeDay===undefined||isDay(f.freeDay))&&(f.jackpots===undefined||count(f.jackpots));
@@ -119,6 +119,23 @@ export async function claimLogin(now=new Date()):Promise<LoginClaim|null>{
  f.bones+=total;f.earned+=total;
  await store.put(f,KEY);await tx.done;
  return {items,total,login:next.state,titles:unlocks.map(u=>u.title),bones:f.bones};
+}
+
+/**
+ * Today's featured song: chosen once a day from the songs installed at that
+ * moment and kept all day, so songs still being installed (the very first
+ * start) or added later don't change it. Chosen again only if it was deleted.
+ */
+export async function featuredToday(packIds:readonly string[],now=new Date()):Promise<string|null>{
+ const today=dayKey(now);
+ const d=await db(),tx=d.transaction('settings','readwrite'),store=tx.objectStore('settings');
+ const raw=await store.get(KEY),f=validFestival(raw)?migrate(raw):emptyFestival();
+ const daily=todayDaily(f.daily,today);
+ if(daily.featured&&packIds.includes(daily.featured)){await tx.done;return daily.featured;}
+ const pick=featuredSong(today,packIds);
+ if(pick){f.daily={...daily,featured:pick};await store.put(f,KEY);}
+ await tx.done;
+ return pick;
 }
 
 /** Chooses the title shown with the level (an unlocked "id:tier", or none). */
