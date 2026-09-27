@@ -529,7 +529,7 @@ html[data-render="software"] .new-best{animation:none}
 .bone-items span{font-size:11px;font-weight:800;padding:1px 8px;border-radius:999px;background:#fffaf0;border:1.5px solid #e0c080;color:#6b5a48;white-space:nowrap}
 .bone-items span:last-child{animation:reward-pop .4s cubic-bezier(.2,1.6,.4,1)}
 .bone-items .daily{background:#dff5d6;border-color:#7ed36f}.bone-items .slot{background:#fff0c2;border-color:#f0b429}
-.reward-slot,.reward-level{display:flex;align-items:center;gap:10px;padding:6px 12px;border-radius:14px;border:2.5px solid var(--ink);background:#fff8e6;box-shadow:0 3px 0 var(--ink);color:var(--ink)}
+.reward-slot,.reward-level,.reward-missions{display:flex;align-items:center;gap:10px;padding:6px 12px;border-radius:14px;border:2.5px solid var(--ink);background:#fff8e6;box-shadow:0 3px 0 var(--ink);color:var(--ink)}
 .slot-label{font-size:11px;font-weight:900;line-height:1.15;color:#8a4a2a;flex:none}
 .slot-reels{--sym:40px;display:flex;gap:4px;padding:3px;border-radius:10px;background:#2b1b2e;border:2px solid var(--ink)}
 .reel{display:block;width:var(--sym);height:var(--sym);overflow:hidden;border-radius:7px;background:#fffaf0}
@@ -555,15 +555,16 @@ html[data-render="software"] .new-best{animation:none}
 @media (max-height:500px) and (orientation:landscape){
  /* The shiba beside the title, so the rewards fit under them. */
  .result-page.has-rewards .result-dog{display:grid;grid-template-columns:auto auto;justify-content:center;align-items:center;gap:6px}
- .result-page.has-rewards .result-character{width:min(72px,22svh);margin:0;grid-column:1;grid-row:1}
+ .result-page.has-rewards .result-character{width:min(62px,19svh);margin:0;grid-column:1;grid-row:1}
  .result-page.has-rewards .result-dog h1{font-size:30px;grid-column:2;grid-row:1}
  .daily-chip .long{display:none}
  .slot-result .what{display:none}.slot-result .mult{font-size:17px}
  .bone-gacha{min-height:34px;padding:4px 10px;font-size:13px}
  .daily-chip{font-size:10px;padding:0 6px}
- .reward-level{padding:2px 8px}.level-badge b{font-size:15px}.level-xp{font-size:11px}
+ .reward-level{padding:2px 8px;line-height:1.25}.level-badge b{font-size:15px}.level-xp{font-size:11px}
  .result-page.has-rewards .celebration{display:none}
- .result-rewards{gap:5px}
+ .result-rewards{gap:4px}
+ .result-page.has-rewards{row-gap:6px}
  .result-rewards .reward-bones{padding:4px 10px;gap:2px 8px}
  .bone-items{display:none}
  .reward-slot,.reward-level{padding:3px 8px;gap:6px}
@@ -678,3 +679,140 @@ html[data-render="software"] .new-best{animation:none}
  .zukan-card b{font-size:10px}.zukan-card small{font-size:9px}
  .series-shelf h3{font-size:13px;gap:6px}.series-bonus{font-size:10px}
 }
+/* ---------------------------------------------------------------- daily */
+/* The paw stamp and the 7-day stamp card (login bonus). */
+.paw{display:block;width:100%;height:100%}
+.stamp-card{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.stamp-card li{position:relative;display:grid;justify-items:center;align-content:start;gap:2px;padding:5px 2px 5px;border-radius:12px;border:2px dashed #d9c9a6;background:#fffaf0;color:#6b5a48}
+.stamp-slot{position:relative;display:block;width:32px;height:32px;border-radius:50%;border:2px dashed #e6d6b4}
+.stamp-card li.done .stamp-slot,.stamp-card li.today .stamp-slot{border-color:transparent}
+.stamp-card li small{font-size:10px;font-weight:800}
+.stamp-card li b{font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+.stamp-card li.big{background:linear-gradient(170deg,#fff3c4,#ffd86b);border-color:#e0a100}
+.stamp-card li.big b{color:#b8322a}
+.stamp-card li.done,.stamp-card li.today{border-style:solid;border-color:#e3b8a8}
+.stamp-slot>.paw,.stamp-card .stamp-drop{position:absolute;inset:-2px;width:auto;height:auto;opacity:.85;transform:rotate(-12deg)}
+.stamp-card .stamp-drop{opacity:0;animation:stamp-land .42s cubic-bezier(.2,1.5,.45,1) .45s forwards}
+.stamp-card .stamp-drop .paw{width:100%;height:100%}
+@keyframes stamp-land{0%{opacity:0;transform:rotate(-40deg) scale(3)}60%{opacity:.95;transform:rotate(-10deg) scale(.86)}100%{opacity:.85;transform:rotate(-12deg) scale(1)}}
+/* The login bonus pop-up: never blocks taps, closes by itself. */
+.login-bonus{position:fixed;inset:0;z-index:150;display:grid;place-items:center;pointer-events:none;padding:16px;background:radial-gradient(circle at 50% 50%,#1e172666,#1e172600 70%);animation:lb-in .28s ease-out}
+.login-bonus.closing{animation:lb-out .3s ease-in forwards}
+@keyframes lb-in{from{opacity:0}}
+@keyframes lb-out{to{opacity:0;transform:scale(.96)}}
+.lb-card{width:min(440px,100%);display:grid;justify-items:center;gap:8px;padding:14px 14px 12px;border-radius:22px;border:3px solid var(--ink);background:linear-gradient(170deg,#fffdf0,#fff2ce);box-shadow:0 7px 0 var(--ink),0 0 40px #ffd86b88;color:var(--ink);animation:card-pop .45s cubic-bezier(.2,.9,.3,1.3)}
+.login-bonus.big .lb-card{border-color:#c98a00;box-shadow:0 7px 0 var(--ink),0 0 60px #ffd23fcc}
+.lb-kicker{display:block;font-size:13px;font-weight:900;letter-spacing:.14em;color:#b8322a;margin-bottom:4px}
+.lb-card h3{margin:0;font-size:26px;line-height:1;text-align:center}
+.lb-card .stamp-card{width:100%}
+.lb-total{display:flex;align-items:center;gap:8px;margin:2px 0 0;font-size:18px;font-weight:900}
+.lb-total svg{width:40px;height:26px}
+.lb-total b{font-size:26px;color:#b8322a;font-variant-numeric:tabular-nums}
+.lb-extras{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:4px}
+.lb-extras li{font-size:12px;font-weight:800;padding:1px 8px;border-radius:999px;background:#fff;border:1.5px solid #f0b429}
+.lb-streak{margin:0;font-size:13px;font-weight:800;color:#6b5a48;text-align:center}
+.lb-streak b{font-size:18px;color:#d9482b}
+.lb-streak small{font-size:11px;white-space:nowrap}
+/* Sideways phones: a flatter card that fits the height. */
+@media (max-height:500px) and (orientation:landscape){
+ .lb-card{width:min(560px,100%);gap:4px;padding:8px 12px}
+ .lb-card h3{display:flex;align-items:baseline;gap:10px;font-size:20px}.lb-kicker{margin:0}
+ .lb-card .stamp-card li{padding:2px 1px 3px}.lb-card .stamp-slot{width:24px;height:24px}
+ .lb-total{font-size:15px}.lb-total b{font-size:20px}.lb-total svg{width:30px;height:20px}
+ .lb-extras li{font-size:11px}
+}
+/* Title-screen chip badges: missions still to do, and the free draw. */
+.chip-button{position:relative}
+.chip-button .paw{width:22px;height:22px;flex:none}
+.chip-badge{position:absolute;top:-7px;right:-6px;min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:999px;background:#ff4d4d;color:#fff;font-size:11px;font-weight:900;border:2px solid #fff4d8;box-shadow:0 2px 0 #0006;animation:badge-pulse 1.8s ease-in-out infinite}
+.chip-badge.free{background:#2f8a3a}
+@keyframes badge-pulse{50%{transform:scale(1.12)}}
+/* Song select: mission chip, chosen title, featured song tag. */
+.mission-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:4px 12px;border-radius:999px;background:#1e1726cc;border:2px solid #ffd86b88;color:#fff4d8;font-size:13px;font-weight:800;white-space:nowrap;text-decoration:none}
+.mission-chip b{font-size:16px;color:#fff;font-variant-numeric:tabular-nums}
+.mission-chip.done{border-color:#7ed36f;background:#2f5a2acc}
+.lv-chip .title-tag{font-style:normal;font-size:11px;font-weight:800;color:#ffd86b;max-width:9em;overflow:hidden;text-overflow:ellipsis}
+.featured-tag{position:absolute;z-index:1;top:-8px;right:10px;padding:0 8px;border-radius:999px;background:linear-gradient(90deg,#ffb13b,#ff5fa2);color:#fff;font-style:normal;font-size:11px;font-weight:900;border:1.5px solid var(--ink);box-shadow:0 2px 0 var(--ink);white-space:nowrap}
+/* The daily page. */
+.daily-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;max-width:1100px;margin:auto}
+.daily-grid .yarikomi{grid-column:1/-1}
+.daily-grid h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.streak-line{margin:10px 0 2px;font-size:14px;font-weight:800;color:#5a4a3a}
+.streak-line b{font-size:22px;color:#d9482b}
+.streak-line small{font-weight:700;color:#8a7658}
+.daily-note{font-size:12px!important;color:#7a6a52}
+.daily-note svg,.m-reward svg,.all-clear svg,.fs-mult svg{display:inline-block;width:22px;height:14px;vertical-align:-2px;margin-right:2px}
+.mission-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.mission-list li{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"name count reward" "bar bar bar";gap:4px 10px;align-items:center;padding:8px 10px;border-radius:12px;border:2px solid #e6d6b4;background:#fffaf0}
+.m-name{grid-area:name;font-weight:900;font-size:15px}
+.m-count{grid-area:count;font-size:12px;font-weight:800;color:#6b5a48;font-variant-numeric:tabular-nums}
+.m-reward{grid-area:reward;font-size:13px;font-weight:900;color:#b8322a;white-space:nowrap}
+.m-bar{grid-area:bar;height:8px;border-radius:999px;background:#eadfc6;overflow:hidden}
+.m-bar i{display:block;height:100%;background:linear-gradient(90deg,#ffb13b,#ff7a3d)}
+.mission-list li.done{border-color:#7ed36f;background:#f1fbe9}
+.mission-list li.done .m-bar i{background:linear-gradient(90deg,#7ed36f,#3aa04a)}
+.m-stamp{position:absolute;right:8px;top:50%;transform:translateY(-50%) rotate(-12deg);padding:2px 10px;border-radius:8px;border:3px solid #d8262b;color:#d8262b;font-weight:900;font-size:15px;letter-spacing:.1em;background:#fffaf0cc}
+.all-clear{display:flex;align-items:center;gap:10px;margin:10px 0 0!important;padding:8px 12px;border-radius:12px;background:#fff2ce;border:2px dashed #e0a100;font-weight:800;color:#6b5a48!important;font-size:13px!important}
+.all-clear b{color:#b8322a;font-size:15px}
+.all-clear .all-count{margin-left:auto;font-variant-numeric:tabular-nums}
+.all-clear.done{border-style:solid;border-color:#7ed36f;background:#f1fbe9}
+.featured-song{display:grid;justify-items:start;gap:3px;padding:12px;border-radius:14px;background:linear-gradient(120deg,#fff0f7,#fff4d8);border:2px solid #ff9ec4}
+.fs-kicker{font-size:12px;font-weight:900;color:#d9338f;letter-spacing:.08em}
+.featured-song strong{font-size:20px}
+.featured-song small{color:#7a6a58}
+.fs-mult{font-weight:900;color:#b8322a}
+.featured-song .primary{margin-top:6px;min-height:44px;padding:8px 18px;font-size:16px}
+.free-gacha{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border-radius:14px;border:2px solid #d9c9a6;background:#fffaf0;font-weight:900}
+.free-gacha.ready{border-color:#2f8a3a;background:#f1fbe9}
+.free-gacha small{color:#7a6a58;font-weight:700}
+.title-now{margin:0 0 8px;font-weight:800;color:#5a4a3a}
+.title-now b{font-size:18px;color:var(--ink);background:#fff2ce;border:2px solid #f0b429;border-radius:999px;padding:1px 12px}
+.title-picks{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.title-pick{min-height:34px;padding:4px 12px;border-radius:999px;font-size:13px;border:2px solid #d9c9a6;background:#fff}
+.title-pick.t1{border-color:#c98a5a}.title-pick.t2{border-color:#9aa7b8}.title-pick.t3{border-color:#e0a100;background:#fff8dc}
+.title-pick.on{background:var(--don);color:#fff;border-color:var(--ink)}
+.ach-count{font-size:14px;color:#8a7658}
+.ach-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.ach{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"medals name" "value value" "bar bar";gap:3px 8px;padding:8px 10px;border-radius:12px;border:2px solid #e6d6b4;background:#fffaf0}
+.ach.gold{border-color:#e0a100;background:linear-gradient(170deg,#fff8dc,#fffaf0)}
+.ach-medals{grid-area:medals;display:flex;gap:2px}
+.ach-medals i{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:900;color:#fff;background:#d9d2c4;border:1.5px solid #bfb4a0}
+.ach-medals i.t1.on{background:#c98a5a;border-color:#8a5a2a}.ach-medals i.t2.on{background:#9aa7b8;border-color:#5a6b80}.ach-medals i.t3.on{background:#f0b429;border-color:#a86b00}
+.ach-name{grid-area:name;font-size:14px;align-self:center}
+.ach-value{grid-area:value;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums}
+.ach-value small{font-weight:700;color:#7a6a58}
+.ach-bar{grid-area:bar;height:6px;border-radius:999px;background:#eadfc6;overflow:hidden}
+.ach-bar i{display:block;height:100%;background:linear-gradient(90deg,#b58cff,#ff7eb6)}
+.ach-ready{grid-column:1/-1;font-size:11px;font-weight:900;color:#d9338f}
+@media (max-width:720px){.ach-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}.ach{padding:6px 8px}.ach-value{font-size:12px}.ach-value small{display:block}.daily-grid{grid-template-columns:1fr}.stamp-card{gap:3px}.stamp-card li{padding:4px 1px}.stamp-card li b{font-size:11px}.stamp-card li small{font-size:9px}.stamp-slot{width:26px;height:26px}}
+/* The gacha's free draw. */
+.gacha-free{display:grid;justify-items:center;gap:2px;min-height:58px;font-size:19px;background:linear-gradient(#b9f0a8,#6fcf5a);border:2.5px solid var(--ink);box-shadow:0 4px 0 var(--ink);color:#16361a;animation:play-breathe 2.2s ease-in-out infinite}
+.gacha-free small{font-size:12px;font-weight:700}
+.gacha-free[hidden]{display:none}
+/* Result: today's missions and new titles. */
+.reward-missions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:6px 10px}
+.rm{position:relative;display:grid;gap:2px;min-width:0}
+.rm b{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rm i{display:block;height:7px;border-radius:999px;background:#eadfc6;overflow:hidden}
+.rm em{display:block;height:100%;background:linear-gradient(90deg,#ffb13b,#ff7a3d);transition:width .7s ease-out}
+.rm small{font-size:10px;font-weight:800;color:#6b5a48;font-variant-numeric:tabular-nums}
+.rm.done em{background:linear-gradient(90deg,#7ed36f,#3aa04a)}
+.rm.done small{color:#2f8a3a;font-weight:900}
+.rm.done b{color:#2f7a34}.rm.done b::before{content:'✔';margin-right:2px}
+.rm.pop{animation:mission-done .55s cubic-bezier(.2,1.6,.4,1)}.rm.pop small{animation:reward-pop .45s cubic-bezier(.2,1.6,.4,1);color:#d8262b}
+@keyframes mission-done{0%{transform:none}35%{transform:scale(1.12)}100%{transform:none}}
+.reward-titles{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 12px;border-radius:14px;border:2.5px solid var(--ink);background:linear-gradient(100deg,#fff3c4,#ffd86b);box-shadow:0 3px 0 var(--ink)}
+.reward-titles[hidden]{display:none}
+.reward-titles.pop{animation:reward-pop .5s cubic-bezier(.2,1.6,.4,1)}
+.title-get-head{font-size:13px;font-weight:900;color:#8a4a0a}
+.title-get{padding:1px 10px;border-radius:999px;background:#fffaf0;border:1.5px solid #c98a00;font-size:13px;font-weight:900;color:var(--ink);white-space:nowrap}
+/* Sideways phones: one row of chips above the songs (曲を追加 stays in the top bar; the first-play bonus shows on the title and the daily page). */
+@media (max-height:500px) and (orientation:landscape){.library-head .button,.library-head .daily-hint{display:none}.library-head .search{min-width:120px}}
+@media (max-height:500px) and (orientation:landscape){.reward-missions{padding:3px 8px;gap:6px;line-height:1.3}.rm b{font-size:10px}.rm small{display:none}
+ /* No room for a titles row: new titles show as a banner over the bottom rows for a few seconds. */
+ .reward-titles{position:absolute;left:6px;right:6px;bottom:2px;z-index:3;padding:3px 10px;gap:4px;justify-content:center;pointer-events:none}
+ .reward-titles,.reward-titles.pop{animation:title-banner 3.8s ease-out forwards}
+ .title-get-head,.title-get{font-size:12px}}
+@keyframes title-banner{0%{transform:scale(.3);opacity:0}9%{transform:none;opacity:1}86%{opacity:1}100%{opacity:0;visibility:hidden}}
+@media (max-height:500px) and (orientation:landscape){.mission-chip{min-height:30px;padding:0 10px;font-size:12px}.mission-chip b{font-size:14px}.lv-chip .title-tag{display:none}}
+@media (prefers-reduced-motion:reduce){.stamp-card .stamp-drop{animation:none;opacity:.85}.chip-badge,.gacha-free{animation:none}}

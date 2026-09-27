@@ -2,7 +2,8 @@ import {BRAND} from '../app/brand';
 import {Character,flowerSvg} from '../render/Character';
 import {nav} from '../app/context';
 import {boneSvg} from '../app/ui';
-import {dailyWaiting} from '../app/progress';
+import {dailyWaiting,dailyBadges} from '../app/progress';
+import {showLoginBonus,pawSvg} from '../app/loginBonus';
 
 const icon={
  plus:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
@@ -21,7 +22,7 @@ export function homeScreen(root:HTMLElement):()=>void{
     <a class="drum-start" href="#/songs" data-nav id="start-game"><strong>はじめる</strong><small>ドン で スタート</small></a>
     <div class="title-links">
      <a class="chip-button gacha-chip" href="#/gacha" data-nav>${boneSvg()} しばガチャ</a>
-     <a class="chip-button" href="#/import" data-nav>${icon.plus} 曲を追加</a>
+     <a class="chip-button festival-chip" href="#/daily" data-nav>${pawSvg('#ffd86b')} きょうのおまつり</a>
      <a class="chip-button" href="#/settings" data-nav>${icon.gear} 設定・電子ドラム</a>
      <a class="chip-button" href="#/studio" data-nav>${icon.studio} 譜面工房</a>
     </div>
@@ -40,5 +41,11 @@ export function homeScreen(root:HTMLElement):()=>void{
  // Until the first finished run of the day, the start drum wears a bonus tag.
  let alive=true;
  void dailyWaiting().then(w=>{if(w&&alive)root.querySelector('#start-game')?.insertAdjacentHTML('beforeend','<span class="daily-badge" aria-label="きょうの初プレイでほねっこ＋50">きょうの<b>＋50</b></span>');});
+ // The login bonus (once a day), then badges: missions still to do, and the free draw.
+ void showLoginBonus().then(()=>dailyBadges()).then(b=>{
+  if(!alive)return;
+  if(b.missionsLeft)root.querySelector('.festival-chip')?.insertAdjacentHTML('beforeend',`<span class="chip-badge" aria-label="残りのミッション ${b.missionsLeft}">${b.missionsLeft}</span>`);
+  if(b.freeDraw)root.querySelector('.gacha-chip')?.insertAdjacentHTML('beforeend','<span class="chip-badge free" aria-label="きょうの無料ガチャあり">無料</span>');
+ });
  return ()=>{alive=false;stop();clearInterval(drummer);nav.reset();};
 }

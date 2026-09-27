@@ -167,7 +167,8 @@ test('U29 a normal run earns ほねっこ (paid once, kept); the example run ear
  const f=(await stored())!;
  expect(f.awards).toHaveLength(1);
  expect(f.awards[0].total).toBeGreaterThan(0);
- expect(f.bones).toBe(f.awards[0].total);
+ // The run's award, plus the day's login bonus (claimed on the title screen).
+ expect(f.bones).toBe(f.awards[0].total+50);
  // The rewards count up one after another; a tap shows the final numbers at once.
  await page.locator('.result-rewards .bone-main').click();
  await expect(page.locator('#bone-count')).toHaveText(f.awards[0].total.toLocaleString('en-US'));
@@ -181,9 +182,11 @@ test('U29 a normal run earns ほねっこ (paid once, kept); the example run ear
  await expect(page.locator('.result-rewards')).toHaveCount(0);
  expect((await stored())!.bones).toBe(f.bones);
 });
+// Today's missions fixed to ones a draw does not advance (the local day, as the app counts it).
+const quietDaily=()=>{const d=new Date();return {day:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,ids:['play2','great150','hard1'],progress:{},paid:[],allPaid:false};};
 test('U30 しばガチャ spends ほねっこ, opens capsules and fills the collection',async({page})=>{
  await boot(page);
- await page.evaluate(async()=>{await (await window.__chacha.db()).put('settings',{schemaVersion:1,bones:1150,earned:1150,owned:{},pulls:0,awards:[]},'festival');});
+ await page.evaluate(async daily=>{await (await window.__chacha.db()).put('settings',{schemaVersion:1,bones:1150,earned:1150,owned:{},pulls:0,awards:[],daily},'festival');},quietDaily());
  await page.goto('/#/gacha');
  await expect(page.locator('#wallet')).toHaveText('1,150');
  await expect(page.locator('#zukan-count')).toHaveText(/^0 \/ \d+$/);
@@ -212,7 +215,7 @@ test('U30 しばガチャ spends ほねっこ, opens capsules and fills the coll
  await expect(page.locator('#pull-10')).toBeDisabled();
  // 天井: after 79 draws without ウルトラレア the next one is ウルトラレア. A series
  // completed (the お面 set here) pays its bonus once, with a celebration.
- await page.evaluate(async()=>{await (await window.__chacha.db()).put('settings',{schemaVersion:1,bones:200,earned:200,owned:{kitsune:1,oni:1,tengu:1,hyottoko:1,okame:1},pulls:79,awards:[],sinceSSR:79},'festival');});
+ await page.evaluate(async daily=>{await (await window.__chacha.db()).put('settings',{schemaVersion:1,bones:200,earned:200,owned:{kitsune:1,oni:1,tengu:1,hyottoko:1,okame:1},pulls:79,awards:[],sinceSSR:79,daily},'festival');},quietDaily());
  await page.reload();
  await expect(page.locator('#pity-left')).toHaveText('1');
  await page.locator('#pull-1').click();
@@ -228,4 +231,62 @@ test('U30 しばガチャ spends ほねっこ, opens capsules and fills the coll
  const g=await page.evaluate(async()=>(await(await window.__chacha.db()).get('settings','festival')) as {bones:number;sets:string[];sinceSSR:number});
  expect(g).toMatchObject({bones:350,sets:['omen'],sinceSSR:0});
  await expect(page.locator('#pity-left')).toHaveText('80');
+});
+test('U31 きょうのおまつり: a login stamp once a day, missions, the featured song, a free draw and titles',async({page})=>{
+ // Every login bonus that pops up, whenever it comes (it closes by itself after a few seconds).
+ await page.addInitScript(()=>{const seen:string[]=[];(window as unknown as {__loginBonus:string[]}).__loginBonus=seen;new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n instanceof HTMLElement&&n.classList.contains('login-bonus'))seen.push(n.textContent??'');}).observe(document,{childList:true,subtree:true});});
+ const shown=()=>page.evaluate(()=>(window as unknown as {__loginBonus:string[]}).__loginBonus);
+ type Festival={bones:number;pulls:number;login?:{count:number;streak:number};daily?:{day:string};freeDay?:string;title?:string;achieved?:Record<string,number>};
+ const stored=()=>page.evaluate(async()=>(await(await window.__chacha.db()).get('settings','festival')) as Festival|undefined);
+ // The first visit of the day: the stamp card, day 1, ＋50.
+ await boot(page);
+ await expect.poll(shown).toEqual([expect.stringMatching(/1日目[\s\S]*＋50/)]);
+ await expect.poll(async()=>(await stored())?.bones).toBe(50);
+ expect((await stored())!.login).toMatchObject({count:1,streak:1});
+ await expect(page.locator('.festival-chip .chip-badge')).toHaveText('3');
+ await expect(page.locator('.gacha-chip .chip-badge.free')).toHaveText('無料');
+ // Not again the same day.
+ await page.reload();
+ await expect(page.locator('.festival-chip .chip-badge')).toHaveText('3');
+ expect(await shown()).toEqual([]);
+ expect((await stored())!.bones).toBe(50);
+ // Fixed missions for the rest (one of them a draw), and a first やりこみ tier reached.
+ await page.evaluate(async day=>{const d=await window.__chacha.db() as unknown as {get:(s:string,k:string)=>Promise<object>;put:(s:string,v:object,k:string)=>Promise<unknown>};const f=await d.get('settings','festival');await d.put('settings',{...f,achieved:{plays:1},daily:{day,ids:['play2','great150','gacha1'],progress:{play2:1},paid:[],allPaid:false}},'festival');},(await stored())!.daily!.day);
+ await page.locator('.festival-chip').click();
+ await expect(page).toHaveURL(/#\/daily/);
+ await expect(page.locator('.daily-login .stamp-card li')).toHaveCount(7);
+ await expect(page.locator('.daily-login .stamp-card li.today')).toHaveCount(1);
+ await expect(page.locator('.streak-line b')).toHaveText('1');
+ await expect(page.locator('.mission-list li')).toHaveCount(3);
+ await expect(page.locator('.mission-list li').first()).toContainText('1 / 2');
+ await expect(page.locator('.ach-grid .ach')).toHaveCount(12);
+ // A title: chosen here, shown on the song list.
+ await page.locator('[data-title="plays:1"]').click();
+ await expect(page.locator('.title-now b')).toHaveText('お祭りデビュー');
+ expect((await stored())!.title).toBe('plays:1');
+ // Today's featured song: one tap selects it on the song list, marked ×2.
+ await page.locator('#play-featured').click();
+ await expect(page).toHaveURL(/#\/songs/);
+ await expect(page.locator('.song-bar.selected .featured-tag')).toHaveText('おすすめ ×2');
+ await expect(page.locator('.lv-chip .title-tag')).toHaveText('お祭りデビュー');
+ await expect(page.locator('.mission-chip b')).toHaveText('0/3');
+ // The free draw: once a day, no bones spent; it also finishes the draw mission.
+ await page.goto('/#/daily');
+ await page.locator('#go-free-gacha').click();
+ await expect(page.locator('#wallet')).toHaveText('50');
+ await page.locator('#pull-free').click();
+ await expect(page.locator('.gacha-reveal .reveal-capsule')).toBeVisible();
+ await page.locator('#reveal-next').click();
+ if(await page.locator('.reveal-capsule.upgrade').count())await page.locator('#reveal-next').click();
+ await expect(page.locator('.reveal-card')).toBeVisible();
+ await page.locator('#reveal-next').click();
+ await expect(page.locator('.gacha-reveal')).toHaveCount(0);
+ await expect(page.locator('#toast')).toContainText('ミッション「しばガチャをひく」 ＋30');
+ await expect(page.locator('#pull-free')).toBeHidden();
+ await expect(page.locator('#wallet')).toHaveText('80');
+ const f=(await stored())!;
+ expect([f.bones,f.pulls,f.freeDay]).toEqual([80,1,f.daily!.day]);
+ await page.goto('/#/');
+ await expect(page.locator('.festival-chip .chip-badge')).toHaveText('2');
+ await expect(page.locator('.gacha-chip .chip-badge')).toHaveCount(0);
 });

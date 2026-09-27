@@ -7,6 +7,9 @@ import {characterSvg,flowerSvg} from '../render/Character';
 import {bestsFor,crownSvg,type ChartBest} from '../app/records';
 import {nav,preview,memory,uiAudio} from '../app/context';
 import {progressChips,miniFortune} from '../app/progress';
+import {showLoginBonus} from '../app/loginBonus';
+import {featuredSong,FEATURED_MULT} from '../game/daily';
+import {dayKey} from '../game/festival';
 import {BUNDLED_ORDER,songColor,chartLevel,bpmOf} from '../app/songinfo';
 import {outputOptions,useOutput} from '../app/output';
 import {closeShutter} from '../app/shutter';
@@ -35,7 +38,10 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
  let previewTimer=0;let alive=true;
  const allBests=new Map<string,Partial<Record<Difficulty,ChartBest>>>();
  await Promise.all(all.map(async m=>allBests.set(m.packId,await bestsFor(m))));
+ // The login bonus first (once a day), so the chips show what it paid.
+ await showLoginBonus();
  const chips=await progressChips('#/songs');
+ const featured=featuredSong(dayKey(),all.map(m=>m.packId));
  if(!isCurrent())return ()=>{};
  // The detail panel animates in only when the song changes (not on a difficulty change).
  let shownSong='';
@@ -56,7 +62,8 @@ export async function libraryScreen(root:HTMLElement,isCurrent:()=>boolean):Prom
    const kind=kindOf(m,sources.get(m.packId)),b=allBests.get(m.packId)??{};
    const crowns=DIFFS.filter(d=>m.charts.some(c=>c.difficulty===d)).map(d=>`<i class="${b[d]?.crown??'none'}"></i>`).join('');
    const fresh=!Object.keys(b).length?'<em class="new-tag" aria-label="まだ遊んでいない曲">NEW</em>':'';
-   return `<li><button class="song-bar ${memory.selected===m.packId?'selected':''}" data-song="${escape(m.packId)}" data-kind="${kind}" style="--genre:${songColor(m.packId)}">${fresh}<span class="bar-icon" aria-hidden="true">${flowerSvg()}</span><span><strong>${escape(m.title)}</strong><small>${escape(m.artist)} · ${duration(m.durationMs)} · ${kindLabel[kind]}</small></span><span class="bar-crowns" aria-hidden="true">${crowns}</span></button></li>`;
+   const pick=m.packId===featured?`<em class="featured-tag" aria-label="きょうのおすすめ曲（ほねっこ${FEATURED_MULT}倍）">おすすめ ×${FEATURED_MULT}</em>`:'';
+   return `<li><button class="song-bar ${memory.selected===m.packId?'selected':''}" data-song="${escape(m.packId)}" data-kind="${kind}" style="--genre:${songColor(m.packId)}">${fresh}${pick}<span class="bar-icon" aria-hidden="true">${flowerSvg()}</span><span><strong>${escape(m.title)}</strong><small>${escape(m.artist)} · ${duration(m.durationMs)} · ${kindLabel[kind]}</small></span><span class="bar-crowns" aria-hidden="true">${crowns}</span></button></li>`;
   }).join('')||'<li class="empty">曲が見つかりませんでした</li>';
   list.querySelectorAll<HTMLElement>('[data-song]').forEach(b=>b.onclick=()=>{uiAudio.effect('move');if(memory.selected===b.dataset.song){zone='detail';focusDetail();return;}select(b.dataset.song!);zone='list';});
  }

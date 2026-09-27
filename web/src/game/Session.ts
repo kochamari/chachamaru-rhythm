@@ -5,11 +5,12 @@ import {InputRouter,type Input} from '../input/InputRouter';
 import {PlayRenderer,stageThemeFor} from '../render/PlayRenderer';
 import {state,difficultyNames} from '../app/store';
 import {escape,toast} from '../app/ui';
-import {saveRun,saveSettings} from '../storage/Database';
+import {saveRun,saveSettings,listSongs} from '../storage/Database';
 import {adoptDrum} from '../app/drumMode';
 import {lockZoom} from '../app/zoom';
 import {outputOptions,useOutput,setTiming,clampDelay,signedMs} from '../app/output';
-import {BoneCounter,feverLevel,finishBones,drawFriends,mergeBonuses,drawSlot,xpForRun} from './festival';
+import {BoneCounter,feverLevel,finishBones,drawFriends,mergeBonuses,drawSlot,xpForRun,dayKey} from './festival';
+import {featuredSong,type RunFacts} from './daily';
 import {cryptoRandom} from './gacha';
 import {awardBones,loadFestival} from '../storage/festival';
 
@@ -29,6 +30,8 @@ export class Session {
  private judged=0;private drumUi=false;
  /** ほねっこ for this run (normal play only), and the festival moments that get a sound. */
  private readonly rewards:boolean;private readonly boneCounter=new BoneCounter();private fever=0;
+ /** FEVER entries this run, and whether this is the day's featured song (for missions and ×2). */
+ private fevers=0;private readonly featured:Promise<boolean>;
  /** The four friends of this run (a slot draw; rare coats found in しばガチャ come more often). */
  private readonly friendDraw:Promise<{coats:string[];owned:Readonly<Record<string,number>>}>;
  private abort=new AbortController();private wake:WakeLockSentinel|null=null;
@@ -52,6 +55,7 @@ export class Session {
   this.rewards=!this.autoplay&&!this.practice;
   this.friendDraw=loadFestival().then(f=>f.owned).catch(()=>({})).then(owned=>({owned,coats:drawFriends(cryptoRandom,owned)}));
   void this.friendDraw.then(d=>this.boneCounter.setFriends(d.coats));
+  this.featured=this.rewards?listSongs().then(ms=>featuredSong(dayKey(),ms.map(m=>m.packId))===pack.manifest.packId).catch(()=>false):Promise.resolve(false);
   const inputMode=this.mode==='mixed'?'keyboard':this.mode;
   this.drumUi=inputMode==='midi';
   root.innerHTML=`<section class="game-scene mode-${inputMode}" aria-label="演奏画面">
@@ -229,6 +233,7 @@ export class Session {
   // FEVER at 30 combo, SUPER FEVER at 100: a rising run each time it goes up.
   const fever=feverLevel(s.combo);
   if(fever>this.fever&&this.status==='PLAYING')this.audio.effect('fever');
+  if(fever>0&&this.fever===0&&this.status==='PLAYING')this.fevers++;
   this.fever=fever;
   if(s.finished&&!this.celebrated&&this.status==='PLAYING'&&!this.practice){
    this.celebrated=true;
@@ -264,10 +269,16 @@ export class Session {
   const result:RunResult={runId:this.runId,packId:this.pack.manifest.packId,chartId:this.chart.chartId,audioHash:this.pack.manifest.audio.sha256,chartHash:this.pack.manifest.charts.find(c=>c.chartId===this.chart.chartId)!.sha256,ruleset:RULESET,inputMode:this.mode,autoplay:this.autoplay,practice:this.practice,date:new Date().toISOString(),settings:structuredClone(state.settings),stats,title:this.pack.manifest.title,difficulty:this.chart.difficulty,timingUnstable:stats.timingUnstable};
   const cleared=stats.gauge>=70;
   if(!this.celebrated){this.celebrated=true;this.renderer.celebrate(cleared?'clear':'finish');this.audio.effect(cleared?'clear':'fail');}
-  // ほねっこ are paid once per finished normal run, before the result screen reads them.
-  // The bonus slot on the result screen is drawn here and only shown there.
-  const award=this.rewards?awardBones(this.runId,this.boneCounter.play,mergeBonuses([...this.boneCounter.bonuses,...finishBones(stats)]),{slot:drawSlot(cryptoRandom),xp:xpForRun(stats)}).catch(()=>null):Promise.resolve(null);
-  const save=Promise.all([saveRun(result),award]).catch(()=>toast('結果を保存できませんでした。ストレージ容量を確認してください'));
+  // ほねっこ are paid once per finished normal run, before the result screen
+  // reads them, and after the run is saved (やりこみ count it). The bonus slot
+  // on the result screen is drawn here and only shown there.
+  const labels=this.boneCounter.bonuses.map(b=>b.label);
+  const facts=async():Promise<RunFacts>=>({cleared,great:stats.great,maxCombo:stats.maxCombo,rollHits:stats.rollHits,fevers:this.fevers,
+   friendsAll:labels.includes('全員集合'),anySet:labels.some(l=>['ペア','ダブルペア','3匹そろい','4匹そろい'].includes(l)),jackpot:labels.includes('4匹そろい'),
+   hard:this.chart.difficulty==='hard',fullCombo:stats.fullCombo,allGreat:stats.allGreat,featured:await this.featured});
+  const save=saveRun(result).then(async()=>{
+   if(this.rewards)await awardBones(this.runId,this.boneCounter.play,mergeBonuses([...this.boneCounter.bonuses,...finishBones(stats)]),{slot:drawSlot(cryptoRandom),xp:xpForRun(stats),run:await facts()}).catch(()=>null);
+  }).catch(()=>toast('結果を保存できませんでした。ストレージ容量を確認してください'));
   this.finishTimer=window.setTimeout(()=>{void save.then(()=>{this.audio.stop();this.status='RESULT';if(!this.disposed)this.onResult(result);});},1500);
  }
 

@@ -4,6 +4,7 @@ import {loadFestival,spendOnDraws,type FestivalData} from '../storage/festival';
 import {drawOutfits,cryptoRandom,collected,seriesProgress,settleCollection,PULL_COST,TEN_PULLS,DUPLICATE_BONES,PITY,type Pull} from '../game/gacha';
 import {COSTUMES,COSTUME_BY_ID,RARITY_LABEL,COMPLETE_BONUS,type Costume,type Rarity} from '../render/costumes';
 import {shibaPicture} from '../render/shibaCard';
+import {dayKey} from '../game/festival';
 
 declare const __TEST__:boolean;
 
@@ -41,6 +42,7 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
    <div class="gacha-machine">${machineSvg()}<div class="drop-capsule" hidden></div></div>
    <div class="gacha-panel paper">
     <div class="wallet"><span class="wallet-icon">${boneSvg()}</span><span>もっている ほねっこ</span><b id="wallet">0</b></div>
+    <button class="gacha-free" id="pull-free" data-nav hidden>きょうの無料1回<small>1日1回、ほねっこなしで ひける</small></button>
     <button class="primary gacha-one" id="pull-1" data-nav>1回ひく<small>ほねっこ ${PULL_COST}</small></button>
     <button class="gacha-ten" id="pull-10" data-nav>10回ひく<small>ほねっこ ${PULL_COST*TEN_PULLS}・スーパーレア以上が1つ確定</small></button>
     <p class="gacha-hint" id="gacha-hint" role="status"></p>
@@ -51,11 +53,13 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
   <section class="zukan paper"><h2>しばずかん <span id="zukan-count"></span></h2><div class="zukan-series" id="zukan"></div></section>
  </section>`;
  const $=<T extends HTMLElement>(q:string)=>root.querySelector<T>(q)!;
+ const free=$<HTMLButtonElement>('#pull-free');
  const wallet=$('#wallet'),one=$<HTMLButtonElement>('#pull-1'),ten=$<HTMLButtonElement>('#pull-10'),hint=$('#gacha-hint'),machine=$('.gacha-machine'),drop=$('.drop-capsule');
 
  function refresh(){
   wallet.textContent=festival.bones.toLocaleString();
   one.disabled=busy||festival.bones<PULL_COST;ten.disabled=busy||festival.bones<PULL_COST*TEN_PULLS;
+  free.hidden=festival.freeDay===dayKey();free.disabled=busy;
   hint.textContent=festival.bones<PULL_COST?`あと ${PULL_COST-festival.bones}本で1回ひけます。演奏して ほねっこを集めよう！`:festival.bones<PULL_COST*TEN_PULLS?`あと ${PULL_COST*TEN_PULLS-festival.bones}本で10回まとめてひけます。`:'';
   const since=festival.sinceSSR??0;
   $('#pity-left').textContent=String(PITY-since);$<HTMLElement>('#pity-bar').style.width=`${since/PITY*100}%`;
@@ -76,11 +80,11 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
   }
  }
 
- async function pull(count:number){
+ async function pull(count:number,isFree=false){
   if(busy)return;
   busy=true;refresh();
-  let result:{pulls:Pull[];festival:FestivalData;bonuses:{label:string;bones:number}[]};
-  try{result=await spendOnDraws(count,(owned,pity)=>drawOutfits(count,cryptoRandom,owned,pity),PULL_COST*count,settleCollection);}
+  let result:{pulls:Pull[];festival:FestivalData;bonuses:{label:string;bones:number}[];extras:{label:string;bones:number}[]};
+  try{result=await spendOnDraws(count,(owned,pity)=>drawOutfits(count,cryptoRandom,owned,pity),PULL_COST*count,settleCollection,{free:isFree});}
   catch(e){toast(e instanceof Error?e.message:'ガチャをひけませんでした');busy=false;refresh();return;}
   festival=result.festival;wallet.textContent=festival.bones.toLocaleString();
   // Turn the handle; a capsule rolls out of the chute.
@@ -95,6 +99,8 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
   if(disposed)return;
   // Series (or the whole book) completed by this draw: a celebration and its bonus.
   if(result.bonuses.length)await celebrate(result.bonuses);
+  // A mission or やりこみ reached by this draw.
+  if(result.extras.length){toast(result.extras.map(e=>`${e.label} ＋${e.bones}`).join('・'));uiAudio.effect('combo50');}
   busy=false;if(disposed)return;
   refresh();void renderZukan();
  }
@@ -185,6 +191,7 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
  const rank=(r:Rarity)=>['N','R','SR','SSR'].indexOf(r);
 
  one.onclick=()=>void pull(1);
+ free.onclick=()=>void pull(1,true);
  ten.onclick=()=>void pull(TEN_PULLS);
  refresh();void renderZukan();
  // Test hook: how many outfits and bones this screen shows.

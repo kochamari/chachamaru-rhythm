@@ -1,13 +1,15 @@
 // The result screen's rewards, revealed one after another after the score:
-// ほねっこ counting up (with a little ticking), the bonus slot (three reels,
-// リーチ when the first two match), the first-run-of-the-day bonus and the
-// 太鼓レベル bar (LEVEL UP!). The award itself was saved before this screen
-// opened; this only shows it. A tap on the panel shows everything at once.
+// ほねっこ counting up (with a little ticking) while today's mission bars fill,
+// the bonus slot (three reels, リーチ when the first two match), the
+// first-run-of-the-day bonus, the 太鼓レベル bar (LEVEL UP!) and, last, any
+// new titles. The award itself was saved before this screen opened; this
+// only shows it. A tap on the panel shows everything at once.
 import {escape,boneSvg} from '../app/ui';
 import {flowerSvg} from '../render/Character';
 import {uiAudio} from '../app/context';
 import {levelFor,slotPayout,SLOT_SYMBOLS,type SlotSymbol} from '../game/festival';
 import {ATLAS_FILES,REGIONS} from '../render/rig';
+import {MISSION_BY_ID} from '../game/daily';
 import type {Award,FestivalData} from '../storage/festival';
 
 const SLOT_LINE=/^スロット /;
@@ -22,11 +24,23 @@ export function slotIcon(symbol:SlotSymbol){
 }
 const SYMBOL_NAME:Record<SlotSymbol,string>={bone:'ほねっこ',flower:'ひまわり',drum:'太鼓',chacha:'ちゃちゃまる'};
 
+/** Today's three missions: bars that fill from before to after this run; "達成！" on the ones this run finished. */
+function missionsRow(award:Award){
+ if(!award.missions?.length)return '';
+ return `<div class="reward-row reward-missions" aria-label="きょうのミッション">${award.missions.map(m=>{
+  const def=MISSION_BY_ID.get(m.id);if(!def)return '';
+  const done=m.after>=def.target,newly=done&&m.before<def.target;
+  return `<span class="rm ${done&&!newly?'done':''}" data-after="${(m.after/def.target*100).toFixed(1)}" data-new="${newly}"><b>${escape(def.name)}</b><i><em style="width:${(m.before/def.target*100).toFixed(1)}%"></em></i><small>${newly?'':done?'達成':`${m.after.toLocaleString()}/${def.target.toLocaleString()}`}</small></span>`;
+ }).join('')}</div>`;
+}
+
 export function rewardsHtml(award:Award,festival:FestivalData,gachaHref:string){
  const level=levelFor(award.xp?.before??festival.xp??0);
  return `<section class="result-rewards" aria-label="ごほうび（タップですぐ全部表示）">
   <div class="reward-row reward-bones"><span class="bone-award-icon">${boneSvg()}</span><div class="bone-main"><b>ほねっこ ＋<span id="bone-count">0</span></b><span class="bone-line"><span class="bone-total">もっている <b id="bone-total">${(festival.bones-award.total).toLocaleString()}</b></span>${award.daily?'<span class="daily-chip" id="daily-chip" hidden><span class="long">きょうの</span>初プレイ ＋50</span>':''}</span></div><a class="button bone-gacha" href="${escape(gachaHref)}" data-nav>ガチャ</a><div class="bone-items" id="bone-items"></div></div>
   ${award.slot?`<div class="reward-row reward-slot"><span class="slot-label">ボーナス<br>スロット</span><div class="slot-reels">${[0,1,2].map(()=>'<span class="reel"><span class="strip"></span></span>').join('')}</div><b class="slot-result" id="slot-result" aria-live="polite"></b></div>`:''}
+  ${missionsRow(award)}
+  ${award.titles?.length?`<div class="reward-titles" id="reward-titles" hidden><span class="title-get-head">称号ゲット！</span>${award.titles.map(t=>`<b class="title-get">${escape(t)}</b>`).join('')}</div>`:''}
   ${award.xp?`<div class="reward-row reward-level"><span class="level-badge">太鼓Lv.<b id="level-num">${level.level}</b></span><div class="level-bar"><i id="level-fill" style="width:${level.into/level.need*100}%"></i></div><span class="level-xp" id="level-xp">＋${award.xp.gain} XP</span><span class="level-up" id="level-up" hidden>LEVEL UP!</span></div>`:''}
  </section>`;
 }
@@ -37,6 +51,7 @@ export function playRewards(root:HTMLElement,award:Award,festival:FestivalData,d
  const panelEl=$('.result-rewards'),countEl=$('#bone-count'),itemsEl=$('#bone-items'),totalEl=$('#bone-total');
  if(!panelEl||!countEl||!itemsEl||!totalEl)return ()=>{};
  const panel:HTMLElement=panelEl,count:HTMLElement=countEl,items:HTMLElement=itemsEl,total:HTMLElement=totalEl;
+ const titlesEl=$('#reward-titles');
  const timers:number[]=[];let ticker=0,shown=0,done=false;
  const later=(ms:number,fn:()=>void)=>timers.push(window.setTimeout(fn,ms));
  const startTotal=festival.bones-award.total;
@@ -64,14 +79,23 @@ export function playRewards(root:HTMLElement,award:Award,festival:FestivalData,d
   if(done)return;done=true;
   timers.forEach(clearTimeout);cancelAnimationFrame(ticker);
   set(award.total);items.innerHTML=describe(award.items);
+  fillMissions(true);
   if(award.slot)showSlot(true);
   const daily=$('#daily-chip');if(daily)daily.hidden=false;
   if(award.xp)showLevel(true);
+  if(titlesEl)titlesEl.hidden=false;
  };
  panel.addEventListener('click',e=>{if(!(e.target as Element).closest('a'))finish();});
 
+ // Mission bars fill; the ones this run finished say 達成！
+ const missionBars=[...root.querySelectorAll<HTMLElement>('.reward-missions .rm')];
+ const fillMissions=(instant:boolean)=>missionBars.forEach(el=>{
+  const bar=el.querySelector<HTMLElement>('em');if(bar){if(instant)bar.style.transition='none';bar.style.width=`${el.dataset.after}%`;}
+  if(el.dataset.new==='true'&&!el.classList.contains('done')){el.classList.add('done','pop');const label=el.querySelector('small');if(label)label.textContent='達成！';}
+ });
  // 1. The bones from play and from the friends.
  later(delay,()=>{items.innerHTML=describe(base);countTo(baseBones,700);});
+ if(missionBars.length)later(delay+450,()=>{fillMissions(false);if(missionBars.some(el=>el.dataset.new==='true'))uiAudio.effect('combo50');});
  let t=delay+900;
  // 2. The bonus slot.
  const reels=[...root.querySelectorAll<HTMLElement>('.reel .strip')];
@@ -124,7 +148,9 @@ export function playRewards(root:HTMLElement,award:Award,festival:FestivalData,d
    if(lvl){items.innerHTML=describe(award.items);countTo(shown+lvl.bones,600);}
   });
  }
- if(award.xp)later(t,()=>showLevel());
- later(t+1600,()=>{if(!done){done=true;set(award.total);items.innerHTML=describe(award.items);}});
+ if(award.xp){later(t,()=>showLevel());t+=award.items.some(i=>i.label==='レベルアップ')?1300:500;}
+ // 5. New titles (やりこみ), last.
+ if(titlesEl)later(t,()=>{titlesEl.hidden=false;pop(titlesEl);uiAudio.effect('fullHouse');});
+ later(t+1600,()=>{if(!done){done=true;set(award.total);items.innerHTML=describe(award.items);if(titlesEl)titlesEl.hidden=false;}});
  return ()=>{done=true;timers.forEach(clearTimeout);timers.forEach(clearInterval);cancelAnimationFrame(ticker);};
 }
