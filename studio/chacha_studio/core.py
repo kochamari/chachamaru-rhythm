@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get('CHACHA_DATA', str(ROOT / '_private' / 'studio')))
-VERSION = 'chacha-generator-v3'
+VERSION = 'chacha-generator-v4'
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -57,10 +57,10 @@ def song_labels(title, artist, info, name=''):
     artist = (artist or '').strip() or info.get('artist', '') or 'アーティスト未設定'
     return title[:200], artist[:200]
 
-def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None):
+def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None, style='song'):
     """Draft chart for one difficulty. Deterministic for the same inputs."""
     from .generator import generate as draft
-    return draft(beats, duration, difficulty, audio_hash, sections, features, downbeats)
+    return draft(beats, duration, difficulty, audio_hash, sections, features, downbeats, style)
 
 
 def decode(audio, directory):

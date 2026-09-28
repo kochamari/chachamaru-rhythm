@@ -1,7 +1,9 @@
-"""Drafts that follow the drums (generator v3), on synthetic songs whose drum
-parts are known: an intro without drums, a rock verse, a fill, a
-four-on-the-floor chorus with a clap on the backbeat, a break and the chorus
-again, over bass, chords and a sung line."""
+"""The drum kit analysis (drums.py) on synthetic songs whose drum parts are
+known: an intro without drums, a rock verse, a fill, a four-on-the-floor
+chorus with a clap on the backbeat, a break and the chorus again, over bass,
+chords and a sung line. It fixes the beats (tempo, half-beat, bar start) for
+every draft, and drives the drums-only draft style (v3), which players found
+too plain as a whole chart and which is kept for comparison."""
 import json
 import os
 import subprocess
@@ -84,7 +86,7 @@ def song():
     y, beats, kicks, snares, duration = render(120, len(SONG), SONG)
     kit = drums.drum_features(y, SR)
     features = {**generator.onset_features(y, SR), 'drums': kit}
-    charts = {d: core.generate(beats, duration, d, 'ab' * 32, [], features, list(range(0, len(beats), 4))) for d in ['easy', 'normal', 'hard']}
+    charts = {d: core.generate(beats, duration, d, 'ab' * 32, [], features, list(range(0, len(beats), 4)), 'drums') for d in ['easy', 'normal', 'hard']}
     return {'beats': beats, 'kicks': kicks, 'snares': snares, 'duration': duration, 'features': features, 'charts': charts, 'y': y}
 
 
@@ -139,7 +141,7 @@ def test_difficulties_step_up_and_easy_stays_on_the_beat(song):
 @pytest.mark.parametrize('difficulty,gap', [('easy', 180), ('normal', 105), ('hard', 75)])
 def test_limits_and_determinism(song, difficulty, gap):
     chart = song['charts'][difficulty]
-    again = core.generate(song['beats'], song['duration'], difficulty, 'ab' * 32, [], song['features'], list(range(0, len(song['beats']), 4)))
+    again = core.generate(song['beats'], song['duration'], difficulty, 'ab' * 32, [], song['features'], list(range(0, len(song['beats']), 4)), 'drums')
     assert chart == again
     t = [n['timeMs'] for n in taps(chart)]
     assert all(b - a >= gap for a, b in zip(t, t[1:]))
@@ -174,15 +176,15 @@ def test_a_fast_song_tracked_at_two_thirds_is_tracked_again():
     assert not drums.tempo_alias(beats, 186, kit)
 
 
-def test_regenerating_an_older_project_follows_the_drums_and_fixes_its_beats(tmp_path):
+def test_regenerating_an_older_project_fixes_its_beats(tmp_path):
     y, _, _, _, _ = render(120, len(SONG), SONG)
     wav = tmp_path / 'song.wav'
     sf.write(wav, y, SR)
     d = tmp_path / 'project'
     p = core.analyze(wav, d, '試験曲', '試験')
-    assert p['manifest']['generator'] == 'chacha-generator-v3'
+    assert p['manifest']['generator'] == 'chacha-generator-v4'
     truth = np.asarray(p['manifest']['beatTimesMs'])
-    # As analysed before v3: no drum features, and the beats half a beat late.
+    # As analysed before the drum features: none saved, and the beats half a beat late.
     features = json.loads((d / 'features.json').read_text())
     del features['drums']
     core.write_json(d / 'features.json', features)
@@ -205,4 +207,4 @@ def test_regenerating_an_older_project_follows_the_drums_and_fixes_its_beats(tmp
     moved = np.asarray(got['manifest']['beatTimesMs'])
     assert np.median([np.min(np.abs(truth - b)) for b in moved]) <= 5
     normal = next(c for c in got['charts'] if c['difficulty'] == 'normal')
-    assert len(taps(normal, 'ka')) > 20
+    assert len(taps(normal)) > 60

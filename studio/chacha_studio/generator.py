@@ -10,7 +10,7 @@ Drafts are for editing, not transcriptions of the original drums.
 """
 import numpy as np
 
-VERSION = 'chacha-generator-v3'
+VERSION = 'chacha-generator-v4'
 
 RULES = {
     # subdivisions per beat, target notes/s, min gap ms, fast-run limit, ka share
@@ -35,7 +35,9 @@ def candidates(beats, downbeat_phase, div, swing=False):
     Straight feel: 1/2 (and 1/4) of the beat. Swing feel: the 'and' falls at
     2/3 of the beat, so the grid uses thirds instead.
     """
-    if swing:
+    if div == 1:
+        fractions = [(0, 0)]
+    elif swing:
         fractions = [(0, 0), (2 / 3, 1)] if div == 2 else [(0, 0), (1 / 3, 2), (2 / 3, 1)]
     else:
         fractions = [(0, 0), (.5, 1)] if div == 2 else [(0, 0), (.25, 2), (.5, 1), (.75, 2)]
@@ -97,19 +99,273 @@ def _enforce(notes, gap, run_limit, half_beat):
     return kept
 
 
-def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None):
-    """One difficulty's draft: following the drums when the analysis has them
-    (v3, see drums.py), else the onset-strength draft (v2) or, without any
-    features (a manual grid), a simple pattern on the beats."""
+def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None, style='song'):
+    """One difficulty's draft.
+
+    style 'song' (v4, the default): the song's strongest attacks, as v2, made
+    readable (see _song_taps). 'v2': the earlier onset draft as it was.
+    'drums': only the drum kit (v3, drums.py); players found it far too plain
+    as a whole chart, so it is kept for comparison only. Without features (a
+    manual grid): a simple pattern on the beats."""
     if len(beats) < 2:
         beats = list(range(0, duration, 500))
     from .drums import taps as drum_taps, usable
     kit = (features or {}).get('drums')
-    if usable(kit) and len(beats) >= 16:
+    if style == 'drums' and usable(kit) and len(beats) >= 16:
         out = [{'kind': 'tap', 'timeMs': n['t'], 'color': n['color'], 'size': n['size']} for n in drum_taps(beats, duration, difficulty, sections, kit, downbeats)]
+    elif style == 'song' and features and len(beats) >= 16:
+        out = _song_taps(beats, duration, difficulty, sections, features, downbeats)
     else:
         out = _onset_taps(beats, duration, difficulty, sections, features, downbeats)
     return _finish(out, beats, duration, difficulty, sections)
+
+
+LAST_GROUPS = {}  # the latest draft's repeat groups (for inspection)
+
+SONG_RULES = {
+    # div: grid per beat (1 beats, 2 eighths, 4 sixteenths); density: notes per
+    # second of music; gap: least ms between notes; run: most notes in a row at
+    # half-beat spacing; ka: most ka; floor: least onset strength; quick: most
+    # notes in a row at sixteenth spacing
+    'easy': {'div': 1, 'density': 1.15, 'gap': 180, 'run': 4, 'ka': .2, 'floor': .2, 'quick': 0},
+    'normal': {'div': 2, 'density': 2.25, 'gap': 105, 'run': 5, 'ka': .3, 'floor': .15, 'quick': 0},
+    'hard': {'div': 4, 'density': 3.3, 'gap': 75, 'run': 8, 'ka': .4, 'floor': .11, 'quick': 3},
+}
+
+
+def _song_taps(beats, duration, difficulty, sections, features, downbeats):
+    """The default draft (v4). Like v2 it takes the song's strongest attacks on
+    its beat grid, so the chart plays what you hear (the singing, the melody
+    and the drums, as loud as they are), with more notes where the song is
+    busy. Made readable where v2 was not:
+
+    - A passage that comes back plays the same way (the second verse as the
+      first, every chorus alike), so it can be learnt by repeating it:
+      passages are found where harmony and rhythm match for several bars in
+      a row, and each bar plays what its counterparts mostly play. Within a
+      passage the rhythm still changes with the singing.
+    - Easy stays on the beats; hard keeps its sixteenths to short runs.
+    - Colour as v2 (brighter attacks are ka), leaning to ka on the snare.
+    The beats themselves are checked by the analysis (tempo, half-beat, bar).
+    """
+    from .drums import usable, _sampler
+    rules = SONG_RULES[difficulty]
+    rate = features.get('rate', 50)
+    low, high, full = (np.asarray(features[k], dtype=float) / 255 for k in ('low', 'high', 'full'))
+    kit = features.get('drums') if usable(features.get('drums')) else None
+    phase = downbeats[0] % 4 if downbeats else downbeat_phase(beats, low, rate)
+    beat_len = np.diff(beats)
+    median_beat = float(np.median(beat_len))
+
+    def half_beat(t):
+        i = min(max(int(np.searchsorted(beats, t, side='right')) - 1, 0), len(beat_len) - 1)
+        return float(beat_len[i]) / 2
+
+    swing = detect_swing(beats, full, rate)
+    per_beat = 3 if swing else 4
+    fine = candidates(beats, phase, 4, swing)
+    t = np.array([c[0] for c in fine], dtype=float)
+    level = np.array([c[1] for c in fine])
+    rel = np.array([c[2] for c in fine]) - phase
+    bar = rel // 4
+    bar = bar - bar.min()
+    slot = (rel % 4) * per_beat + np.round(np.array([c[3] for c in fine]) * per_beat).astype(int)
+    nb, width = int(bar.max()) + 1, 4 * per_beat
+    valid = (t >= 800) & (t <= duration - 300)
+
+    def grid(values):
+        m = np.zeros((nb, width))
+        m[bar, slot] = np.where(valid, values, 0)
+        return m
+    sample = lambda env, r, w=28: np.array([_sample(env, r, x, w) for x in t])  # noqa: E731
+    F, L, H = grid(sample(full, rate)), grid(sample(low, rate)), grid(sample(high, rate))
+    if kit:
+        at = lambda k: _sampler(kit[k], kit['rate'], 25)(t)  # noqa: E731
+        M, K, S = grid(at('melody')), grid(at('kick')), grid(at('snare'))
+    else:
+        M = K = S = np.zeros((nb, width))
+
+    # Passages that come back: their bars form groups that play as one.
+    rhythm = np.concatenate([2 * M, F], axis=1) if kit else F
+    harmony = _bar_chroma(kit, beats, phase, nb) if kit and 'chroma' in kit else None
+    group = _repeat_groups(rhythm, harmony)
+    LAST_GROUPS.update(group=group, first_bar=int(np.array([c[2] for c in fine]).min() - phase) // 4)
+    same = (group[:, None] == group[None, :]).astype(float)
+    share = lambda m: (same @ m) / same.sum(axis=1, keepdims=True)  # noqa: E731
+    Fs, Ls, Hs, Ks, Ss = share(F), share(L), share(H), share(K), share(S)
+
+    # The difficulty's grid, strongest first (off-beats count a little less),
+    # up to its density: busy parts get more notes, quiet ones fewer.
+    lv_ok = {1: [0], 2: [0, 1], 4: [0, 1, 2]}[rules['div']]
+    notes = []
+    for i in np.nonzero(valid & np.isin(level, lv_ok))[0]:
+        f = Fs[bar[i], slot[i]]
+        if f < rules['floor'] * (1.0 if level[i] == 0 else 1.25):
+            continue
+        down = slot[i] == 0
+        notes.append({'t': float(t[i]), 'level': int(level[i]), 'bar': int(bar[i]), 'slot': int(slot[i]), 'down': bool(down),
+                      'score': f * POSITION_WEIGHT[int(level[i])] * (1.12 if down else 1.0)})
+    from scipy.ndimage import maximum_filter1d
+    busy = maximum_filter1d(full, size=max(1, int(rate * 2))) > .08
+    active = float(np.count_nonzero(busy)) / rate
+    notes.sort(key=lambda n: (-n['score'], n['t']))
+    notes = notes[:max(8, int(rules['density'] * max(active, 1)))]
+    notes.sort(key=lambda n: n['t'])
+    notes = _enforce(notes, rules['gap'], rules['run'], half_beat)
+    if rules['quick']:
+        notes = _quick_runs(notes, median_beat / 4 * 1.25, rules['quick'])
+
+    # Every bar of a group plays what the group's bars mostly play.
+    chosen = np.zeros((nb, width), dtype=bool)
+    for n in notes:
+        chosen[n['bar'], n['slot']] = True
+    usable_slot = grid(np.ones(len(t))) > 0
+    snapped = chosen.copy()
+    for g in np.unique(group):
+        bars = np.nonzero(group == g)[0]
+        if len(bars) < 2:
+            continue
+        usual = chosen[bars].mean(axis=0) >= .5
+        for j in bars:
+            snapped[j] = usual & usable_slot[j]
+    where = {(int(bar[i]), int(slot[i])): i for i in range(len(t))}
+    notes = []
+    for j, sl in zip(*np.nonzero(snapped)):
+        i = where[(int(j), int(sl))]
+        notes.append({'t': float(t[i]), 'level': int(level[i]), 'bar': int(j), 'slot': int(sl), 'down': bool(sl == 0),
+                      'score': Fs[j, sl] * POSITION_WEIGHT[int(level[i])]})
+    notes.sort(key=lambda n: n['t'])
+    # Where two copied bars meet too closely, the later note gives way.
+    kept = []
+    for n in notes:
+        if kept and n['t'] - kept[-1]['t'] < rules['gap']:
+            continue
+        kept.append(n)
+    notes = kept
+    if not notes:
+        t0 = int(min(max(800, beats[min(2, len(beats) - 1)]), duration - 300))
+        return [{'kind': 'tap', 'timeMs': t0, 'color': 'don', 'size': 'normal'}]
+
+    # Colour: the brighter attacks (and the snare) are ka, up to the share;
+    # a bar's first beat stays don.
+    key = np.array([Hs[n['bar'], n['slot']] / (Hs[n['bar'], n['slot']] + Ls[n['bar'], n['slot']] + 1e-6)
+                    + .35 * float(np.clip(Ss[n['bar'], n['slot']] - Ks[n['bar'], n['slot']], 0, 1)) for n in notes])
+    # A group's bars decide together (slot by slot), within the share.
+    together = {}
+    for i, n in enumerate(notes):
+        together.setdefault((int(group[n['bar']]), n['slot']), []).append(i)
+    budget = int(len(notes) * rules['ka'] * .95)  # (rolls may take a few notes later)
+    ka = set()
+    for k in sorted(together, key=lambda k: (-key[together[k][0]], k)):
+        members = together[k]
+        if key[members[0]] <= .3:
+            break
+        if k[1] == 0 or len(ka) + len(members) > budget:
+            continue
+        ka.update(members)
+    for i, n in enumerate(notes):
+        n['color'] = 'ka' if i in ka else 'don'
+
+    # Large notes: a few strong, isolated first beats.
+    big = []
+    for i, n in enumerate(notes):
+        if not n['down']:
+            continue
+        prev_gap = n['t'] - notes[i - 1]['t'] if i else 1e9
+        next_gap = notes[i + 1]['t'] - n['t'] if i + 1 < len(notes) else 1e9
+        if prev_gap >= median_beat * .9 and next_gap >= median_beat * .9:
+            big.append(n)
+    big.sort(key=lambda n: -n['score'])
+    # A group's bars share their large notes, within 5% of the notes.
+    room = max(0, int(len(notes) * .05))
+    by_group = {}
+    for n in big:
+        by_group.setdefault(int(group[n['bar']]), []).append(n)
+    for n in big:
+        members = by_group.get(int(group[n['bar']]), [])
+        if members and len(members) <= room and 'size' not in n:
+            for x in members:
+                x['size'] = 'large'
+            room -= len(members)
+    return [{'kind': 'tap', 'timeMs': int(round(n['t'])), 'color': n['color'], 'size': n.get('size', 'normal')} for n in notes]
+
+
+def _bar_chroma(kit, beats, phase, nb):
+    """Each bar's harmony: the chroma of its 4 beats (4 x 12 values)."""
+    c = kit['chroma']
+    rate = c['rate']
+    frames = np.asarray(c['frames'], dtype=float).reshape(-1, 12) / 255
+    out = np.zeros((nb, 48))
+    first = (0 - phase) // 4
+    for i in range(len(beats) - 1):
+        a = int(beats[i] / 1000 * rate)
+        b = max(int(beats[i + 1] / 1000 * rate), a + 1)
+        seg = frames[a:b]
+        if not len(seg):
+            continue
+        rel = i - phase
+        bar = rel // 4 - first
+        if 0 <= bar < nb:
+            out[bar, (rel % 4) * 12:(rel % 4) * 12 + 12] = seg.mean(axis=0)
+    return out
+
+
+def _repeat_groups(rhythm, harmony=None, window=8, need=.22, margin=.15, min_lag=4):
+    """Groups of bars that repeat each other: a second verse with the first, a
+    chorus with the one before. Bar j goes with bar j-L when the bars around
+    it (`window` bars) match those around j-L in harmony and rhythm clearly
+    better than at other distances; music that is alike everywhere (a loop)
+    links nothing, so it keeps the rhythm the song gives each bar. Bars are
+    compared by what sets them apart from the whole song (its average bar
+    removed), since a pop song's chords and beat are alike almost everywhere.
+    Returns a group number per bar."""
+    nb = len(rhythm)
+
+    def cos(m):
+        m = m - m.mean(axis=0, keepdims=True)
+        n = np.linalg.norm(m, axis=1) + 1e-9
+        return (m @ m.T) / n[:, None] / n[None, :]
+    sim = cos(rhythm) if harmony is None else .5 * cos(rhythm) + .5 * cos(harmony)
+    parent = list(range(nb))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    if nb <= min_lag + window:
+        return np.arange(nb)
+    kernel = np.ones(window) / window
+    strength = np.full((nb, nb), -1.0)  # [bar, lag]
+    for lag in range(min_lag, nb):
+        d = sim[np.arange(lag, nb), np.arange(0, nb - lag)]
+        smooth = np.convolve(d, kernel, mode='same') if len(d) >= window else np.full(len(d), -1.0)
+        strength[lag:, lag] = smooth
+    for j in range(min_lag, nb):
+        row = strength[j, min_lag:j + 1]
+        if not len(row):
+            continue
+        best = int(np.argmax(row))
+        if row[best] >= need and row[best] - float(np.median(row)) >= margin:
+            parent[find(j)] = find(j - (best + min_lag))
+    return np.array([find(j) for j in range(nb)])
+
+
+def _quick_runs(notes, quick_ms, limit):
+    """At most `limit` notes in a row at sixteenth spacing (the weakest inner
+    note of a longer run goes)."""
+    notes = list(notes)
+    changed = True
+    while changed:
+        changed = False
+        run = notes[:1]
+        for prev, cur in zip(notes, notes[1:]):
+            run = run + [cur] if cur['t'] - prev['t'] <= quick_ms else [cur]
+            if len(run) > limit:
+                notes.remove(min(run[1:-1], key=lambda n: n['score']))
+                changed = True
+                break
+    return notes
 
 
 def _onset_taps(beats, duration, difficulty, sections=None, features=None, downbeats=None):

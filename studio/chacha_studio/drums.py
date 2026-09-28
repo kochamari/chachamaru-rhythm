@@ -18,7 +18,7 @@ It is a draft for editing, not a transcription of the drums.
 import numpy as np
 
 VERSION = 'chacha-generator-v3'
-FEATURES = 3
+FEATURES = 4
 
 RULES = {
     # levels: 1 = beats only, 2 = + eighths (swing: the swung 'and'), 3 = + sixteenths (swing: triplets)
@@ -36,12 +36,15 @@ def drum_features(y, sr):
     percussive part of the sound (so singing and chords count far less):
     kick (35-120 Hz), snare (the drum's body at 150-300 Hz together with its
     crack at 1.2-5 kHz, minus the bass drum), hat (5-9 kHz), and full (the
-    whole band, for the parts without drums)."""
+    whole band, for the parts without drums) and melody (note changes in the
+    harmonic part at 200-4000 Hz: mostly the singing and the lead). Also the
+    harmony (chroma, 12 pitch classes about 10 times a second), which tells
+    where a passage of the song comes back (a second verse, the next chorus)."""
     import librosa
     hop = int(round(sr / 100))
     power = np.abs(librosa.stft(np.asarray(y, dtype=np.float32), n_fft=1024, hop_length=hop)) ** 2
     freqs = librosa.fft_frequencies(sr=sr, n_fft=1024)
-    _, perc = librosa.decompose.hpss(power, kernel_size=31, margin=(1.0, 2.0))
+    harm, perc = librosa.decompose.hpss(power, kernel_size=31, margin=(1.0, 2.0))
 
     def flux(spec, lo, hi):
         band = spec[(freqs >= lo) & (freqs < hi)].sum(axis=0)
@@ -54,13 +57,19 @@ def drum_features(y, sr):
     snare = np.sqrt(flux(perc, 150, 300) * flux(perc, 1200, 5000)) - .4 * kick
     snare = np.clip(snare / (np.percentile(snare, 99.5) + 1e-9), 0, 1)
     q = lambda a: [int(v) for v in np.round(np.clip(a, 0, 1) * 255)]  # noqa: E731
+    chroma = librosa.feature.chroma_stft(S=harm, sr=sr, n_fft=1024)
+    step = 10
+    frames = chroma.shape[1] // step
+    slow = chroma[:, :frames * step].reshape(12, frames, step).mean(axis=2).T if frames else np.zeros((0, 12))
+    slow = slow / (slow.max(axis=1, keepdims=True) + 1e-9)
     return {'version': FEATURES, 'rate': sr / hop, 'kick': q(kick), 'snare': q(snare), 'hat': q(flux(perc, 5000, 9000)),
-            'full': q(flux(power, 30, 11000))}
+            'full': q(flux(power, 30, 11000)), 'melody': q(flux(harm, 200, 4000)),
+            'chroma': {'rate': sr / hop / step, 'frames': q(slow.ravel())}}
 
 
 def usable(drums):
     """Drum features this version can use (older analyses are computed again)."""
-    return bool(drums) and drums.get('version') == FEATURES and all(k in drums for k in ('kick', 'snare', 'hat', 'full'))
+    return bool(drums) and drums.get('version') == FEATURES and all(k in drums for k in ('kick', 'snare', 'hat', 'full', 'melody', 'chroma'))
 
 
 def _sampler(env, rate, width_ms):
