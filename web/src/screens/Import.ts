@@ -6,13 +6,13 @@ import {isBundle,readBundle,bundleSong,BUNDLE_MAX} from '../packs/bundle';
 import {saveSong,mergeSong} from '../storage/Database';
 import {memory} from '../app/context';
 
-type Outcome={title:string;result:'added'|'updated'|'same'|'error';note?:string;packId?:string};
+type Outcome={title:string;result:'added'|'updated'|'same'|'older'|'error';note?:string;packId?:string};
 const message=(e:unknown)=>e instanceof Error?e.message:String(e);
 
 export function importScreen(root:HTMLElement):()=>void{
  const abort=new AbortController();
  root.innerHTML=`${header('import')}<section class="page"><div class="page-heading"><div><span class="eyebrow">自分だけのセットリストを</span><h1>曲を追加する</h1><p>譜面工房で作った曲パック（ZIP）を取り込みます。</p></div><a href="#/songs" class="button">曲一覧へ</a></div>
-  <div class="import-box">${flowerSvg()}<h2>曲パックを、ここへ。</h2><p>ZIPファイルを選ぶか、この枠にドロップしてください。いくつでも選べます。<br>何曲かをまとめたZIPなら、まだ入っていない曲だけを追加します。</p>
+  <div class="import-box">${flowerSvg()}<h2>曲パックを、ここへ。</h2><p>ZIPファイルを選ぶか、この枠にドロップしてください。いくつでも選べます。<br>何曲かをまとめたZIPなら、まだ入っていない曲は追加し、譜面が新しくなった曲はまとめて更新します。</p>
    <input id="pack-file" type="file" accept=".zip,application/zip" multiple aria-label="曲パックを選ぶ">
    <div id="import-status" role="status"></div><button id="cancel-import" hidden>取込を取り消す</button></div>
   <p class="library-note" style="text-align:center">曲パックは自動では登録されません。ファイルアプリやiCloudに保存したZIPを、ここで選んでください。<br>音源から譜面を作るときは、Macで<a class="text-link" href="#/studio">譜面工房</a>を開きます。</p></section>`;
@@ -77,9 +77,9 @@ export function importScreen(root:HTMLElement):()=>void{
   }catch(e){outcomes.push({title:'',result:'error',note:message(e)});}
   finally{field.disabled=false;cancel.hidden=true;}
   const count=(r:Outcome['result'])=>outcomes.filter(o=>o.result===r).length;
-  const added=count('added'),updated=count('updated'),same=count('same'),failed=count('error');
-  const parts=[added&&`追加 ${added}曲`,updated&&`更新 ${updated}曲`,same&&`すでにある ${same}曲`,failed&&`読めなかった ${failed}件`].filter(Boolean).join('・')||'取り込む曲がありませんでした';
-  const label={added:'追加',updated:'新しい版に更新',same:'すでにある',error:'読めなかった'};
+  const added=count('added'),updated=count('updated'),same=count('same'),older=count('older'),failed=count('error');
+  const parts=[added&&`追加 ${added}曲`,updated&&`更新 ${updated}曲`,same&&`すでにある ${same}曲`,older&&`この端末の方が新しい ${older}曲`,failed&&`読めなかった ${failed}件`].filter(Boolean).join('・')||'取り込む曲がありませんでした';
+  const label={added:'追加',updated:'新しい版に更新',same:'すでにある',older:'この端末の方が新しい（そのまま）',error:'読めなかった'};
   status.innerHTML=`<div class="import-summary">${abort.signal.aborted?'<p>途中で取り消しました。ここまでの結果です。</p>':''}<strong>${escape(parts)}</strong><ul>${outcomes.map(o=>`<li class="${o.result}"><b>${label[o.result]}</b> ${escape(o.title)}${o.note?`<small>${escape(o.note)}</small>`:''}</li>`).join('')}</ul>${added+updated?'<a class="button primary" href="#/songs" id="to-songs">曲一覧へ</a>':''}</div>`;
   const fresh=outcomes.find(o=>o.result==='added'||o.result==='updated');
   if(fresh?.packId)memory.selected=fresh.packId;

@@ -53,6 +53,11 @@ test('P13 a collection ZIP adds only new songs, skips the ones already here and 
  const titles=await page.evaluate(async()=>(await window.__chacha.db().then(d=>d.getAll('songs')) as {manifest:{title:string;packId:string;revision:number}}[]).map(s=>s.manifest));
  expect(titles.filter(m=>m.packId.startsWith('bundle-e2e')).map(m=>[m.title,m.revision])).toEqual([['まとめ試験A',5],['まとめ試験B',1]]);
  await page.locator('#to-songs').click();await expect(page.getByRole('button',{name:/まとめ試験A/})).toBeVisible();
+ // Opening the older collection again keeps the newer version.
+ await page.goto('/#/import');
+ await page.locator('#pack-file').setInputFiles({name:'ちゃちゃまる曲パック_3曲.zip',mimeType:'application/zip',buffer:first});
+ await expect(page.locator('.import-summary strong')).toHaveText('すでにある 2曲・この端末の方が新しい 1曲',{timeout:60000});
+ expect(await page.evaluate(async()=>(await(await window.__chacha.db()).get('songs','bundle-e2e-a') as {manifest:{revision:number}}).manifest.revision)).toBe(5);
 });
 
 test('U26 touch pads on an iPhone hit the drum with no vibration parts, and the play screen does not zoom',async({browser},info)=>{
