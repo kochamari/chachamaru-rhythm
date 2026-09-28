@@ -123,15 +123,18 @@ function lcg(seed:number){return ()=>{seed=(seed*16807)%2147483647;return (seed-
 it('the four friends are a slot draw: rare coats get likelier friend by friend, and more so when found in the draw',()=>{
  const N=40000,rare=[0,0,0,0],rareOwned=[0,0,0,0],sets={pair:0,twoPair:0,three:0,four:0,none:0};
  const random=lcg(11);
+ // Checked by counting inside the loop (40000 expect calls take seconds on a slow CI runner).
+ const known=new Set<string>([...COMMON_COATS,...RARE_COATS]);let wrongCount=0,unknownCoat=0;
  for(let n=0;n<N;n++){
   const coats=drawFriends(random,{});
-  expect(coats).toHaveLength(4);
-  coats.forEach((c,i)=>{expect([...COMMON_COATS,...RARE_COATS]).toContain(c);if((RARE_COATS as readonly string[]).includes(c))rare[i]++;});
+  if(coats.length!==4)wrongCount++;
+  coats.forEach((c,i)=>{if(!known.has(c))unknownCoat++;if((RARE_COATS as readonly string[]).includes(c))rare[i]++;});
   let best:ReturnType<typeof joinBonuses>['set']=null;
   coats.forEach((c,i)=>{const {set}=joinBonuses(coats.slice(0,i),c);if(set)best=set;});
   sets[best??'none']++;
   drawFriends(random,{kin:1,sakura:1}).forEach((c,i)=>{if((RARE_COATS as readonly string[]).includes(c))rareOwned[i]++;});
  }
+ expect([wrongCount,unknownCoat]).toEqual([0,0]);
  const rate=(x:number)=>x/N;
  // 3 rare coats: 6% → 10.5% → 18% → 30% (before the リーチ boost on the fourth).
  expect(rate(rare[0])).toBeCloseTo(.06,1);expect(rate(rare[1])).toBeGreaterThan(rate(rare[0]));expect(rate(rare[2])).toBeGreaterThan(rate(rare[1]));expect(rate(rare[3])).toBeGreaterThan(rate(rare[2]));
@@ -140,7 +143,7 @@ it('the four friends are a slot draw: rare coats get likelier friend by friend, 
  expect(rate(sets.pair+sets.twoPair)).toBeGreaterThan(.4);
  expect(rate(sets.three)).toBeGreaterThan(.08);expect(rate(sets.three)).toBeLessThan(.3);
  expect(rate(sets.four)).toBeGreaterThan(.005);expect(rate(sets.four)).toBeLessThan(.05);
-});
+},20000);
 
 it('each friend pays for what their coat completes; リーチ when the fourth can complete a set',()=>{
  expect(joinBonuses([],'kuro')).toEqual({items:[],set:null,rare:false});
