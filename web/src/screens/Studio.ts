@@ -20,7 +20,7 @@ async function whenFree(start:()=>Promise<Response>,waiting:()=>void,stop:()=>bo
 // (scripts/install-mac-app.sh) opens it from a chachamaru-studio:// link,
 // starting it in the background when it is not running.
 const MAC_STUDIO='http://127.0.0.1:8787/#/studio',MAC_APP='chachamaru-studio://open';
-export async function studioScreen(root:HTMLElement){let alive=true,editorCleanup=()=>{},poll=0;const local=await localAvailable();const onMac=/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints<2;root.innerHTML=`${header('studio')}<section class="studio-page"><div class="studio-heading"><div><span class="eyebrow">CHACHAMARU MUSIC STUDIO</span><h1>譜面工房</h1></div><div class="inline-actions"><span class="local-indicator">${local?'● このMacで解析できます':'ZIPの編集モード'}</span><label class="button">＋ ${local?'音源':'ZIP'}を追加<input type="file" id="studio-upload" accept="${local?'.wav,.mp3,.m4a':'.zip'}" hidden></label><a class="button" href="#/songs">あそぶ</a></div></div><div id="quick-list" class="quick-list" aria-live="polite"></div><div id="studio-content"><section class="studio-welcome"><div class="studio-welcome-art"></div><span class="eyebrow">好きな曲を、自分だけのリズムに。</span><h2>ここから、きみの一曲を。</h2>${local?`<label class="quick-drop" id="quick-drop"><input type="file" id="quick-upload" accept=".mp3,.m4a,.wav,audio/*" multiple hidden><strong>ここに音源をドロップ</strong><span>MP3・M4A・WAV（いくつでも）。3つの難易度の譜面を作って、iPhone用の曲パックZIPを保存します。</span><em>曲名とアーティストは音源の情報から（なければファイル名）。このMacのゲームにもすぐ追加されます。</em><b class="button primary">音源を選ぶ</b></label><p class="quick-note">曲名を決めてから作るときは、右上の「＋ 音源を追加」から。何曲かまとめてドロップすると、最後に1つのZIPにまとめて保存します。</p><section class="bundle-panel" id="bundle-panel" hidden><div class="bundle-head"><strong>作った曲をまとめてiPhoneへ</strong><span>選んだ曲を1つのZIPにします。iPhoneの「曲を追加」でこのZIPを選ぶと、まだ入っていない曲だけが追加されます。</span></div><div class="bundle-list" id="bundle-list"></div><div class="bundle-actions"><button id="bundle-all">すべて選ぶ</button><button class="primary" id="make-bundle" disabled>曲を選んでください</button></div></section>`:`<div class="mac-studio-callout"><strong>音源（MP3など）から曲パックを作るのは、Macの譜面工房です</strong><span>Macで「Start Studio.command」を開くと、Macの譜面工房が開きます。そこに音源をドロップするだけで、曲パックZIPができます。</span>${onMac?`<a class="button primary" id="open-mac-studio" href="${MAC_APP}">Macの譜面工房を開く</a><small>「ちゃちゃまる譜面工房」アプリが起動します（初回はブラウザの確認で「開く」）。アプリがないときは「Start Studio.command」を開き、<a id="open-mac-studio-direct" href="${MAC_STUDIO}">127.0.0.1:8787</a> へ。</small>`:''}</div><p>この画面では、手元の曲パックZIPを読み込んで編集できます。</p><label class="button">ZIPを選ぶ<input type="file" class="welcome-upload" accept=".zip" hidden></label>`}<div id="project-list" class="project-list"></div></section></div></section>`;
+export async function studioScreen(root:HTMLElement){let alive=true,editorCleanup=()=>{},poll=0;const local=await localAvailable();const onMac=/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints<2;root.innerHTML=`${header('studio')}<section class="studio-page"><div class="studio-heading"><div><span class="eyebrow">CHACHAMARU MUSIC STUDIO</span><h1>譜面工房</h1></div><div class="inline-actions"><span class="local-indicator">${local?'● このMacで解析できます':'ZIPの編集モード'}</span><label class="button">＋ ${local?'音源':'ZIP'}を追加<input type="file" id="studio-upload" accept="${local?'.wav,.mp3,.m4a':'.zip'}" hidden></label><a class="button" href="#/songs">あそぶ</a></div></div><div id="quick-list" class="quick-list" aria-live="polite"></div><div id="studio-content"><section class="studio-welcome"><div class="studio-welcome-art"></div><span class="eyebrow">好きな曲を、自分だけのリズムに。</span><h2>ここから、きみの一曲を。</h2>${local?`<label class="quick-drop" id="quick-drop"><input type="file" id="quick-upload" accept=".mp3,.m4a,.wav,audio/*" multiple hidden><strong>ここに音源をドロップ</strong><span>MP3・M4A・WAV（いくつでも）。3つの難易度の譜面を作って、iPhone用の曲パックZIPを保存します。</span><em>曲名とアーティストは音源の情報から（なければファイル名）。このMacのゲームにもすぐ追加されます。</em><b class="button primary">音源を選ぶ</b></label><p class="quick-note">曲名を決めてから作るときは、右上の「＋ 音源を追加」から。何曲かまとめてドロップすると、最後に1つのZIPにまとめて保存します。</p><section class="bundle-panel" id="bundle-panel" hidden><div class="bundle-head"><strong>作った曲をまとめてiPhoneへ</strong><span>選んだ曲を1つのZIPにします。iPhoneの「曲を追加」でこのZIPを選ぶと、まだ入っていない曲だけが追加されます。</span></div><div class="bundle-list" id="bundle-list"></div><div class="bundle-actions"><button id="bundle-all">すべて選ぶ</button><button id="remake-selected" disabled title="ドラムを聞き分けて、3つの難易度の譜面を作り直します（今の譜面は履歴に残ります）">譜面を作り直す</button><button class="primary" id="make-bundle" disabled>曲を選んでください</button></div><p class="bundle-note">前に作った曲も「譜面を作り直す」で、ドラムに合わせた新しい譜面にできます。</p></section>`:`<div class="mac-studio-callout"><strong>音源（MP3など）から曲パックを作るのは、Macの譜面工房です</strong><span>Macで「Start Studio.command」を開くと、Macの譜面工房が開きます。そこに音源をドロップするだけで、曲パックZIPができます。</span>${onMac?`<a class="button primary" id="open-mac-studio" href="${MAC_APP}">Macの譜面工房を開く</a><small>「ちゃちゃまる譜面工房」アプリが起動します（初回はブラウザの確認で「開く」）。アプリがないときは「Start Studio.command」を開き、<a id="open-mac-studio-direct" href="${MAC_STUDIO}">127.0.0.1:8787</a> へ。</small>`:''}</div><p>この画面では、手元の曲パックZIPを読み込んで編集できます。</p><label class="button">ZIPを選ぶ<input type="file" class="welcome-upload" accept=".zip" hidden></label>`}<div id="project-list" class="project-list"></div></section></div></section>`;
 const content=root.querySelector<HTMLElement>('#studio-content')!;
 async function openProject(id:string){editorCleanup();const project=await getProject(id);const audio=await(await api(`projects/${id}/audio`)).blob();if(!alive)return;editorCleanup=await editor(content,project,audio,true);}
 async function openZip(file:File){try{const pack=await importZip(file);const old=await(await db()).get('settings','studio-'+pack.manifest.packId);const project:Project=old??{projectId:pack.manifest.packId,revision:1,manifest:pack.manifest,charts:pack.charts,waveform:[],bpm:Math.round(60000/(pack.manifest.beatTimesMs[1]-pack.manifest.beatTimesMs[0]))||120,confidence:'medium',warnings:['曲パックの編集です。保存はこのブラウザ内です。'],analysis:{sampleRate:22050,hopLength:256,audioSha256:pack.manifest.audio.sha256},originalHash:pack.manifest.audio.sha256};if(!alive)return;editorCleanup();editorCleanup=await editor(content,project,pack.audio,false,pack.cover);}catch(e){toast((e as Error).message);}}
@@ -38,7 +38,7 @@ root.ondrop=e=>{e.preventDefault();root.classList.remove('dragging');const files
 type Made={projectId:string;title:string;zip:Blob;name:string};
 type Batch={size:number;settled:number;made:Made[]};
 type Item={file:File;row:HTMLElement;cancelled:boolean;batch:Batch};
-const queue:Item[]=[];let draining=false;
+const queue:Item[]=[];let draining=false,remaking=false;
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 const packName=(title:string)=>`${title.replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_').trim().slice(0,80)||'song'}_ちゃちゃまる.zip`;
 function quick(files:File[]){
@@ -132,8 +132,8 @@ async function makePack(item:Item):Promise<Made|null>{
  const checked=new Set([...picks.querySelectorAll<HTMLInputElement>('input:checked')].map(i=>i.value));
  panel.hidden=projects.length<1;
  picks.innerHTML=projects.map(p=>`<label><input type="checkbox" value="${p.projectId}"${checked.has(p.projectId)?' checked':''}><b>${escape(p.title)}</b><small>${escape(p.artist)}</small></label>`).join('');
- const make=root.querySelector<HTMLButtonElement>('#make-bundle')!;
- const update=()=>{const n=picks.querySelectorAll('input:checked').length;make.disabled=!n;make.textContent=n?`選んだ${n}曲をまとめてZIPに`:'曲を選んでください';};
+ const make=root.querySelector<HTMLButtonElement>('#make-bundle')!,remake=root.querySelector<HTMLButtonElement>('#remake-selected')!;
+ const update=()=>{const n=picks.querySelectorAll('input:checked').length;make.disabled=!n||remaking;make.textContent=n?`選んだ${n}曲をまとめてZIPに`:'曲を選んでください';remake.disabled=!n||remaking;remake.textContent=remaking?'作り直しています…':n?`選んだ${n}曲の譜面を作り直す`:'譜面を作り直す';};
  picks.onchange=update;update();
  root.querySelector<HTMLElement>('#bundle-all')!.onclick=()=>{const boxes=[...picks.querySelectorAll<HTMLInputElement>('input')];const all=boxes.every(b=>b.checked);boxes.forEach(b=>{b.checked=!all;});update();};
  make.onclick=async()=>{
@@ -143,6 +143,50 @@ async function makePack(item:Item):Promise<Made|null>{
   catch(e){toast((e as Error).message);}
   finally{update();}
  };
+ // Songs made before: their three drafts made again the new way (following
+ // the drums), one song at a time; the saved charts stay in the history.
+ remake.onclick=async()=>{
+  const ids=[...picks.querySelectorAll<HTMLInputElement>('input:checked')].map(i=>i.value);if(!ids.length||remaking)return;
+  if(!confirm(`選んだ${ids.length}曲の3つの難易度を、ドラムに合わせた新しい作り方で作り直します。今の譜面は履歴に残ります。よろしいですか？`))return;
+  remaking=true;update();
+  let done=0;
+  try{for(const id of ids){if(!alive)break;if(await remakeSong(id,projects.find(p=>p.projectId===id)?.title??''))done++;}}
+  finally{remaking=false;if(alive)update();}
+  if(alive)toast(done?`${done}曲の譜面を作り直しました。「まとめてZIPに」でiPhoneへ送れます`:'作り直せませんでした');
+ };
+}
+/** Makes a song's three drafts again, then puts it in this Mac's game. */
+async function remakeSong(projectId:string,title:string){
+ const list=root.querySelector<HTMLElement>('#quick-list');if(!list)return false;
+ const row=document.createElement('div');row.className='quick-item working remake';
+ row.innerHTML=`<div class="quick-main"><strong>${escape(title)}</strong><span class="quick-status">作り直しを待っています</span></div><div class="quick-bar"><i></i></div>`;
+ list.append(row);
+ const status=row.querySelector<HTMLElement>('.quick-status')!,bar=row.querySelector<HTMLElement>('.quick-bar i')!;
+ try{
+  for(const [i,d] of (['easy','normal','hard'] as Difficulty[]).entries()){
+   const project=await getProject(projectId);
+   status.textContent=`${difficultyNames[d]}の譜面を作っています（ドラムを聞き分けています）`;bar.style.width=`${8+i*29}%`;
+   const job=await(await whenFree(()=>api(`projects/${projectId}/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({difficulty:d,revision:project.revision})}),()=>{status.textContent='ほかの曲の解析が終わるのを待っています';},()=>!alive)).json() as {jobId:string};
+   const deadline=performance.now()+180000;
+   for(;;){
+    if(!alive)return false;
+    const j=await(await api('jobs/'+job.jobId)).json();
+    if(j.status==='REVIEW_READY')break;
+    if(j.status==='ERROR'||j.status==='CANCELLED')throw Error(`${j.message}${j.error?'（'+j.error+'）':''}`);
+    if(performance.now()>deadline)throw Error('時間がかかりすぎています。もう一度お試しください');
+    await sleep(400);
+   }
+  }
+  status.textContent='このMacのゲームに入れています';bar.style.width='95%';
+  const project=await getProject(projectId);
+  const r=await(await api(`projects/${projectId}/export`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  const pack=await importZip(await(await api('exports/'+r.exportId)).blob());pack.source='studio';await saveSong(pack,'replace');
+  await(await db()).put('settings',project.revision,'local-import-'+projectId);
+  if(!alive)return true;
+  row.classList.replace('working','done');bar.style.width='100%';
+  status.innerHTML=`<b>${escape(project.manifest.title)}</b><br><small>3つの難易度を作り直しました（前の譜面は履歴に残っています）</small>`;
+  return true;
+ }catch(e){row.classList.replace('working','failed');status.textContent=`作り直せませんでした：${(e as Error).message}`;return false;}
 }
 try{await loadProjects();}catch(e){toast((e as Error).message);}
 return ()=>{alive=false;clearTimeout(poll);editorCleanup();root.ondragover=null;root.ondrop=null;};}

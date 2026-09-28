@@ -1,14 +1,16 @@
-"""Onset-aware chart drafts.
+"""Chart drafts, beat tracking helpers and rolls.
 
-The analysis stores band onset envelopes (low / high / full). Notes are placed
-on the song's own beat grid where the music actually attacks, coloured by
-whether the attack is low (drums, bass: don) or bright (snare, claps: ka),
-then shaped into repeating phrases and checked against the difficulty limits.
-It is a draft for editing, not a transcription of the original drums.
+Since v3 the drafts follow the song's drums (drums.py). This module keeps the
+beat helpers (tracker latency, half tempo, swing, bar start), the rolls and
+the earlier onset-strength draft (v2): the analysis stores band onset
+envelopes (low / high / full), notes go on the beat grid where the music
+attacks, coloured by whether the attack is low (don) or bright (ka), shaped
+into repeating phrases. v2 is used when a project has no drum features.
+Drafts are for editing, not transcriptions of the original drums.
 """
 import numpy as np
 
-VERSION = 'chacha-generator-v2'
+VERSION = 'chacha-generator-v3'
 
 RULES = {
     # subdivisions per beat, target notes/s, min gap ms, fast-run limit, ka share
@@ -96,9 +98,23 @@ def _enforce(notes, gap, run_limit, half_beat):
 
 
 def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None):
-    rules = RULES[difficulty]
+    """One difficulty's draft: following the drums when the analysis has them
+    (v3, see drums.py), else the onset-strength draft (v2) or, without any
+    features (a manual grid), a simple pattern on the beats."""
     if len(beats) < 2:
         beats = list(range(0, duration, 500))
+    from .drums import taps as drum_taps, usable
+    kit = (features or {}).get('drums')
+    if usable(kit) and len(beats) >= 16:
+        out = [{'kind': 'tap', 'timeMs': n['t'], 'color': n['color'], 'size': n['size']} for n in drum_taps(beats, duration, difficulty, sections, kit, downbeats)]
+    else:
+        out = _onset_taps(beats, duration, difficulty, sections, features, downbeats)
+    return _finish(out, beats, duration, difficulty, sections)
+
+
+def _onset_taps(beats, duration, difficulty, sections=None, features=None, downbeats=None):
+    """The v2 draft: the strongest attacks on the beat grid, shaped into phrases."""
+    rules = RULES[difficulty]
     rate = features.get('rate', 50) if features else None
     low = np.asarray(features['low'], dtype=float) / 255 if features else None
     high = np.asarray(features['high'], dtype=float) / 255 if features else None
@@ -224,7 +240,18 @@ def generate(beats, duration, difficulty, audio_hash, sections=None, features=No
     for n in big[:max(0, int(len(taps) * .05))]:
         n['size'] = 'large'
 
-    out = [{'kind': 'tap', 'timeMs': int(n['t']), 'color': n['color'], 'size': n.get('size', 'normal')} for n in taps]
+    return [{'kind': 'tap', 'timeMs': int(n['t']), 'color': n['color'], 'size': n.get('size', 'normal')} for n in taps]
+
+
+def _finish(out, beats, duration, difficulty, sections):
+    """Rolls leading into choruses, then the chart with note ids."""
+    beat_len = np.diff(beats)
+    median_beat = float(np.median(beat_len)) if len(beat_len) else 500.0
+
+    def local_beat(t):
+        i = int(np.searchsorted(beats, t, side='right')) - 1
+        i = min(max(i, 0), len(beat_len) - 1)
+        return float(beat_len[i]) if len(beat_len) else median_beat
 
     # A roll leading into a chorus: one per started minute (at least one in
     # songs over 12 s).
@@ -320,8 +347,9 @@ def refine_beats(y, sr, beats_ms, bpm):
     return [int(round(b)) for b in beats if b >= 0], bpm, shift
 
 
-def downbeat_phase_chroma(y, sr, beats_ms, low_env=None, rate=None):
-    """Bar start from where the bass and chords change, supported by low attacks."""
+def downbeat_phase_chroma(y, sr, beats_ms, low_env=None, rate=None, drum_scores=None):
+    """Bar start from where the bass and chords change, supported by low attacks
+    and, when the song has drums, by the backbeat (snare on beats 2 and 4)."""
     import librosa
     if len(beats_ms) < 16:
         return downbeat_phase(beats_ms, low_env, rate)
@@ -347,4 +375,8 @@ def downbeat_phase_chroma(y, sr, beats_ms, low_env=None, rate=None):
 
     def z(v):
         return (v - v.mean()) / (v.std() + 1e-9)
-    return int(np.argmax(z(bass) + .5 * z(chords) + .6 * z(attacks)))
+    score = z(bass) + .5 * z(chords) + .6 * z(attacks)
+    # The backbeat tells beats 1/3 from 2/4 clearly; weigh it when it is there.
+    if drum_scores is not None and np.ptp(drum_scores) > .03:
+        score = score + 1.5 * z(np.asarray(drum_scores, dtype=float))
+    return int(np.argmax(score))

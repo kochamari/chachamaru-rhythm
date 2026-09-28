@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get('CHACHA_DATA', str(ROOT / '_private' / 'studio')))
-VERSION = 'chacha-generator-v2'
+VERSION = 'chacha-generator-v3'
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -63,29 +63,85 @@ def generate(beats, duration, difficulty, audio_hash, sections=None, features=No
     return draft(beats, duration, difficulty, audio_hash, sections, features, downbeats)
 
 
-def load_features(directory, compute=False):
-    """Onset features saved by the analysis. Projects made before v2 have
-    none: with compute=True they are derived from the project's final audio."""
-    f = Path(directory) / 'features.json'
-    if f.exists():
-        try:
-            return json.loads(f.read_text())
-        except ValueError:
-            pass
-    audio = Path(directory) / 'song.m4a'
-    if not compute or not audio.exists():
-        return None
+def decode(audio, directory):
+    """The final audio as mono 22.05 kHz samples (the analysis format)."""
     import soundfile as sf
-    from .generator import onset_features
     pcm = Path(directory) / 'features.wav'
     try:
         subprocess.run([ffmpeg(), '-nostdin', '-v', 'error', '-y', '-i', str(audio), '-vn', '-ar', '22050', '-ac', '1', '-c:a', 'pcm_s16le', str(pcm)], check=True, timeout=120)
-        y, sr = sf.read(pcm, dtype='float32')
-        features = onset_features(y, sr)
-        write_json(f, features)
-        return features
+        return sf.read(pcm, dtype='float32')
     finally:
         pcm.unlink(missing_ok=True)
+
+
+def load_features(directory, compute=False):
+    """Onset features saved by the analysis. Projects made before v2 have
+    none, and before v3 no drum features: with compute=True the missing ones
+    are derived from the project's final audio and saved."""
+    from .drums import usable
+    f = Path(directory) / 'features.json'
+    features = None
+    if f.exists():
+        try:
+            features = json.loads(f.read_text())
+        except ValueError:
+            features = None
+    audio = Path(directory) / 'song.m4a'
+    if not compute or not audio.exists() or (features and usable(features.get('drums'))):
+        return features
+    from .generator import onset_features
+    from .drums import drum_features
+    y, sr = decode(audio, directory)
+    features = features or onset_features(y, sr)
+    features['drums'] = drum_features(y, sr)
+    write_json(f, features)
+    return features
+
+
+def track_beats(y, sr, duration, kit=None, beats=None, bpm=None):
+    """Beats (ms), BPM and the tracker's latency correction. With drum features
+    two tracker slips are fixed: a fast song tracked at two thirds of its
+    tempo (it then looks swung) is tracked again at 1.5 times the tempo, and
+    beats that sit on the off-beats move by half a beat. Given `beats`, they
+    are checked instead of tracked afresh (a project analysed before)."""
+    import numpy as np
+    import librosa
+    from .generator import refine_beats
+    from .drums import tempo_alias, align_beats
+    onset = None
+
+    def track(**options):
+        nonlocal onset
+        if onset is None:
+            onset = librosa.onset.onset_strength(y=y, sr=sr, hop_length=256)
+        tempo, frames = librosa.beat.beat_track(onset_envelope=onset, sr=sr, hop_length=256, **options)
+        found = float(np.asarray(tempo).ravel()[0]) if np.asarray(tempo).size else 120.0
+        raw = [round(float(t) * 1000) for t in librosa.frames_to_time(frames, sr=sr, hop_length=256)]
+        got, found, shift = refine_beats(y, sr, raw, found)
+        return sorted(set(t for t in got if 0 <= t < duration)), found, shift
+
+    fixes = []
+    shift = 0.0
+    if beats is None:
+        beats, bpm, shift = track()
+    if kit is not None and tempo_alias(beats, bpm, kit):
+        beats, bpm, shift = track(bpm=bpm * 1.5)
+        fixes.append('tempo')
+    if kit is not None:
+        beats, moved = align_beats(beats, kit)
+        if moved:
+            fixes.append('half-beat')
+    return beats, bpm, shift, fixes
+
+
+def bar_phase(y, sr, beats, features):
+    """Which beat starts the bar (0-3): chords and bass change there, and the
+    drums play their backbeat on beats 2 and 4."""
+    import numpy as np
+    from .generator import downbeat_phase_chroma
+    from .drums import bar_phase_scores
+    kit = features.get('drums')
+    return downbeat_phase_chroma(y, sr, beats, np.asarray(features['low'], dtype=float) / 255, features['rate'], bar_phase_scores(beats, kit))
 
 
 def validate(project):
@@ -194,7 +250,6 @@ def chorus_candidates(y, sr, duration, beats, window_ms=16000, count=3):
 
 def analyze(source, directory, title, artist, progress=lambda *args:None, name=''):
     import numpy as np
-    import librosa
     import soundfile as sf
     directory=Path(directory)
     directory.mkdir(parents=True,exist_ok=True)
@@ -209,13 +264,11 @@ def analyze(source, directory, title, artist, progress=lambda *args:None, name='
     progress('ANALYZING',40,'曲の拍と盛り上がりを調べています')
     y,sr=sf.read(pcm,dtype='float32')
     duration=round(len(y)/sr*1000)
-    onset=librosa.onset.onset_strength(y=y,sr=sr,hop_length=256)
-    tempo,frames=librosa.beat.beat_track(onset_envelope=onset,sr=sr,hop_length=256)
-    bpm=float(np.asarray(tempo).ravel()[0]) if np.asarray(tempo).size else 120
-    beats=[round(float(t)*1000) for t in librosa.frames_to_time(frames,sr=sr,hop_length=256)]
-    from .generator import onset_features,downbeat_phase_chroma,refine_beats
-    beats,bpm,beat_shift=refine_beats(y,sr,beats,bpm)
-    beats=sorted(set(t for t in beats if 0<=t<duration))
+    from .generator import onset_features
+    from .drums import drum_features
+    # The drum kit's parts (the draft follows the drums), also used to check the beats.
+    kit=drum_features(y,sr)
+    beats,bpm,beat_shift,fixes=track_beats(y,sr,duration,kit)
     warnings=[]
     confidence='high'
     if len(beats)<8 or not np.isfinite(bpm) or bpm<=0:
@@ -223,8 +276,9 @@ def analyze(source, directory, title, artist, progress=lambda *args:None, name='
     elif np.std(np.diff(beats))/np.mean(np.diff(beats))>.15:
         confidence='medium';warnings.append('拍間隔が変化しています。先頭・中盤・末尾を試聴してください。')
     features=onset_features(y,sr)
+    features['drums']=kit
     write_json(directory/'features.json',features)
-    phase=downbeat_phase_chroma(y,sr,beats,np.asarray(features['low'],dtype=float)/255,features['rate']) if confidence!='low' else 0
+    phase=bar_phase(y,sr,beats,features) if confidence!='low' else 0
     rms=np.sqrt(np.mean(np.square(y.reshape(-1,1))))
     if rms<.005:
         confidence='low';warnings.append('静かな音源です。自動下書きを確認してください。')
@@ -235,7 +289,7 @@ def analyze(source, directory, title, artist, progress=lambda *args:None, name='
     downbeats=list(range(phase,len(beats),4))
     charts=[generate(beats,duration,d,h,sections,features if confidence!='low' else None,downbeats) for d in ['easy','normal','hard']]
     m={'schemaVersion':1,'packId':'song-'+h[:16],'revision':1,'title':title,'artist':artist,'durationMs':duration,'audio':{'path':'audio/song.m4a','sha256':h},'charts':[{'chartId':c['chartId'],'difficulty':c['difficulty'],'path':f"charts/{c['difficulty']}.json",'sha256':hashlib.sha256(json.dumps(c,separators=(',', ':')).encode()).hexdigest()} for c in charts],'beatTimesMs':beats,'downbeatIndices':downbeats,'sections':sections,'generator':VERSION}
-    p={'projectId':directory.name,'revision':1,'manifest':m,'charts':charts,'waveform':peaks,'bpm':round(bpm,2),'confidence':confidence,'warnings':warnings+['自動下書き・要試聴。盛り上がりは音量からの候補で、歌詞のサビ判定ではありません。'],'analysis':{'sampleRate':sr,'hopLength':256,'audioSha256':h,'beatShiftMs':round(beat_shift,1)},'originalHash':sha(source),'decodedDurationMs':duration,'containerDurationMs':final_info['durationMs']}
+    p={'projectId':directory.name,'revision':1,'manifest':m,'charts':charts,'waveform':peaks,'bpm':round(bpm,2),'confidence':confidence,'warnings':warnings+['自動下書き・要試聴。盛り上がりは音量からの候補で、歌詞のサビ判定ではありません。'],'analysis':{'sampleRate':sr,'hopLength':256,'audioSha256':h,'beatShiftMs':round(beat_shift,1),'beatFixes':fixes},'originalHash':sha(source),'decodedDurationMs':duration,'containerDurationMs':final_info['durationMs']}
     validate(p)
     write_json(directory/'project.json',p)
     pcm.unlink(missing_ok=True)

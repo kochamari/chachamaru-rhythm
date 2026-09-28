@@ -29,5 +29,11 @@ test('M16 several dropped songs are saved as one collection ZIP, and songs can b
  const one=page.waitForEvent('download',{predicate:d=>nfc(d).startsWith('ちゃちゃまる曲パック_1曲_')});await page.locator('#make-bundle').click();
  const single=unzipSync(new Uint8Array(readFileSync((await (await one).path())!)));
  expect(JSON.parse(strFromU8(single['bundle.json'])).songs.map((s:{title:string})=>s.title)).toEqual(['まとめ一曲目']);
+ // A song made before can have its three drafts made again (the new way), and this Mac's game gets it.
+ await expect(page.locator('#remake-selected')).toHaveText('選んだ1曲の譜面を作り直す');
+ page.once('dialog',d=>void d.accept());
+ await page.locator('#remake-selected').click();
+ await expect(page.locator('.quick-item.remake.done')).toContainText('3つの難易度を作り直しました',{timeout:120000});
+ await expect(page.locator('#remake-selected')).toHaveText('選んだ1曲の譜面を作り直す');
  expect(errors).toEqual([]);
 });

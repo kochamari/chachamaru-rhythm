@@ -62,7 +62,7 @@ GitHub Pagesは静的配信で、Python解析APIをホストしていません�
 | 曲ZIPの検証・取込 | `web/src/packs/`, `web/src/workers/zip.worker.ts`, [保存仕様](03_PACK_STORAGE.md) |
 | ブラウザ保存・ベスト記録 | `web/src/storage/Database.ts`, `tests/unit/storage-editor.test.ts` |
 | Studioの画面・編集履歴 | `web/src/screens/Studio.ts`, `web/src/studio/` |
-| 解析・自動下書き・API・ZIP生成 | `studio/chacha_studio/core.py`, `generator.py`, `server.py`, `tests/python/`, [Studio仕様](04_STUDIO.md) |
+| 解析・自動下書き・API・ZIP生成 | `studio/chacha_studio/core.py`（解析の流れ・拍）, `drums.py`（ドラムに合わせる下書き v3）, `generator.py`（拍の補助・連打・v2下書き）, `server.py`, `tests/python/`（`test_drums.py` は合成曲で検証）, [Studio仕様](04_STUDIO.md) |
 | 型とファイル形式 | `contracts/public-types.ts`, `schemas/manifest.schema.json`, `schemas/chart.schema.json` |
 | 公開・キャッシュ・CI | `web/vite.config.ts`, `scripts/service-worker.mjs`, `.github/workflows/`, `web/public/manifest.webmanifest` |
 
