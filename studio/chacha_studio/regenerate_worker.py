@@ -2,7 +2,7 @@
 import json
 import sys
 from pathlib import Path
-from .core import generate,validate,write_json,load_features,decode,track_beats,bar_phase,VERSION
+from .core import generate,validate,write_json,load_features,decode,track_beats,bar_phase,VERSION,generation
 from .drums import usable
 
 work=Path(sys.argv[1]);difficulty=sys.argv[2]
@@ -12,14 +12,18 @@ try:
     project=work.parent.parent
     before=load_features(project)
     features=load_features(project,compute=True) if p.get('confidence')!='low' else None
-    if features and usable(features.get('drums')) and not (before and usable(before.get('drums'))):
+    fresh=not (before and usable(before.get('drums')))
+    if features and usable(features.get('drums')) and (fresh or generation(m.get('generator'))<6):
         # The first draft that follows the drums (a song analysed before
-        # they were used): check the beats and the bar start as a new
-        # analysis would, since the drafts rest on them.
+        # they were used), or the first since songs get a steady grid (v6):
+        # check the beats and the bar start as a new analysis would, since
+        # the drafts rest on them.
         y,sr=decode(project/'song.m4a',work)
         beats,bpm,_,fixes=track_beats(y,sr,m['durationMs'],features['drums'],m['beatTimesMs'],p['bpm'])
         if fixes:
             m['beatTimesMs']=beats;p['bpm']=round(bpm,2)
+            analysis=p.setdefault('analysis',{})
+            analysis['beatFixes']=sorted(set(analysis.get('beatFixes',[]))|set(fixes))
         if len(beats)>=16:
             phase=bar_phase(y,sr,beats,features)
             m['downbeatIndices']=list(range(phase,len(beats),4))

@@ -62,7 +62,7 @@ GitHub Pagesは静的配信で、Python解析APIをホストしていません�
 | 曲ZIPの検証・取込 | `web/src/packs/`, `web/src/workers/zip.worker.ts`, [保存仕様](03_PACK_STORAGE.md) |
 | ブラウザ保存・ベスト記録 | `web/src/storage/Database.ts`, `tests/unit/storage-editor.test.ts` |
 | Studioの画面・編集履歴 | `web/src/screens/Studio.ts`, `web/src/studio/` |
-| 解析・自動下書き・API・ZIP生成 | `studio/chacha_studio/core.py`（解析の流れ・拍）, `ladder.py`（下書き v5：3難易度のはしご・色・大音符・フィルの連打）, `generator.py`（入口、くり返しの検出、連打の仕上げ、比較用の v4・v2）, `drums.py`（ドラム・メロディ・和音の解析と拍の補正、比較用のドラムだけの下書き v3）, `server.py`, `tests/python/`（`test_song_draft.py`・`test_drums.py` は合成曲で検証）, [Studio仕様](04_STUDIO.md) |
+| 解析・自動下書き・API・ZIP生成 | `studio/chacha_studio/core.py`（解析の流れ・拍）, `steady.py`（一定テンポの拍の格子）, `patterns.py`（下書き v6：小節ごとのリズム、3難易度のはしご）, `ladder.py`（比較用の v5、色・大音符・フィルの連打の元）, `generator.py`（入口、くり返しの検出、連打の仕上げ、比較用の v4・v2）, `drums.py`（ドラム・メロディ・和音の解析と拍の補正、比較用のドラムだけの下書き v3）, `server.py`, `tests/python/`（`test_song_draft.py`・`test_patterns.py`・`test_drums.py` は合成曲で検証）, [Studio仕様](04_STUDIO.md) |
 | 型とファイル形式 | `contracts/public-types.ts`, `schemas/manifest.schema.json`, `schemas/chart.schema.json` |
 | 公開・キャッシュ・CI | `web/vite.config.ts`, `scripts/service-worker.mjs`, `.github/workflows/`, `web/public/manifest.webmanifest` |
 

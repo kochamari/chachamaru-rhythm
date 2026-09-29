@@ -1,16 +1,15 @@
-"""Chart drafts, beat tracking helpers and rolls.
+"""Chart drafts: the entry point, beat tracking helpers and rolls.
 
-Since v3 the drafts follow the song's drums (drums.py). This module keeps the
-beat helpers (tracker latency, half tempo, swing, bar start), the rolls and
-the earlier onset-strength draft (v2): the analysis stores band onset
-envelopes (low / high / full), notes go on the beat grid where the music
-attacks, coloured by whether the attack is low (don) or bright (ka), shaped
-into repeating phrases. v2 is used when a project has no drum features.
-Drafts are for editing, not transcriptions of the original drums.
+The default draft (v6) is made bar by bar in patterns.py. This module keeps
+the beat helpers (tracker latency, half tempo, swing, bar start), the rolls
+and the earlier drafts for comparison: the onset-strength draft (v2, also
+used when a project has no drum features: notes go on the beat grid where
+the music attacks, coloured by whether the attack is low (don) or bright
+(ka)) and v4. Drafts are for editing, not transcriptions.
 """
 import numpy as np
 
-VERSION = 'chacha-generator-v5'
+VERSION = 'chacha-generator-v6'
 
 RULES = {
     # subdivisions per beat, target notes/s, min gap ms, fast-run limit, ka share
@@ -102,21 +101,26 @@ def _enforce(notes, gap, run_limit, half_beat):
 def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None, style='song'):
     """One difficulty's draft.
 
-    style 'song' (v5, the default): the three difficulties made together as
-    one ladder (ladder.py). 'v4': the same notes chosen per difficulty
+    style 'song' (v6, the default): each bar's rhythm chosen as a whole, the
+    three difficulties together as one ladder (patterns.py). 'v5': the notes
+    of the ladder chosen one by one (ladder.py); in busy, fast songs players
+    found it disordered and hard. 'v4': the same notes chosen per difficulty
     (_song_taps). 'v2': the earlier onset draft as it was. 'drums': only the
-    drum kit (v3, drums.py); players found it far too plain as a whole chart,
-    so it is kept for comparison only. Without features (a manual grid): a
-    simple pattern on the beats."""
+    drum kit (v3, drums.py); players found it far too plain as a whole chart.
+    The earlier ones are kept for comparison only. Without features (a
+    manual grid): a simple pattern on the beats."""
     if len(beats) < 2:
         beats = list(range(0, duration, 500))
     from .drums import taps as drum_taps, usable
     kit = (features or {}).get('drums')
     if style == 'drums' and usable(kit) and len(beats) >= 16:
         out = [{'kind': 'tap', 'timeMs': n['t'], 'color': n['color'], 'size': n['size']} for n in drum_taps(beats, duration, difficulty, sections, kit, downbeats)]
-    elif style == 'song' and features and len(beats) >= 16:
-        from .ladder import song_ladder
-        ladder = song_ladder(beats, duration, sections, features, downbeats)
+    elif style in ('song', 'v5') and features and len(beats) >= 16:
+        if style == 'song':
+            from .patterns import song_patterns as draft
+        else:
+            from .ladder import song_ladder as draft
+        ladder = draft(beats, duration, sections, features, downbeats)
         out = [{'kind': 'tap', 'timeMs': n['t'], 'color': n['color'], 'size': n['size']} for n in ladder[difficulty]]
         return _finish(out, beats, duration, difficulty, sections, ladder['rolls'])
     elif style == 'v4' and features and len(beats) >= 16:
@@ -316,7 +320,7 @@ def _bar_chroma(kit, beats, phase, nb):
     return out
 
 
-def _repeat_groups(rhythm, harmony=None, window=8, need=.22, margin=.15, min_lag=4):
+def _repeat_groups(rhythm, harmony=None, window=8, need=.22, margin=.15, min_lag=4, alike=.5, level=.5):
     """Groups of bars that repeat each other: a second verse with the first, a
     chorus with the one before. Bar j goes with bar j-L when the bars around
     it (`window` bars) match those around j-L in harmony and rhythm clearly
@@ -324,14 +328,21 @@ def _repeat_groups(rhythm, harmony=None, window=8, need=.22, margin=.15, min_lag
     links nothing, so it keeps the rhythm the song gives each bar. Bars are
     compared by what sets them apart from the whole song (its average bar
     removed), since a pop song's chords and beat are alike almost everywhere.
-    Returns a group number per bar."""
+    The two bars themselves must also sound alike (rhythms at least `alike`
+    similar, the quieter at least `level` as busy as the other): around the
+    end of a part the bars that follow can match, and a quiet outro must not
+    take the rhythm of the verse it comes after. Returns a group number per
+    bar."""
     nb = len(rhythm)
 
-    def cos(m):
-        m = m - m.mean(axis=0, keepdims=True)
+    def cos(m, centre=True):
+        if centre:
+            m = m - m.mean(axis=0, keepdims=True)
         n = np.linalg.norm(m, axis=1) + 1e-9
         return (m @ m.T) / n[:, None] / n[None, :]
     sim = cos(rhythm) if harmony is None else .5 * cos(rhythm) + .5 * cos(harmony)
+    raw = cos(rhythm, False)
+    busy = rhythm.mean(axis=1)
     parent = list(range(nb))
 
     def find(a):
@@ -352,8 +363,10 @@ def _repeat_groups(rhythm, harmony=None, window=8, need=.22, margin=.15, min_lag
         if not len(row):
             continue
         best = int(np.argmax(row))
-        if row[best] >= need and row[best] - float(np.median(row)) >= margin:
-            parent[find(j)] = find(j - (best + min_lag))
+        i = j - (best + min_lag)
+        if row[best] >= need and row[best] - float(np.median(row)) >= margin and raw[j, i] >= alike \
+                and min(busy[i], busy[j]) >= level * max(busy[i], busy[j]):
+            parent[find(j)] = find(i)
     return np.array([find(j) for j in range(nb)])
 
 
@@ -581,24 +594,15 @@ def refine_beats(y, sr, beats_ms, bpm):
     Fast songs are often tracked at half tempo: when the midpoints attack as
     strongly as the beats, the midpoints are inserted.
     """
-    import librosa
     beats = np.asarray(beats_ms, dtype=float)
     if len(beats) < 8:
         return [int(round(b)) for b in beats], bpm, 0.0
-    hop = 32
-    env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop, n_fft=256)
-    times = librosa.frames_to_time(np.arange(len(env)), sr=sr, hop_length=hop) * 1000
+    shift, env, times = _latency(y, sr, beats)
 
     def strength(t, lo=-15, hi=15):
         w = (times >= t + lo) & (times <= t + hi)
         return float(env[w].max()) if w.any() else 0.0
 
-    devs = []
-    for b in beats:
-        w = (times >= b - 70) & (times <= b + 40)
-        if w.any():
-            devs.append(times[w][int(np.argmax(env[w]))] - b)
-    shift = float(np.clip(np.median(devs) - 2.5, -60, 60)) if len(devs) >= 8 else 0.0
     beats = beats + shift
     if bpm < 100:
         mids = (beats[:-1] + beats[1:]) / 2
@@ -608,6 +612,33 @@ def refine_beats(y, sr, beats_ms, bpm):
             beats = np.sort(np.concatenate([beats, mids]))
             bpm *= 2
     return [int(round(b)) for b in beats if b >= 0], bpm, shift
+
+
+def _latency(y, sr, beats):
+    """How far (ms) the attacks sit from the given beats: the median offset of
+    the strongest point of a fine onset envelope (1.5 ms steps) near each
+    beat. Returns (shift, envelope, envelope times)."""
+    import librosa
+    hop = 32
+    env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop, n_fft=256)
+    times = librosa.frames_to_time(np.arange(len(env)), sr=sr, hop_length=hop) * 1000
+    devs = []
+    for b in beats:
+        w = (times >= b - 70) & (times <= b + 40)
+        if w.any():
+            devs.append(times[w][int(np.argmax(env[w]))] - b)
+    shift = float(np.clip(np.median(devs) - 2.5, -60, 60)) if len(devs) >= 8 else 0.0
+    return shift, env, times
+
+
+def on_attacks(y, sr, beats_ms):
+    """Beats moved by the attacks' median offset (as refine_beats does for the
+    tracker's beats). Returns (beats, shift)."""
+    beats = np.asarray(beats_ms, dtype=float)
+    if len(beats) < 8:
+        return [int(round(b)) for b in beats], 0.0
+    shift = _latency(y, sr, beats)[0]
+    return [int(round(b)) for b in beats + shift if b + shift >= 0], shift
 
 
 def downbeat_phase_chroma(y, sr, beats_ms, low_env=None, rate=None, drum_scores=None):

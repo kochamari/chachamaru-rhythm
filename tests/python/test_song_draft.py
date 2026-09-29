@@ -1,7 +1,7 @@
-"""The default draft (v4, generator._song_taps) on a synthetic song whose
-parts are known: intro, verse, chorus, the second verse and chorus (the same
-music again) and an outro. The verse's drums keep to the beats, so its
-off-beat eighths come only from the sung line; the chorus is busier."""
+"""The default draft (v6, patterns.py) on a synthetic song whose parts are
+known: intro, verse, chorus, the second verse and chorus (the same music
+again) and an outro. The verse's drums keep to the beats, so its off-beat
+eighths come only from the sung line; the chorus is busier."""
 import sys
 
 import numpy as np

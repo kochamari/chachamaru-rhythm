@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get('CHACHA_DATA', str(ROOT / '_private' / 'studio')))
-VERSION = 'chacha-generator-v5'
+VERSION = 'chacha-generator-v6'
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -57,6 +57,13 @@ def song_labels(title, artist, info, name=''):
     artist = (artist or '').strip() or info.get('artist', '') or 'アーティスト未設定'
     return title[:200], artist[:200]
 
+def generation(label):
+    """The generator number of a label ('chacha-generator-v6' -> 6; 0 when unknown)."""
+    try:
+        return int(str(label).rsplit('-v', 1)[1])
+    except (IndexError, ValueError):
+        return 0
+
 def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None, style='song'):
     """Draft chart for one difficulty. Deterministic for the same inputs."""
     from .generator import generate as draft
@@ -100,14 +107,17 @@ def load_features(directory, compute=False):
 
 def track_beats(y, sr, duration, kit=None, beats=None, bpm=None):
     """Beats (ms), BPM and the tracker's latency correction. With drum features
-    two tracker slips are fixed: a fast song tracked at two thirds of its
-    tempo (it then looks swung) is tracked again at 1.5 times the tempo, and
-    beats that sit on the off-beats move by half a beat. Given `beats`, they
-    are checked instead of tracked afresh (a project analysed before)."""
+    the tracker's slips are fixed: a fast song tracked at two thirds of its
+    tempo (it then looks swung) is tracked again at 1.5 times the tempo, a
+    song that keeps one tempo gets one steady grid (steady.py: the tracker
+    wanders in busy songs), and beats that sit on the off-beats move by half
+    a beat. Given `beats`, they are checked instead of tracked afresh (a
+    project analysed before)."""
     import numpy as np
     import librosa
-    from .generator import refine_beats
+    from .generator import refine_beats, on_attacks
     from .drums import tempo_alias, align_beats
+    from .steady import steady_grid, join
     onset = None
 
     def track(**options):
@@ -128,6 +138,14 @@ def track_beats(y, sr, duration, kit=None, beats=None, bpm=None):
         beats, bpm, shift = track(bpm=bpm * 1.5)
         fixes.append('tempo')
     if kit is not None:
+        fit = steady_grid(beats, np.asarray(kit['full'], dtype=float) / 255, kit['rate'], duration)
+        if fit:
+            # The grid is fitted on 10 ms frames: put it on the attacks as the
+            # tracker's beats are.
+            grid, _ = on_attacks(y, sr, fit['grid'])
+            beats = [b for b in join(fit, grid) if 0 <= b < duration]
+            bpm = fit['bpm']
+            fixes.append('steady')
         beats, moved = align_beats(beats, kit)
         if moved:
             fixes.append('half-beat')
