@@ -10,7 +10,7 @@ Drafts are for editing, not transcriptions of the original drums.
 """
 import numpy as np
 
-VERSION = 'chacha-generator-v4'
+VERSION = 'chacha-generator-v5'
 
 RULES = {
     # subdivisions per beat, target notes/s, min gap ms, fast-run limit, ka share

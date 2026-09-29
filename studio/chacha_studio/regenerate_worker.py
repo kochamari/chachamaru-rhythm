@@ -2,7 +2,7 @@
 import json
 import sys
 from pathlib import Path
-from .core import generate,validate,write_json,load_features,decode,track_beats,bar_phase
+from .core import generate,validate,write_json,load_features,decode,track_beats,bar_phase,VERSION
 from .drums import usable
 
 work=Path(sys.argv[1]);difficulty=sys.argv[2]
@@ -25,6 +25,7 @@ try:
             m['downbeatIndices']=list(range(phase,len(beats),4))
     c=generate(m['beatTimesMs'],m['durationMs'],difficulty,m['audio']['sha256'],m['sections'],features,m['downbeatIndices'])
     p['charts']=[c if x['difficulty']==difficulty else x for x in p['charts']]
+    m['generator']=VERSION  # the latest draft's generator
     p['revision']+=1;m['revision']+=1;validate(p)
     write_json(work/'candidate.json',p)
     write_json(work/'status.json',{'status':'REVIEW_READY','progress':100,'message':'下書きを作りました'})
