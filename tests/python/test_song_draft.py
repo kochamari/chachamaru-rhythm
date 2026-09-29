@@ -152,3 +152,35 @@ def test_limits_and_determinism(song, difficulty, gap):
     assert sum(n['size'] == 'large' for n in taps(chart)) <= max(1, len(t) * .1)
     for r in [n for n in chart['notes'] if n['kind'] == 'roll']:
         assert not any(r['timeMs'] - 90 <= x <= r['endMs'] + 90 for x in t)
+
+
+def test_one_ladder_easy_within_normal_within_hard_with_the_same_colours(song):
+    easy, normal, hard = (taps(song['charts'][d]) for d in ('easy', 'normal', 'hard'))
+
+    def within(small, big):
+        colours = {n['timeMs']: n['color'] for n in big}
+        return all(colours.get(n['timeMs']) == n['color'] for n in small)
+    assert within(easy, normal) and within(normal, hard)
+
+
+def test_hard_has_no_lone_sixteenth(song):
+    t = [n['timeMs'] for n in taps(song['charts']['hard'])]
+    beats = np.asarray(song['beats'])
+    for i, x in enumerate(t):
+        k = int(np.searchsorted(beats, x + 1, side='right')) - 1
+        frac = (x - beats[k]) / 500
+        if min(abs(frac - .25), abs(frac - .75)) < .05:
+            assert (i and x - t[i - 1] <= 160) or (i + 1 < len(t) and t[i + 1] - x <= 160), x
+
+
+def test_rolls_at_the_drum_fill_and_a_large_last_note():
+    import test_drums
+    y, beats, _, _, duration = test_drums.render(120, len(test_drums.SONG), test_drums.SONG)
+    features = {**generator.onset_features(y, SR), 'drums': drums.drum_features(y, SR)}
+    fill = test_drums.SONG.index('fill')
+    start, end = beats[fill * 4 + 1], beats[fill * 4 + 3] + 500
+    for d in ('easy', 'normal', 'hard'):
+        chart = core.generate(beats, duration, d, 'ef' * 32, [], features, list(range(0, len(beats), 4)))
+        rolls = [n for n in chart['notes'] if n['kind'] == 'roll']
+        assert any(r['timeMs'] < end and r['endMs'] > start for r in rolls), (d, rolls)
+        assert taps(chart)[-1]['size'] == 'large'

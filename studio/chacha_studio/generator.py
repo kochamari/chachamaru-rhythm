@@ -102,11 +102,12 @@ def _enforce(notes, gap, run_limit, half_beat):
 def generate(beats, duration, difficulty, audio_hash, sections=None, features=None, downbeats=None, style='song'):
     """One difficulty's draft.
 
-    style 'song' (v4, the default): the song's strongest attacks, as v2, made
-    readable (see _song_taps). 'v2': the earlier onset draft as it was.
-    'drums': only the drum kit (v3, drums.py); players found it far too plain
-    as a whole chart, so it is kept for comparison only. Without features (a
-    manual grid): a simple pattern on the beats."""
+    style 'song' (v5, the default): the three difficulties made together as
+    one ladder (ladder.py). 'v4': the same notes chosen per difficulty
+    (_song_taps). 'v2': the earlier onset draft as it was. 'drums': only the
+    drum kit (v3, drums.py); players found it far too plain as a whole chart,
+    so it is kept for comparison only. Without features (a manual grid): a
+    simple pattern on the beats."""
     if len(beats) < 2:
         beats = list(range(0, duration, 500))
     from .drums import taps as drum_taps, usable
@@ -114,6 +115,11 @@ def generate(beats, duration, difficulty, audio_hash, sections=None, features=No
     if style == 'drums' and usable(kit) and len(beats) >= 16:
         out = [{'kind': 'tap', 'timeMs': n['t'], 'color': n['color'], 'size': n['size']} for n in drum_taps(beats, duration, difficulty, sections, kit, downbeats)]
     elif style == 'song' and features and len(beats) >= 16:
+        from .ladder import song_ladder
+        ladder = song_ladder(beats, duration, sections, features, downbeats)
+        out = [{'kind': 'tap', 'timeMs': n['t'], 'color': n['color'], 'size': n['size']} for n in ladder[difficulty]]
+        return _finish(out, beats, duration, difficulty, sections, ladder['rolls'])
+    elif style == 'v4' and features and len(beats) >= 16:
         out = _song_taps(beats, duration, difficulty, sections, features, downbeats)
     else:
         out = _onset_taps(beats, duration, difficulty, sections, features, downbeats)
@@ -499,8 +505,9 @@ def _onset_taps(beats, duration, difficulty, sections=None, features=None, downb
     return [{'kind': 'tap', 'timeMs': int(n['t']), 'color': n['color'], 'size': n.get('size', 'normal')} for n in taps]
 
 
-def _finish(out, beats, duration, difficulty, sections):
-    """Rolls leading into choruses, then the chart with note ids."""
+def _finish(out, beats, duration, difficulty, sections, fills=None):
+    """Rolls (at the given drum fills, or else leading into choruses), then
+    the chart with note ids."""
     beat_len = np.diff(beats)
     median_beat = float(np.median(beat_len)) if len(beat_len) else 500.0
 
@@ -511,9 +518,9 @@ def _finish(out, beats, duration, difficulty, sections):
 
     # A roll leading into a chorus: one per started minute (at least one in
     # songs over 12 s).
-    rolls = []
-    chorus_starts = [s['startMs'] for s in (sections or []) if s.get('kind') == 'chorus']
-    if not chorus_starts and duration > 12000 and len(beats) > 24:
+    rolls = [{'kind': 'roll', 'timeMs': int(a), 'endMs': int(b)} for a, b in (fills or [])]
+    chorus_starts = [] if fills else [s['startMs'] for s in (sections or []) if s.get('kind') == 'chorus']
+    if not fills and not chorus_starts and duration > 12000 and len(beats) > 24:
         chorus_starts = [beats[max(8, len(beats) // 2)] + int(local_beat(beats[len(beats) // 2]) * 4)]
     allowed = max(1, int(round(duration / 60000)))
     for start in chorus_starts[:allowed]:
