@@ -23,18 +23,23 @@ CHORUS = [[0, .5, 1, 2, 2.5, 3], [0, 1, 2, 3], [0, .5, 1.5, 2, 3], [0, 2, 3, 3.5
 CHORDS = [('A2', ['A3', 'C4', 'E4']), ('F2', ['F3', 'A3', 'C4']), ('C3', ['C4', 'E4', 'G4']), ('G2', ['G3', 'B3', 'D4'])]
 
 
-def render(bpm=120, lead_in=1.0, tail=2.0, seed=11):
+def render(bpm=120, lead_in=1.0, tail=2.0, seed=11, parts=False):
+    """The song (mono 22.05 kHz), its beats, the melody's and drums' onsets
+    (ms) and its length; with parts=True also each part alone, as a
+    separation would give them (the sung line as 'vocals')."""
     rng = np.random.default_rng(seed)
     beat = 60 / bpm
     total = lead_in + len(PARTS) * 4 * beat + tail
     mix = np.zeros(int(total * SR_HI) + SR_HI)
+    alone = {name: np.zeros_like(mix) for name in ('vocals', 'drums', 'bass', 'other')}
     onsets = {'melody': [], 'drums': []}
 
-    def add(sound, at, gain=1.0):
+    def add(sound, at, gain=1.0, part='other'):
         i = int(round(at * SR_HI))
         k = min(len(sound), len(mix) - i)
         if k > 0:
             mix[i:i + k] += sound[:k] * gain
+            alone[part][i:i + k] += sound[:k] * gain
 
     def t(bar, b):
         return lead_in + (bar * 4 + b) * beat
@@ -45,13 +50,13 @@ def render(bpm=120, lead_in=1.0, tail=2.0, seed=11):
         add(I.pad(rng, [N(x) for x in voicing], 4 * beat, .6), t(bar, 0), .12)
         if kind in ('intro', 'outro'):
             for b in range(4):
-                add(I.hat(rng, .5), t(bar, b), .15)
+                add(I.hat(rng, .5), t(bar, b), .15, 'drums')
             continue
         line = (VERSE if kind == 'verse' else CHORUS)[index[kind] % 8]
         index[kind] += 1
         tones = [N(v) + 12 for v in voicing]
         for k, b in enumerate(line):
-            add(I.pluck_lead(rng, tones[(k + bar) % 3], .4 * beat, .9), t(bar, b), .5)
+            add(I.pluck_lead(rng, tones[(k + bar) % 3], .4 * beat, .9), t(bar, b), .5, 'vocals')
             onsets['melody'].append(t(bar, b) * 1000)
         if kind == 'verse':
             kicks, snares, hats = [0, 2], [1, 3], [0, 1, 2, 3]
@@ -60,19 +65,21 @@ def render(bpm=120, lead_in=1.0, tail=2.0, seed=11):
             kicks, snares, hats = [0, 1, 2, 3], [1, 3], [.5, 1.5, 2.5, 3.5]
             bass = [0, .5, 1, 1.5, 2, 2.5, 3, 3.5]
         for b in bass:
-            add(I.bass(rng, N(root), .4 * beat, .8), t(bar, b), .3)
+            add(I.bass(rng, N(root), .4 * beat, .8), t(bar, b), .3, 'bass')
         for b in hats:
-            add(I.hat(rng, .5, open_=kind == 'chorus'), t(bar, b), .15)
+            add(I.hat(rng, .5, open_=kind == 'chorus'), t(bar, b), .15, 'drums')
         for b in kicks:
-            add(I.kick(rng, .9), t(bar, b), .8)
+            add(I.kick(rng, .9), t(bar, b), .8, 'drums')
             onsets['drums'].append(t(bar, b) * 1000)
         for b in snares:
-            add(I.snare(rng, .85), t(bar, b), .6)
+            add(I.snare(rng, .85), t(bar, b), .6, 'drums')
             onsets['drums'].append(t(bar, b) * 1000)
     y = resample_poly(mix, 1, 2).astype(np.float32)
-    y /= np.max(np.abs(y)) + 1e-9
+    scale = .8 / (np.max(np.abs(y)) + 1e-9)
     beats = [round(t(0, b) * 1000) for b in range(len(PARTS) * 4)]
-    return y * .8, beats, onsets, round(total * 1000)
+    if parts:
+        return y * scale, beats, onsets, round(total * 1000), {name: (resample_poly(a, 1, 2) * scale).astype(np.float32) for name, a in alone.items()}
+    return y * scale, beats, onsets, round(total * 1000)
 
 
 @pytest.fixture(scope='module')

@@ -1,4 +1,4 @@
-"""Chart drafts built bar by bar (generator v6, the default).
+"""Chart drafts built bar by bar (generator v6 and v7, the default).
 
 The notes are still the song's strongest attacks on its beat grid, as in the
 drafts players liked (v2 and v5): the singing and the melody as much as the
@@ -17,17 +17,29 @@ chooses each bar's rhythm as a whole, the way a person writes a chart:
   166 BPM). Runs of eighths are shorter in fast songs.
 - Playing the rhythm of the bar before, or of the bar two before (a sung
   phrase and its answer), is worth a little: a bar changes when the song
-  does, not at every small difference.
+  does, not at every small difference (the last bar of a phrase more freely).
+- Every bar with music gets a few notes; notes go only where the bar (and
+  most of its repeats) has an attack.
 - One ladder: normal first (beats and eighths), hard adds notes to each bar
-  of normal, easy keeps some of normal's beats; each note keeps its colour.
+  of normal, easy keeps some of normal's beats (leaning to beats 1 and 3);
+  each note keeps its colour.
 - A passage that comes back plays the same (the second verse as the first).
-  Colours, large notes and rolls as in v5 (ladder.py).
+- Colours bar by bar: a rhythm keeps its colours from one bar to the next
+  unless the sound clearly changes (see COLOUR). Large notes and rolls as in
+  v5 (ladder.py).
+
+v7: when the song's parts are separated (stems.py), the attacks are heard
+part by part: the singing leads (its soft, quick syllables measured against
+the strongest nearby; how closely depends on the tempo, see FOLLOW), and the
+other instruments and the drums carry the bars where no one sings; colours
+and fills use the drum part alone.
 
 It is a draft for editing, not a transcription.
 """
 from functools import lru_cache
 
 import numpy as np
+from scipy.ndimage import maximum_filter1d
 
 from .generator import POSITION_WEIGHT, _bar_chroma, _repeat_groups, _sample, candidates, detect_swing, downbeat_phase
 from .ladder import KA_EASY, KA_HARD, KA_NORMAL, LARGE_SHARE, _fill_rolls
@@ -41,7 +53,33 @@ QUICK = 3  # most notes in a row at sixteenth spacing
 LONE = {'normal': .5, 'hard': .3}  # an off-beat on its own
 SIXTEENTH = .3  # a sixteenth (hard)
 REPEAT = (.1, .3)  # worth of playing the rhythm of the bar before / two before
+PHRASE_END = .5  # ...at the last bar of a four-bar phrase: half (a fill may break the pattern)
 CHOICES = 10  # rhythms a bar considers (its best ones, and its neighbours')
+# With the song's parts separated (stems.py): how much each part's attacks
+# count. The singing leads; where no one sings the other instruments carry
+# the tune (a riff, a solo); the drums (with their hi-hat) support. The
+# singing's attacks are measured half against the strongest one within 2 s
+# (quick, even singing has soft attacks).
+PARTS = {'singing': 1.2, 'drums': .6, 'hat': .6, 'other': .7, 'lead': 1.0, 'nearby': .5, 'window_s': 2.0}
+# How closely the rhythm follows the singing: in songs up to 140 BPM the drums
+# count less while someone sings and an off-beat (an 'and') more; from 200
+# BPM, where off-beats are hard to read, the beat leads (in between, a mix).
+FOLLOW = {'slow_bpm': 140, 'fast_bpm': 200, 'drums_sung': (.4, .6), 'and': (.85, .72)}
+EASY_STRONG = 1.15  # easy leans to beats 1 and 3 (a steady half-note pulse)
+EASY_KA = 1.15  # and a little to normal's ka, so it has both colours
+FOLD = .8  # a sixteenth's attack at the eighth next to it (for rhythms without sixteenths)
+# Every bar with music gets at least this many notes where it can (an
+# interlude of drums alone is no rest), each missing one costing this many
+# notes' worth.
+LEAST = {'easy': 1, 'normal': 2, 'hard': 3, 'short': 1.5}
+# Colour: a note's leaning to ka (the snare over the bass drum, a brighter
+# sound, and where it falls: the backbeat and the 'and' lean to ka, beat 3
+# to don, beat 1 is always don). Decided bar by bar: a repeat plays its first
+# time's colours, and a bar with the rhythm of the bar before keeps its
+# colours unless a note's leaning moves past the threshold by 'change'. One
+# threshold for the whole song ('ka_at', moved to keep the share of ka within
+# 'least' and the KA_ caps).
+COLOUR = {'bright': .3, 'backbeat': .15, 'and': .1, 'three': -.1, 'ka_at': .1, 'change': .25, 'least': {'normal': .18, 'hard': .18}}
 LAST = {}  # the latest draft's repeat groups (for inspection)
 
 
@@ -126,8 +164,10 @@ def _joins(T):
 def _choose(cands, values, bits, count, again1, again2, joins):
     """The rhythm of each bar (indices into the table) that is worth most in
     all: its value, plus again1 for the rhythm of the bar before and again2
-    for that of the bar two before (non-empty rhythms), over allowed joins."""
+    for that of the bar two before (non-empty rhythms; per bar), over allowed
+    joins."""
     nb = len(cands)
+    again1, again2 = np.broadcast_to(again1, nb), np.broadcast_to(again2, nb)
     if nb == 1:
         return [cands[0][int(np.argmax(values[0]))]]
 
@@ -135,13 +175,13 @@ def _choose(cands, values, bits, count, again1, again2, joins):
         return ((bits[a][:, None] == bits[b][None, :]) & (count[b] > 0)[None, :]).astype(float)
     D = [None] * nb
     back = [None] * nb
-    D[1] = values[0][:, None] + values[1][None, :] + again1 * same(cands[0], cands[1])
+    D[1] = values[0][:, None] + values[1][None, :] + again1[1] * same(cands[0], cands[1])
     D[1] = np.where(joins(cands[0], cands[1]), D[1], -np.inf)
     for b in range(2, nb):
         ca, cb, cc = cands[b - 2], cands[b - 1], cands[b]
-        s = D[b - 1][:, :, None] + again2 * same(ca, cc)[:, None, :]
+        s = D[b - 1][:, :, None] + again2[b] * same(ca, cc)[:, None, :]
         h = np.argmax(s, axis=0)
-        D[b] = np.take_along_axis(s, h[None], axis=0)[0] + values[b][None, :] + again1 * same(cb, cc)
+        D[b] = np.take_along_axis(s, h[None], axis=0)[0] + values[b][None, :] + again1[b] * same(cb, cc)
         D[b] = np.where(joins(cb, cc), D[b], -np.inf)
         back[b] = h
     i, j = np.unravel_index(int(np.argmax(D[nb - 1])), D[nb - 1].shape)
@@ -165,12 +205,13 @@ def song_patterns(beats, duration, sections, features, downbeats):
     beat_len = np.diff(beats)
     median_beat = float(np.median(beat_len))
     swing = detect_swing(beats, full, rate)
+    slow = float(np.clip((60000 / median_beat - FOLLOW['slow_bpm']) / (FOLLOW['fast_bpm'] - FOLLOW['slow_bpm']), 0, 1))
+    follow = lambda k: FOLLOW[k][0] + (FOLLOW[k][1] - FOLLOW[k][0]) * slow  # noqa: E731
     per_beat = 3 if swing else 4
     level_of, _ = _layout(per_beat)
     width = len(level_of)
     fine = candidates(beats, phase, 4, swing)
     t = np.array([c[0] for c in fine], dtype=float)
-    level = np.array([c[1] for c in fine])
     rel = np.array([c[2] for c in fine]) - phase
     bar = rel // 4
     first_bar = int(bar.min())
@@ -196,15 +237,47 @@ def song_patterns(beats, duration, sections, features, downbeats):
     rhythm = np.concatenate([2 * M, F], axis=1) if kit else F
     harmony = _bar_chroma(kit, beats, phase, nb) if kit and 'chroma' in kit else None
     group = _repeat_groups(rhythm, harmony)
-    LAST.update(group=group, first_bar=first_bar)
+    # Phrases of four bars start where the music changes most often; the last
+    # bar of a phrase may leave the rhythm it repeated (a fill, the end of a
+    # sung line) if its sound asks for it.
+    look = rhythm if harmony is None else np.concatenate([rhythm / (np.linalg.norm(rhythm, axis=1, keepdims=True) + 1e-9), harmony / (np.linalg.norm(harmony, axis=1, keepdims=True) + 1e-9)], axis=1)
+    look = look - look.mean(axis=0, keepdims=True)
+    look = look / (np.linalg.norm(look, axis=1, keepdims=True) + 1e-9)
+    change = np.r_[0.0, 1 - np.sum(look[1:] * look[:-1], axis=1)]
+    start = int(np.argmax([change[o::4].mean() if len(change[o::4]) else 0 for o in range(4)]))
+    keep = np.where((np.arange(nb) - start) % 4 == 3, PHRASE_END, 1.0)
+    LAST.update(group=group, first_bar=first_bar, phrase=start)
     same = (group[:, None] == group[None, :]).astype(float)
     share = lambda m: (same @ m) / same.sum(axis=1, keepdims=True)  # noqa: E731
-    Fs, Ls, Hs, Ks, Ss = share(F), share(L), share(H), share(K), share(S)
-    heard = np.maximum(F, .85 * M) if kit else F  # each bar's own attacks
+    from .stems import usable as parts_usable
+    parts = features.get('stems') if kit and parts_usable(features.get('stems')) else None
+    if parts:
+        # The parts heard apart (see PARTS).
+        part = lambda k: grid(_sampler(parts[k], parts['rate'], 25)(t))  # noqa: E731
+        raw = np.asarray(parts['vocal'], dtype=float) / 255
+        singing = np.asarray(parts['voice'], dtype=float) / 255 > .15
+        nearby = raw / np.maximum(maximum_filter1d(raw, size=max(1, int(parts['rate'] * PARTS['window_s']))), .15)
+        nearby = np.minimum(nearby, 1.0) * singing
+        V = (1 - PARTS['nearby']) * part('vocal') + PARTS['nearby'] * grid(_sampler(np.round(nearby * 255), parts['rate'], 25)(t))
+        D = np.maximum(part('drums'), PARTS['hat'] * part('hat'))
+        sung = grid(_sampler(np.round(singing * 255.0), parts['rate'], 60)(t)) > .5
+        other = np.where(sung, PARTS['other'], PARTS['lead']) * part('other')
+        heard = np.maximum(np.maximum(np.where(sung, follow('drums_sung'), PARTS['drums']) * D, PARTS['singing'] * V), other)
+        K, S = part('kick'), part('snare')  # the drum part alone: clearer for colours and fills
+    else:
+        heard = np.maximum(F, .85 * M) if kit else F  # each bar's own attacks
+    Ls, Hs, Ks, Ss = share(L), share(H), share(K), share(S)
     salient = share(heard)
-    weight = np.array([POSITION_WEIGHT[int(x)] for x in level_of]) * np.where(np.arange(width) == 0, 1.12, 1.0)
+    weight = np.array([follow('and') if parts and x == 1 else POSITION_WEIGHT[int(x)] for x in level_of]) * np.where(np.arange(width) == 0, 1.12, 1.0)
     value = salient * weight[None, :]
-    from scipy.ndimage import maximum_filter1d
+    # Without sixteenths a quick syllable counts at the eighth or beat next to
+    # it, as a person simplifying the rhythm would write it.
+    folded = value.copy()
+    for k in range(width):
+        if level_of[k] <= 1:
+            near = [j for j in (k - 1, k + 1) if 0 <= j < width and level_of[j] == 2]
+            if near:
+                folded[:, k] = np.maximum(value[:, k], FOLD * salient[:, near].max(axis=1) * weight[k])
     busy = maximum_filter1d(full, size=max(1, int(rate * 2))) > .08
     active = max(float(np.count_nonzero(busy)) / rate, 1.0)
     tempo = float(np.clip((60000 / median_beat - 80) / 80, .25, 1.5))
@@ -242,16 +315,20 @@ def song_patterns(beats, duration, sections, features, downbeats):
             out[members] = best & open_bits[members]
         return out
 
-    def solve(T, target, fits, lone, sixteenth, floor):
+    def solve(T, target, fits, lone, sixteenth, floor, lean=None, least=0, values=None):
         """Each bar's rhythm (bitmask), the cost per note set for `target`
         notes; fits(bits) -> (bars, rhythms) bool."""
         open_bits = slots_open(floor)
         allowed = ((T['bits'][None, :] & ~open_bits[:, None]) == 0) & fits(T['bits'])
-        base = value @ T['mask'].T.astype(float)
+        own = value if values is None else values
+        base = (own if lean is None else own * (lean if lean.ndim == 2 else lean[None, :])) @ T['mask'].T.astype(float)
         joins = _joins(T)
 
+        reach = np.where(allowed, T['n'][None, :], 0).max(axis=1)
+        short = np.maximum(0, np.minimum(least, reach)[:, None] - T['n'][None, :])
+
         def run(cost):
-            V = base - cost * (T['n'] + lone * T['lone'] + sixteenth * T['six'])[None, :]
+            V = base - cost * (T['n'] + lone * T['lone'] + sixteenth * T['six'])[None, :] - LEAST['short'] * cost * short
             V = np.where(allowed, V, -np.inf)
             own = np.argmax(V, axis=1)
             cands = []
@@ -260,7 +337,7 @@ def song_patterns(beats, duration, sections, features, downbeats):
                 top = np.argpartition(-V[b], k - 1)[:k] if k else np.zeros(0, int)
                 near = [own[x] for x in range(max(0, b - 2), min(nb, b + 3)) if np.isfinite(V[b, own[x]])]
                 cands.append(np.unique(np.concatenate([top, np.array(near, dtype=int)])))
-            path = _choose(cands, [V[b, cands[b]] for b in range(nb)], T['bits'], T['n'], REPEAT[0] * cost, REPEAT[1] * cost, joins)
+            path = _choose(cands, [V[b, cands[b]] for b in range(nb)], T['bits'], T['n'], REPEAT[0] * cost * keep, REPEAT[1] * cost * keep, joins)
             return T['bits'][path]
         lo, hi, best = 0.0, float(value.max()) + 1, None
         for _ in range(16):
@@ -280,49 +357,161 @@ def song_patterns(beats, duration, sections, features, downbeats):
     on_beats = int(sum(1 << k for k in range(width) if level_of[k] == 0))
     run8_normal = 5 if eighth_ms >= 180 else (4 if eighth_ms >= 150 else 3)
     T = _table(per_beat, straight, run8_normal, QUICK)
-    normal_bits = solve(T, max(8, int(DENSITY['normal'] * active)), lambda x: np.ones((nb, len(x)), bool), LONE['normal'] * tempo, 0.0, FLOOR['normal'])
-    T = _table(per_beat, everything if sixteenth_ms >= SIXTEENTH_MS else straight, 8 if eighth_ms < 180 else 16, QUICK)
-    hard_bits = solve(T, max(int(DENSITY['hard'] * active), 1), lambda x: (x[None, :] & normal_bits[:, None]) == normal_bits[:, None], LONE['hard'] * tempo, SIXTEENTH * tempo, FLOOR['hard']) | normal_bits
-    T = _table(per_beat, on_beats, 16, QUICK)
-    easy_bits = solve(T, max(4, int(DENSITY['easy'] * active)), lambda x: (x[None, :] & ~normal_bits[:, None]) == 0, 0.0, 0.0, FLOOR['easy']) & normal_bits
+    normal_bits = solve(T, max(8, int(DENSITY['normal'] * active)), lambda x: np.ones((nb, len(x)), bool), LONE['normal'] * tempo, 0.0, FLOOR['normal'], least=LEAST['normal'], values=folded)
+    quick_ok = sixteenth_ms >= SIXTEENTH_MS
+    T = _table(per_beat, everything if quick_ok else straight, 8 if eighth_ms < 180 else 16, QUICK)
+    hard_bits = solve(T, max(int(DENSITY['hard'] * active), 1), lambda x: (x[None, :] & normal_bits[:, None]) == normal_bits[:, None], LONE['hard'] * tempo, SIXTEENTH * tempo, FLOOR['hard'], least=LEAST['hard'], values=None if quick_ok else folded) | normal_bits
 
     def notes(chosen):
         m = bits_of(chosen)
         return {where[(b, k)] for b, k in zip(*np.nonzero(m)) if (b, k) in where and valid[where[(b, k)]]}
-    normal, hard, easy = notes(normal_bits), notes(hard_bits), notes(easy_bits)
+    normal, hard = notes(normal_bits), notes(hard_bits)
     # The joins of repeated passages (as_group) can make a run too long: drop
     # its last note (normal's drops leave easy too).
     normal = _limit(normal, t, GAP['normal'], eighth_ms * 1.1, run8_normal)
-    easy &= normal
     hard = _limit(hard | normal, t, GAP['hard'], eighth_ms * 1.1, 8 if eighth_ms < 180 else 16, keep=normal)
 
-    # Colour (as v5): decided on normal, easy keeps it (no more than its share
-    # of ka: its weakest ka beats go), hard colours its extra notes.
-    key = {i: Hs[bar[i], slot[i]] / (Hs[bar[i], slot[i]] + Ls[bar[i], slot[i]] + 1e-6)
-           + .35 * float(np.clip(Ss[bar[i], slot[i]] - Ks[bar[i], slot[i]], 0, 1)) for i in hard}
+    # Colour: decided on normal (easy keeps it, with no more than its share
+    # of ka: its weakest ka beats go); hard colours its extra notes the same
+    # way. A group of sixteenths (ドコ, ドコドン) takes its first note's colour.
+    beat_of = np.arange(width) // per_beat
 
-    def paint(chosen, budget):
-        together = {}
-        for i in sorted(chosen, key=lambda i: t[i]):
-            together.setdefault((int(group[bar[i]]), int(slot[i])), []).append(i)
-        ka = set()
-        for k in sorted(together, key=lambda k: (-key[together[k][0]], k)):
-            members = together[k]
-            if key[members[0]] <= .3:
+    def leaning(i):
+        return lean_at(bar[i], slot[i])
+
+    def lean_at(b, k):
+        drum = float(np.clip(Ss[b, k] - Ks[b, k], -1, 1))
+        bright = Hs[b, k] / (Hs[b, k] + Ls[b, k] + 1e-6) - .5
+        place = 0.0
+        if level_of[k] == 0 and beat_of[k] in (1, 3):
+            place = COLOUR['backbeat']
+        elif level_of[k] == 0 and beat_of[k] == 2:
+            place = COLOUR['three']
+        elif level_of[k] == 1:
+            place = COLOUR['and']
+        return drum + COLOUR['bright'] * bright + place
+
+    def paint(chosen, fixed, least, most):
+        """Colours of `chosen` (notes in `fixed` keep theirs), bar by bar: a
+        repeat plays the colours of its first time; a bar with the rhythm of
+        the bar before (or two before) keeps its colours unless the sound
+        clearly changes (a snare coming in); otherwise each note leans to ka
+        or don by its sound. One threshold for the whole song keeps the share
+        of ka between `least` and `most`."""
+        rhythm, members = {}, {}
+        for i in chosen:
+            b = int(bar[i])
+            rhythm.setdefault(b, set()).add(int(slot[i]))
+            members.setdefault(b, []).append(i)
+        rhythm = {b: frozenset(v) for b, v in rhythm.items()}
+        first_of = {}
+        for b in sorted(rhythm):
+            first_of.setdefault(int(group[b]), b)
+
+        def colours(at):
+            out = dict(fixed)
+            by_bar = {}
+            for b in sorted(rhythm):
+                mine = {}
+                source = first_of[int(group[b])]
+                earlier = next((b - d for d in (1, 2) if rhythm.get(b - d) == rhythm[b] and b - d in by_bar), None)
+                held = {int(slot[i]): fixed[i] for i in members[b] if i in fixed}
+                for k in rhythm[b]:
+                    lean = lean_at(b, k)
+                    if k in held:
+                        mine[k] = held[k]  # normal's colour, kept on hard
+                    elif source != b and rhythm.get(source) == rhythm[b]:
+                        mine[k] = by_bar[source][k]  # a repeat: as the first time
+                    elif k == 0:
+                        mine[k] = 'don'
+                    elif earlier is not None:
+                        before = by_bar[earlier][k]
+                        change = lean > at + COLOUR['change'] if before == 'don' else lean < at - COLOUR['change']
+                        mine[k] = ('ka' if before == 'don' else 'don') if change else before
+                    else:
+                        mine[k] = 'ka' if lean > at else 'don'
+                by_bar[b] = mine
+                for i in members[b]:
+                    if i not in fixed:
+                        out[i] = mine[int(slot[i])]
+            # A group of sixteenths takes its first note's colour.
+            order = sorted(chosen, key=lambda i: t[i])
+            for a, b in zip(order, order[1:]):
+                if b not in fixed and t[b] - t[a] <= sixteenth_ms * 1.25 and (level_of[slot[b]] == 2 or level_of[slot[a]] == 2):
+                    out[b] = out[a]
+            return out
+
+        def share_ka(out):
+            return sum(out[i] == 'ka' for i in chosen) / max(1, len(chosen))
+        at = COLOUR['ka_at']
+        out = colours(at)
+        lo, hi = -1.0, 1.5
+        if share_ka(out) > most:
+            lo = at
+        elif share_ka(out) < least:
+            hi = at
+        else:
+            return out
+        for _ in range(20):  # the threshold that brings the share of ka within bounds
+            at = (lo + hi) / 2
+            out = colours(at)
+            if share_ka(out) > most:
+                lo = at
+            elif share_ka(out) < least:
+                hi = at
+            else:
                 break
-            if k[1] == 0 or len(ka) + len(members) > budget:
-                continue
-            ka.update(members)
-        return ka
-    ka = paint(normal, int(len(normal) * KA_NORMAL * .95))  # (rolls may take a few notes later)
-    easy_ka = sorted((i for i in easy if i in ka), key=lambda i: (value[bar[i], slot[i]], t[i]))
-    while easy_ka and len(easy_ka) > len(easy) * KA_EASY:
-        i = easy_ka.pop(0)
-        drop = {j for j in easy_ka + [i] if group[bar[j]] == group[bar[i]] and slot[j] == slot[i]}
-        easy -= drop
-        easy_ka = [j for j in easy_ka if j not in drop]
-    ka |= paint(hard - normal, max(0, int(len(hard) * KA_HARD) - len(ka)))
-    colour = {i: 'ka' if i in ka else 'don' for i in hard}
+        if share_ka(out) > most:
+            out = colours(hi)
+        if fixed:
+            # An added note takes the colour its place has in a neighbouring
+            # bar of the same rhythm where normal plays it (same rhythm, same
+            # colours on hard too).
+            at_slot = {(int(bar[i]), int(slot[i])): i for i in chosen}
+            for i in sorted(chosen, key=lambda i: t[i]):
+                if i in fixed:
+                    continue
+                b, k = int(bar[i]), int(slot[i])
+                for d in (-1, 1, -2, 2):
+                    j = at_slot.get((b + d, k))
+                    if j is not None and j in fixed and rhythm.get(b + d) == rhythm[b]:
+                        out[i] = fixed[j]
+                        break
+        return out
+    colour = paint(normal, {}, COLOUR['least']['normal'], KA_NORMAL * .95)  # (rolls may take a few notes later)
+    # Easy: some of normal's beats, leaning to beats 1 and 3 and a little to
+    # normal's ka, so easy has both colours.
+    T = _table(per_beat, on_beats, 16, QUICK)
+    lean = np.tile(np.where(np.arange(width) % (2 * per_beat) == 0, EASY_STRONG, 1.0), (nb, 1))
+    for i in normal:
+        if colour[i] == 'ka':
+            lean[bar[i], slot[i]] *= EASY_KA
+    easy_target = max(4, int(DENSITY['easy'] * active))
+    easy_room = normal_bits.copy()  # normal's beats easy may take
+
+    def easy_notes():
+        chosen = solve(T, easy_target, lambda x: (x[None, :] & ~easy_room[:, None]) == 0, 0.0, 0.0, FLOOR['easy'], lean, least=LEAST['easy'])
+        return notes(chosen) & normal
+    easy = easy_notes()
+    def easy_cap(easy):
+        """Easy's weakest ka beats go (with their repeats) until it has no more
+        than its share of ka; returns the notes and the places that went."""
+        easy_ka = sorted((i for i in easy if colour[i] == 'ka'), key=lambda i: (value[bar[i], slot[i]], t[i]))
+        gone = set()
+        while easy_ka and len(easy_ka) > len(easy) * KA_EASY:
+            i = easy_ka.pop(0)
+            drop = {j for j in easy_ka + [i] if group[bar[j]] == group[bar[i]] and slot[j] == slot[i]}
+            easy = easy - drop
+            gone |= drop
+            easy_ka = [j for j in easy_ka if j not in drop]
+        return easy, gone
+    easy, gone = easy_cap(easy)
+    if gone and len(easy) < .95 * easy_target:
+        # Choose again without those ka beats, so don beats take their place.
+        for i in gone:
+            easy_room[bar[i]] &= ~(np.int64(1) << int(slot[i]))
+        easy, _ = easy_cap(easy_notes())
+    colour = paint(hard, {i: colour[i] for i in normal}, COLOUR['least']['hard'], KA_HARD)
 
     # Large notes where the song starts something, the same in every difficulty.
     score = value[bar, slot]

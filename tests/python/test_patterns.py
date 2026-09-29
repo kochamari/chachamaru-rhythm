@@ -145,7 +145,7 @@ def test_regenerating_a_v5_project_puts_it_on_a_steady_grid(tmp_path):
     subprocess.run([sys.executable, '-m', 'chacha_studio.regenerate_worker', str(work), 'hard'], check=True, env=env, timeout=180)
     got = json.loads((work / 'candidate.json').read_text())
     core.validate(got)
-    assert got['manifest']['generator'] == 'chacha-generator-v6'
+    assert got['manifest']['generator'] == core.VERSION == 'chacha-generator-v7'
     assert 'steady' in got['analysis']['beatFixes']
     t = np.asarray(truth, dtype=float)
     assert np.median([np.min(np.abs(t - b)) for b in got['manifest']['beatTimesMs']]) <= 6

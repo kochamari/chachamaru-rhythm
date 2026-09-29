@@ -11,7 +11,7 @@ try:
     # The project directory holds the analysis features (work = <project>/jobs/<id>).
     project=work.parent.parent
     before=load_features(project)
-    features=load_features(project,compute=True) if p.get('confidence')!='low' else None
+    features=load_features(project,compute=True,work=work) if p.get('confidence')!='low' else None
     fresh=not (before and usable(before.get('drums')))
     if features and usable(features.get('drums')) and (fresh or generation(m.get('generator'))<6):
         # The first draft that follows the drums (a song analysed before
@@ -30,6 +30,7 @@ try:
     c=generate(m['beatTimesMs'],m['durationMs'],difficulty,m['audio']['sha256'],m['sections'],features,m['downbeatIndices'])
     p['charts']=[c if x['difficulty']==difficulty else x for x in p['charts']]
     m['generator']=VERSION  # the latest draft's generator
+    p.setdefault('analysis',{})['parts']=bool(features and 'stems' in features)
     p['revision']+=1;m['revision']+=1;validate(p)
     write_json(work/'candidate.json',p)
     write_json(work/'status.json',{'status':'REVIEW_READY','progress':100,'message':'下書きを作りました'})

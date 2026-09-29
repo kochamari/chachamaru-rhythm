@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get('CHACHA_DATA', str(ROOT / '_private' / 'studio')))
-VERSION = 'chacha-generator-v6'
+VERSION = 'chacha-generator-v7'
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -81,11 +81,14 @@ def decode(audio, directory):
         pcm.unlink(missing_ok=True)
 
 
-def load_features(directory, compute=False):
+def load_features(directory, compute=False, work=None):
     """Onset features saved by the analysis. Projects made before v2 have
-    none, and before v3 no drum features: with compute=True the missing ones
-    are derived from the project's final audio and saved."""
+    none, before v3 no drum features, and before v7 (or on a Mac without the
+    separation environment, stems.py) no features of the song's separated
+    parts: with compute=True the missing ones are derived from the project's
+    final audio and saved (temporary files in `work`)."""
     from .drums import usable
+    from . import stems
     f = Path(directory) / 'features.json'
     features = None
     if f.exists():
@@ -94,13 +97,22 @@ def load_features(directory, compute=False):
         except ValueError:
             features = None
     audio = Path(directory) / 'song.m4a'
-    if not compute or not audio.exists() or (features and usable(features.get('drums'))):
+    if not compute or not audio.exists():
         return features
-    from .generator import onset_features
-    from .drums import drum_features
-    y, sr = decode(audio, directory)
-    features = features or onset_features(y, sr)
-    features['drums'] = drum_features(y, sr)
+    need_drums = not (features and usable(features.get('drums')))
+    need_parts = stems.python() is not None and not stems.usable((features or {}).get('stems'))
+    if not need_drums and not need_parts:
+        return features
+    if need_drums:
+        from .generator import onset_features
+        from .drums import drum_features
+        y, sr = decode(audio, work or directory)
+        features = features or onset_features(y, sr)
+        features['drums'] = drum_features(y, sr)
+    if need_parts:
+        parts = stems.analyse(audio, work or directory)
+        if parts:
+            features['stems'] = parts
     write_json(f, features)
     return features
 
@@ -295,6 +307,11 @@ def analyze(source, directory, title, artist, progress=lambda *args:None, name='
         confidence='medium';warnings.append('拍間隔が変化しています。先頭・中盤・末尾を試聴してください。')
     features=onset_features(y,sr)
     features['drums']=kit
+    from . import stems
+    if stems.python() is not None:
+        progress('ANALYZING',60,'歌とドラムを聞き分けています')
+        parts=stems.analyse(audio,directory)
+        if parts:features['stems']=parts
     write_json(directory/'features.json',features)
     phase=bar_phase(y,sr,beats,features) if confidence!='low' else 0
     rms=np.sqrt(np.mean(np.square(y.reshape(-1,1))))
@@ -307,7 +324,7 @@ def analyze(source, directory, title, artist, progress=lambda *args:None, name='
     downbeats=list(range(phase,len(beats),4))
     charts=[generate(beats,duration,d,h,sections,features if confidence!='low' else None,downbeats) for d in ['easy','normal','hard']]
     m={'schemaVersion':1,'packId':'song-'+h[:16],'revision':1,'title':title,'artist':artist,'durationMs':duration,'audio':{'path':'audio/song.m4a','sha256':h},'charts':[{'chartId':c['chartId'],'difficulty':c['difficulty'],'path':f"charts/{c['difficulty']}.json",'sha256':hashlib.sha256(json.dumps(c,separators=(',', ':')).encode()).hexdigest()} for c in charts],'beatTimesMs':beats,'downbeatIndices':downbeats,'sections':sections,'generator':VERSION}
-    p={'projectId':directory.name,'revision':1,'manifest':m,'charts':charts,'waveform':peaks,'bpm':round(bpm,2),'confidence':confidence,'warnings':warnings+['自動下書き・要試聴。盛り上がりは音量からの候補で、歌詞のサビ判定ではありません。'],'analysis':{'sampleRate':sr,'hopLength':256,'audioSha256':h,'beatShiftMs':round(beat_shift,1),'beatFixes':fixes},'originalHash':sha(source),'decodedDurationMs':duration,'containerDurationMs':final_info['durationMs']}
+    p={'projectId':directory.name,'revision':1,'manifest':m,'charts':charts,'waveform':peaks,'bpm':round(bpm,2),'confidence':confidence,'warnings':warnings+['自動下書き・要試聴。盛り上がりは音量からの候補で、歌詞のサビ判定ではありません。'],'analysis':{'sampleRate':sr,'hopLength':256,'audioSha256':h,'beatShiftMs':round(beat_shift,1),'beatFixes':fixes,'parts':'stems' in features},'originalHash':sha(source),'decodedDurationMs':duration,'containerDurationMs':final_info['durationMs']}
     validate(p)
     write_json(directory/'project.json',p)
     pcm.unlink(missing_ok=True)
