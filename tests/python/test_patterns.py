@@ -1,7 +1,9 @@
 """The v6 rules on the synthetic songs: steady grids for songs that keep one
 tempo (steady.py), and bar rhythms that stay readable (patterns.py): no
 sixteenths on hard in a fast song, sixteenths only as a group from an
-eighth, hardly any off-beat on its own, and bars that repeat a nearby bar."""
+eighth, hardly any off-beat on its own, and bars that repeat a nearby bar.
+v8: a steady groove turns at the end of its phrases, and the chorus is the
+busiest part."""
 import json
 import os
 import subprocess
@@ -145,7 +147,56 @@ def test_regenerating_a_v5_project_puts_it_on_a_steady_grid(tmp_path):
     subprocess.run([sys.executable, '-m', 'chacha_studio.regenerate_worker', str(work), 'hard'], check=True, env=env, timeout=180)
     got = json.loads((work / 'candidate.json').read_text())
     core.validate(got)
-    assert got['manifest']['generator'] == core.VERSION == 'chacha-generator-v7'
+    assert got['manifest']['generator'] == core.VERSION == 'chacha-generator-v8'
     assert 'steady' in got['analysis']['beatFixes']
     t = np.asarray(truth, dtype=float)
     assert np.median([np.min(np.abs(t - b)) for b in got['manifest']['beatTimesMs']]) <= 6
+
+
+def longest_repeat(chart, beats):
+    """The most bars in a row that play the same (rhythm and colours)."""
+    step = (beats[1] - beats[0]) / 4
+    by_bar = {}
+    for n in taps(chart):
+        bar = (int(np.searchsorted(beats, n['timeMs'] + 1, side='right')) - 1) // 4
+        by_bar.setdefault(bar, []).append((round((n['timeMs'] - beats[bar * 4]) / step), n['color']))
+    keys = sorted(by_bar)
+    best = run = 1
+    for a, b in zip(keys, keys[1:]):
+        run = run + 1 if b == a + 1 and by_bar[a] == by_bar[b] else 1
+        best = max(best, run)
+    return best
+
+
+def test_a_steady_groove_turns_at_the_end_of_its_phrases():
+    """On a long drum song (the same grooves bar after bar), no difficulty
+    plays one bar, rhythm and colours, more than four times in a row: the
+    last bar of a phrase turns where the song offers another rhythm (v8;
+    v7 played ten bars of one rhythm in normal)."""
+    parts = test_drums.SONG * 3
+    y, beats, _, _, duration = test_drums.render(120, len(parts), parts)
+    features = {**generator.onset_features(y, SR), 'drums': drums.drum_features(y, SR)}
+    for d in ('easy', 'normal', 'hard'):
+        chart = core.generate(beats, duration, d, 'ab' * 32, [], features, list(range(0, len(beats), 4)))
+        assert longest_repeat(chart, beats) <= 4, d
+
+
+def test_the_chorus_is_the_busiest_part():
+    """With the chorus sections given, normal plays more notes in the chorus
+    than without them, and a larger share of its notes there (the chorus is
+    made the busiest part where the song allows; v8)."""
+    y, beats, onsets, duration = test_song_draft.render()
+    features = {**generator.onset_features(y, SR), 'drums': drums.drum_features(y, SR)}
+    chorus = [(beats[i * 4], beats[j * 4]) for i, j in ((10, 18), (26, 34))]
+    sections = [{'kind': 'chorus', 'startMs': a, 'endMs': b, 'confirmed': False} for a, b in chorus]
+
+    def notes(chart):
+        t = np.array([n['timeMs'] for n in taps(chart)])
+        inside = np.zeros(len(t), bool)
+        for a, b in chorus:
+            inside |= (t >= a) & (t < b)
+        return inside.sum(), (~inside).sum()
+    downbeats = list(range(0, len(beats), 4))
+    plain = notes(core.generate(beats, duration, 'normal', 'ab' * 32, [], features, downbeats))
+    shaped = notes(core.generate(beats, duration, 'normal', 'ab' * 32, sections, features, downbeats))
+    assert shaped[0] > plain[0] and shaped[0] / sum(shaped) > plain[0] / sum(plain)

@@ -72,11 +72,16 @@ def test_the_ladder_and_its_rules_hold_with_the_parts(song):
         assert all(b - a >= gap for a, b in zip(t, t[1:])), d
     again = core.generate(song['beats'], song['duration'], 'hard', 'ij' * 32, [], song['parts'], song['downbeats'])
     assert again == song['charts']['hard']
+    # With the drums heard apart, up to 45% ka (as in hand-made charts);
+    # hard's added notes lean to don, so hard has no more ka than normal.
+    ka = lambda notes: sum(n['color'] == 'ka' for n in notes) / len(notes)  # noqa: E731
+    assert .18 <= ka(normal) <= .45 and ka(hard) <= ka(normal) + .01 and ka(easy) <= .3
 
 
 def test_a_rhythm_keeps_its_colours_in_the_next_bar():
     """On the drum song (the same groove bar after bar), bars with the rhythm
-    of the bar before keep its colours."""
+    of the bar before (or two before: a phrase may alternate two rhythms)
+    keep its colours."""
     import test_drums
     y, beats, _, _, duration = test_drums.render(120, len(test_drums.SONG), test_drums.SONG)
     features = {**generator.onset_features(y, SR), 'drums': drums.drum_features(y, SR)}
@@ -87,8 +92,9 @@ def test_a_rhythm_keeps_its_colours_in_the_next_bar():
         by_bar.setdefault(bar, []).append((round((n['timeMs'] - beats[bar * 4]) / 125), n['color']))
     same = kept = 0
     for b in sorted(by_bar):
-        before = by_bar.get(b - 1)
-        if before and [s for s, _ in before] == [s for s, _ in by_bar[b]]:
+        rhythm = [s for s, _ in by_bar[b]]
+        before = next((by_bar[b - d] for d in (1, 2) if b - d in by_bar and [s for s, _ in by_bar[b - d]] == rhythm), None)
+        if before:
             same += 1
             kept += before == by_bar[b]
     assert same >= 8 and kept / same >= .9

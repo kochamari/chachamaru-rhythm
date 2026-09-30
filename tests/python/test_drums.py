@@ -182,7 +182,7 @@ def test_regenerating_an_older_project_fixes_its_beats(tmp_path):
     sf.write(wav, y, SR)
     d = tmp_path / 'project'
     p = core.analyze(wav, d, '試験曲', '試験')
-    assert p['manifest']['generator'] == 'chacha-generator-v7'
+    assert p['manifest']['generator'] == 'chacha-generator-v8'
     truth = np.asarray(p['manifest']['beatTimesMs'])
     # As analysed before the drum features: none saved, and the beats half a beat late.
     features = json.loads((d / 'features.json').read_text())

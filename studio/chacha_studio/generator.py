@@ -9,7 +9,7 @@ the music attacks, coloured by whether the attack is low (don) or bright
 """
 import numpy as np
 
-VERSION = 'chacha-generator-v7'
+VERSION = 'chacha-generator-v8'
 
 RULES = {
     # subdivisions per beat, target notes/s, min gap ms, fast-run limit, ka share

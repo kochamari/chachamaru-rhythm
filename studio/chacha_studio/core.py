@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get('CHACHA_DATA', str(ROOT / '_private' / 'studio')))
-VERSION = 'chacha-generator-v7'
+VERSION = 'chacha-generator-v8'
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
