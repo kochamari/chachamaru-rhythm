@@ -45,21 +45,32 @@ export function renderDon(sr:number):Float32Array{
  return fadeEdges(normalize(out,.95),sr,.3,30);
 }
 
-/** Rim stroke: bright, dry wooden click with short modal ringing. */
+/** Two-pole resonator: `x` rings at `freq`, dying away with time constant `tau` (s). */
+function resonate(x:Float32Array,sr:number,freq:number,tau:number){
+ const r=Math.exp(-1/(tau*sr)),a1=-2*r*Math.cos(2*Math.PI*freq/sr),a2=r*r,out=new Float32Array(x.length);
+ let y1=0,y2=0;
+ for(let i=0;i<x.length;i++){const y=x[i]-a1*y1-a2*y2;y2=y1;y1=y;out[i]=y;}
+ return out;
+}
+
+/** Rim stroke (fuchi): a hardwood stick on the drum's wooden rim. The stick's
+ * click, then a few wooden modes (the barrel's hollow knock around 650 Hz, the
+ * bright "ka" around 1.4 kHz) that die within tens of ms, the higher ones
+ * first, so it knocks like wood rather than ringing like metal. */
 export function renderKa(sr:number):Float32Array{
- const n=Math.floor(sr*.2),out=new Float32Array(n);
- const modes=[[1180,.06,.7],[2530,.034,.42],[3810,.022,.26],[5230,.014,.14]];
- const phases=modes.map(()=>0);
- for(let i=0;i<n;i++){
-  const t=i/sr;let v=0;
-  modes.forEach(([f,d,a],k)=>{phases[k]+=2*Math.PI*f*(1+.012*Math.exp(-t/.01))/sr;v+=a*Math.sin(phases[k])*Math.exp(-t/d);});
-  out[i]=v*Math.min(1,t/.0008);
+ const n=Math.floor(sr*.13),out=new Float32Array(n);
+ const strike=noise(n,23);
+ for(let i=0;i<n;i++)strike[i]*=Math.exp(-i/sr/.0008);
+ strike[0]+=1.5;
+ for(const [freq,tau,amp] of [[650,.018,.45],[1400,.009,1],[2300,.005,.55],[3500,.0028,.35]]){
+  const mode=normalize(resonate(strike,sr,freq,tau),1);
+  for(let i=0;i<n;i++)out[i]+=amp*mode[i];
  }
- const snap=bandpass(noise(n,21),sr,3400,1.1);
- const knock=bandpass(noise(n,22),sr,650,2.2);
- for(let i=0;i<n;i++){const t=i/sr;out[i]+=snap[i]*2.6*Math.exp(-t/.009)+knock[i]*1.3*Math.exp(-t/.018);}
- for(let i=0;i<n;i++)out[i]=Math.tanh(out[i]*1.4)/Math.tanh(1.4);
- return fadeEdges(normalize(out,.8),sr,.2,20);
+ const click=bandpass(noise(n,24),sr,3800,.7);
+ for(let i=0;i<n;i++)out[i]+=click[i]*1.4*Math.exp(-i/sr/.0014);
+ normalize(out,1);
+ for(let i=0;i<n;i++)out[i]=Math.tanh(out[i]*2.2)/Math.tanh(2.2);
+ return fadeEdges(normalize(out,.92),sr,.2,15);
 }
 
 /** Pop kit: punchy kick for don, crisp snare/clap for ka. */

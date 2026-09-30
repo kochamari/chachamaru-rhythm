@@ -29,6 +29,15 @@ describe('synthesised drum sounds',()=>{
   // Ends silently (no click at the end of the buffer).
   expect(Math.abs(don[don.length-1])).toBeLessThan(1e-3);expect(Math.abs(ka[ka.length-1])).toBeLessThan(1e-3);
  });
+ it('ka knocks like a wooden rim instead of ringing like metal',()=>{
+  const sr=48000,ka=renderKa(sr);
+  const energy=(x:Float32Array,a=0)=>x.slice(a).reduce((s,v)=>s+v*v,0);
+  // Over within about 40 ms (the ringing rim before kept 28% of its sound after 40 ms).
+  expect(energy(ka,Math.floor(sr*.04))).toBeLessThan(energy(ka)*.05);
+  // Its bright partials die first (before: 36% of the 3 kHz band after 25 ms).
+  const bright=bandpass(Float32Array.from(ka),sr,3000,1);
+  expect(energy(bright,Math.floor(sr*.025))).toBeLessThan(energy(bright)*.05);
+ });
  it('every festival effect renders a bounded sound',()=>{
   for(const name of ['combo10','combo50','combo100','fullCombo','allGreat','clear','fail','chorus','select','move','back','tick','balloon','count','fever','fullHouse','gachaTurn','gachaOpen','gachaRare','join','reel'] as EffectName[]){
    const x=renderEffect(name,44100);
