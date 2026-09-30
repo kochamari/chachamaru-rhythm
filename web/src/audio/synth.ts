@@ -2,7 +2,11 @@
 // Pure functions: the same sample rate always gives the same samples, which
 // keeps them testable and lets the engine prepare them once per session.
 
-export type HitSound='taiko'|'pop'|'wood';
+/** 和太鼓 voices: standard, a small tight drum (higher, lighter), a big drum (deeper, heavier), and the standard in a hall. */
+export type HitSound='taiko'|'shime'|'odaiko'|'hibiki';
+export const HIT_SOUNDS:readonly HitSound[]=['taiko','shime','odaiko','hibiki'];
+/** The voice to play for a saved choice (earlier versions' 'pop' and 'wood', or none, play the standard drum). */
+export function hitSoundOf(saved:string|undefined):HitSound{return HIT_SOUNDS.includes(saved as HitSound)?saved as HitSound:'taiko';}
 export type EffectName='combo10'|'combo50'|'combo100'|'fullCombo'|'allGreat'|'clear'|'fail'|'chorus'|'select'|'move'|'back'|'tick'|'balloon'|'count'|'fever'|'fullHouse'|'gachaTurn'|'gachaOpen'|'gachaRare'|'join'|'reel';
 
 function rng(seed:number){return ()=>{seed|=0;seed=seed+0x6d2b79f5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296*2-1;};}
@@ -53,44 +57,80 @@ function resonate(x:Float32Array,sr:number,freq:number,tau:number){
  return out;
 }
 
-/** Rim stroke (fuchi): a hardwood stick on the drum's wooden rim. The stick's
- * click, then a few wooden modes (the barrel's hollow knock around 650 Hz, the
- * bright "ka" around 1.4 kHz) that die within tens of ms, the higher ones
- * first, so it knocks like wood rather than ringing like metal. */
-export function renderKa(sr:number):Float32Array{
- const n=Math.floor(sr*.13),out=new Float32Array(n);
+interface Rim {dur:number;modes:[number,number,number][];click:[number,number,number];drive:number;top:number}
+interface Skin {dur:number;f0:number;sweep:number;sweepTau:number;tau:number;modes:[number,number,number][];sub:number;thump:[number,number,number];slap:[number,number,number];drive:number}
+// Rim strokes: [frequency, decay time constant (s), level] of the wooden modes;
+// the stick's click [frequency, decay, level]. Higher modes die first.
+const RIMS:Record<'taiko'|'shime'|'odaiko',Rim>={
+ taiko:{dur:.11,modes:[[1050,.005,.3],[2050,.008,1],[3150,.004,.5],[4600,.0022,.25]],click:[5200,.0008,1.3],drive:2.6,top:10000},
+ shime:{dur:.1,modes:[[1300,.004,.25],[2600,.0065,1],[3900,.0032,.45],[5600,.0018,.2]],click:[6000,.0007,1.2],drive:2.8,top:11000},
+ odaiko:{dur:.12,modes:[[820,.006,.35],[1650,.009,1],[2650,.0045,.5],[4000,.0025,.25]],click:[4500,.0009,1.3],drive:2.4,top:9000},
+};
+// Centre strokes of the other drums: the membrane's pitch f0 (starting
+// `sweep` higher), its modes [ratio, level, decay relative to tau], a sub
+// tone, the barrel's thump and the stick's slap [frequency, decay, level].
+const SKINS:Record<'shime'|'odaiko',Skin>={
+ shime:{dur:.32,f0:170,sweep:140,sweepTau:.015,tau:.1,modes:[[1,1,1],[1.61,.45,.5],[2.18,.25,.3]],sub:.2,thump:[650,.018,1.8],slap:[3200,.003,1.1],drive:1.9},
+ odaiko:{dur:.6,f0:78,sweep:95,sweepTau:.03,tau:.3,modes:[[1,1,1],[1.59,.4,.45],[2.14,.2,.28]],sub:.45,thump:[300,.035,2.4],slap:[1800,.004,.8],drive:1.8},
+};
+
+/** Rim stroke (fuchi): a hardwood stick on the drum's wooden rim. The strike
+ * rings a few wooden modes that die within tens of ms, the higher ones
+ * first (wood knocks where metal would ring on), and the stick clicks. */
+function rimStroke(sr:number,v:Rim):Float32Array{
+ const n=Math.floor(sr*v.dur),out=new Float32Array(n);
  const strike=noise(n,23);
- for(let i=0;i<n;i++)strike[i]*=Math.exp(-i/sr/.0008);
+ for(let i=0;i<n;i++)strike[i]*=Math.exp(-i/sr/.0006);
  strike[0]+=1.5;
- for(const [freq,tau,amp] of [[650,.018,.45],[1400,.009,1],[2300,.005,.55],[3500,.0028,.35]]){
+ for(const [freq,tau,amp] of v.modes){
   const mode=normalize(resonate(strike,sr,freq,tau),1);
   for(let i=0;i<n;i++)out[i]+=amp*mode[i];
  }
- const click=bandpass(noise(n,24),sr,3800,.7);
- for(let i=0;i<n;i++)out[i]+=click[i]*1.4*Math.exp(-i/sr/.0014);
+ const [cf,ctau,ca]=v.click,click=bandpass(noise(n,24),sr,cf,.8);
+ for(let i=0;i<n;i++)out[i]+=click[i]*ca*Math.exp(-i/sr/ctau);
  normalize(out,1);
- for(let i=0;i<n;i++)out[i]=Math.tanh(out[i]*2.2)/Math.tanh(2.2);
- return fadeEdges(normalize(out,.92),sr,.2,15);
+ for(let i=0;i<n;i++)out[i]=Math.tanh(out[i]*v.drive)/Math.tanh(v.drive);
+ lowpass(out,sr,v.top,.6);
+ return fadeEdges(normalize(out,.92),sr,.15,12);
+}
+/** Centre stroke of another drum: the membrane's pitch drops as it settles; the barrel thumps, the stick slaps. */
+function centreStroke(sr:number,v:Skin):Float32Array{
+ const n=Math.floor(sr*v.dur),out=new Float32Array(n),ph=v.modes.map(()=>0);
+ let sub=0;
+ for(let i=0;i<n;i++){
+  const t=i/sr,f=v.f0+v.sweep*Math.exp(-t/v.sweepTau);let y=0;
+  v.modes.forEach(([r,a,d],k)=>{ph[k]+=2*Math.PI*f*r/sr;y+=a*Math.sin(ph[k])*Math.exp(-t/(d*v.tau));});
+  sub+=2*Math.PI*(v.f0*.58+25*Math.exp(-t/.03))/sr;
+  y+=v.sub*Math.sin(sub)*Math.exp(-t/(v.tau*1.1))*Math.min(1,t/.004);
+  out[i]=Math.min(1,t/.0012)*y;
+ }
+ const [tf,tt,ta]=v.thump,[sf,st,sa]=v.slap;
+ const thump=bandpass(noise(n,11),sr,tf,1.3),slap=bandpass(noise(n,12),sr,sf,.9);
+ for(let i=0;i<n;i++){const t=i/sr;out[i]+=thump[i]*ta*Math.exp(-t/tt)+slap[i]*sa*Math.exp(-t/st);}
+ normalize(out,1);
+ for(let i=0;i<n;i++)out[i]=Math.tanh(out[i]*v.drive)/Math.tanh(v.drive);
+ return fadeEdges(normalize(out,.95),sr,.3,30);
+}
+/** The stroke in a small hall (four damped combs and two allpasses), under the dry sound. */
+function inHall(x:Float32Array,sr:number,wet:number,seconds:number):Float32Array{
+ const n=x.length+Math.floor(sr*seconds),dry=new Float32Array(n),room=new Float32Array(n);
+ dry.set(x);
+ for(const [ms,g] of [[29.7,.78],[37.1,.76],[41.1,.74],[43.7,.72]]){
+  const d=Math.floor(sr*ms/1000),buf=new Float32Array(n);let damped=0;
+  for(let i=0;i<n;i++){damped=damped*.35+(i>=d?buf[i-d]:0)*.65;buf[i]=dry[i]+g*damped;room[i]+=buf[i];}
+ }
+ for(const [ms,g] of [[5,.7],[1.7,.7]]){
+  const d=Math.floor(sr*ms/1000),y=new Float32Array(n);
+  for(let i=0;i<n;i++)y[i]=-g*room[i]+(i>=d?room[i-d]+g*y[i-d]:0);
+  room.set(y);
+ }
+ lowpass(room,sr,5000);
+ normalize(room,wet);
+ for(let i=0;i<n;i++)dry[i]+=room[i];
+ return fadeEdges(normalize(dry,.92),sr,.1,40);
 }
 
-/** Pop kit: punchy kick for don, crisp snare/clap for ka. */
-export function renderPopDon(sr:number):Float32Array{
- const n=Math.floor(sr*.35),out=new Float32Array(n);let ph=0;
- for(let i=0;i<n;i++){const t=i/sr;const f=48+120*Math.exp(-t/.028);ph+=2*Math.PI*f/sr;out[i]=Math.sin(ph)*Math.exp(-t/.16)*Math.min(1,t/.001);}
- const click=bandpass(noise(n,31),sr,3200,1);
- const body=bandpass(noise(n,32),sr,180,1.2);
- for(let i=0;i<n;i++){const t=i/sr;out[i]+=click[i]*.8*Math.exp(-t/.003)+body[i]*1.5*Math.exp(-t/.03);}
- for(let i=0;i<n;i++)out[i]=Math.tanh(out[i]*1.8)/Math.tanh(1.8);
- return fadeEdges(normalize(out,.95),sr,.3,25);
-}
-export function renderPopKa(sr:number):Float32Array{
- const n=Math.floor(sr*.2),out=new Float32Array(n);let ph=0;
- const rattle=bandpass(noise(n,41),sr,4200,.7);
- for(let i=0;i<n;i++){const t=i/sr;ph+=2*Math.PI*(200+60*Math.exp(-t/.01))/sr;out[i]=Math.sin(ph)*.5*Math.exp(-t/.05)+rattle[i]*2.4*Math.exp(-t/.045);}
- for(let i=0;i<n;i++)out[i]=Math.tanh(out[i]*1.3)/Math.tanh(1.3);
- return fadeEdges(normalize(out,.8),sr,.2,20);
-}
-/** Wooden clappers: low block for don, high block for ka. */
+/** Wood blocks, low and high: the steady beat of 音ズレ合わせ (a sharp attack to time against). */
 export function renderWood(sr:number,high:boolean):Float32Array{
  const n=Math.floor(sr*(high?.14:.2)),out=new Float32Array(n);
  const base=high?1850:720,modes=[[1,.9,high?.045:.07],[2.76,.45,.025],[5.4,.2,.012]];
@@ -100,9 +140,13 @@ export function renderWood(sr:number,high:boolean):Float32Array{
  for(let i=0;i<n;i++){const t=i/sr;out[i]+=snap[i]*1.8*Math.exp(-t/.004);}
  return fadeEdges(normalize(out,high?.8:.95),sr,.2,15);
 }
+
+/** Rim stroke of the standard drum: a high, dry "ka". */
+export function renderKa(sr:number):Float32Array{return rimStroke(sr,RIMS.taiko);}
+
 export function renderHit(color:'don'|'ka',set:HitSound,sr:number):Float32Array{
- if(set==='pop')return color==='don'?renderPopDon(sr):renderPopKa(sr);
- if(set==='wood')return renderWood(sr,color==='ka');
+ if(set==='hibiki')return color==='don'?inHall(renderDon(sr),sr,.35,.35):inHall(renderKa(sr),sr,.3,.3);
+ if(set==='shime'||set==='odaiko')return color==='don'?centreStroke(sr,SKINS[set]):rimStroke(sr,RIMS[set]);
  return color==='don'?renderDon(sr):renderKa(sr);
 }
 

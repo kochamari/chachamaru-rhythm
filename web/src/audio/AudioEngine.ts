@@ -1,6 +1,6 @@
 import {ClockBridge} from './ClockBridge';
 import type {Settings,Color} from '../../../contracts/public-types';
-import {renderHit,renderEffect,type EffectName,type HitSound} from './synth';
+import {renderHit,renderEffect,hitSoundOf,type EffectName,type HitSound} from './synth';
 
 type Bus='bgm'|'hit'|'effect'|'ui';
 
@@ -88,7 +88,7 @@ export class AudioEngine {
  }
  /** Stroke sample for the chosen sound set, rendered on first use. */
  private hitSample(color:Color){
-  const set:HitSound=this.settings.hitSound??'taiko',key=`${color}:${set}`;
+  const set:HitSound=hitSoundOf(this.settings.hitSound),key=`${color}:${set}`;
   let b=this.samples.get(key);
   if(!b&&this.context&&typeof this.context.createBuffer==='function'){b=this.toBuffer(renderHit(color,set,this.context.sampleRate));this.samples.set(key,b);}
   return key;

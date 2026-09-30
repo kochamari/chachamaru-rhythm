@@ -1,6 +1,6 @@
 import './styles.css';
 import type {RunResult} from '../../contracts/public-types';
-import {state,defaults,validSettings} from './app/store';
+import {state,defaults,validSettings,hitSoundOf} from './app/store';
 import {fail,toast} from './app/ui';
 import {app,input,midi,uiAudio,preview,nav,memory,armAudioUnlock} from './app/context';
 import {db,listSongs,getSong,saveSong,saveSettings,backup,restore} from './storage/Database';
@@ -141,7 +141,7 @@ async function boot(){
  let rest:{packId:string;file:string;revision:number}[]=[];
  try{
   const settings=await(await db()).get('settings','main');
-  if(validSettings(settings))Object.assign(state.settings,settings);
+  if(validSettings(settings)){Object.assign(state.settings,settings);if(state.settings.hitSound!==undefined&&hitSoundOf(state.settings.hitSound)!==state.settings.hitSound){state.settings.hitSound=hitSoundOf(state.settings.hitSound);await saveSettings(state.settings);}}
   else{if(navigator.maxTouchPoints>0)state.settings.inputMode='touch';await saveSettings(state.settings);}
   const catalog=await bundledCatalog();
   await installBundled(catalog.slice(0,1),leaving.signal);
