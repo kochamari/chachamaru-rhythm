@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import {beforeEach,it,expect} from 'vitest';
-import {boneGain,finishBones,BoneCounter,inFever,feverLevel,FEVER_COMBO,ALL_FRIENDS_BONES,ALL_FRIENDS_GAUGE,drawFriends,joinBonuses,isReach,mergeBonuses,RARE_COATS,COMMON_COATS} from '../../web/src/game/festival';
+import {boneGain,finishBones,BoneCounter,inFever,feverLevel,FEVER_COMBO,ALL_FRIENDS_BONES,ALL_FRIENDS_GAUGE,drawFriends,joinBonuses,isReach,mergeBonuses,RARE_COATS,COMMON_COATS,SET_BONES,FINISH_BONES} from '../../web/src/game/festival';
 import {awardBones,loadFestival,validFestival,emptyFestival} from '../../web/src/storage/festival';
 import {db} from '../../web/src/storage/Database';
 import type {EffectEvent} from '../../contracts/public-types';
@@ -29,8 +29,11 @@ it('counts a run live: FEVER from the 31st hit on, ends on a miss; all four frie
  expect(c.bones).toBe(35);
  c.add([],ALL_FRIENDS_GAUGE);expect(c.bones).toBe(35+ALL_FRIENDS_BONES);expect(c.play).toBe(35);
  c.add([],ALL_FRIENDS_GAUGE-20);c.add([],ALL_FRIENDS_GAUGE);expect(c.bones).toBe(35+ALL_FRIENDS_BONES);
- expect(finishBones({gauge:72,fullCombo:false,allGreat:false})).toEqual([{label:'クリア',bones:20}]);
- expect(finishBones({gauge:100,fullCombo:true,allGreat:true}).map(i=>i.bones)).toEqual([20,100]);
+ expect(finishBones({gauge:72,fullCombo:false,allGreat:false})).toEqual([{label:'クリア',bones:FINISH_BONES.clear}]);
+ expect(finishBones({gauge:100,fullCombo:true,allGreat:true}).map(i=>i.bones)).toEqual([FINISH_BONES.clear,FINISH_BONES.allGreat]);
+ expect(finishBones({gauge:100,fullCombo:true,allGreat:false}).map(i=>i.label)).toEqual(['クリア','フルコンボ']);
+ // A full combo and all 良 are rare: they pay big, the clear stays small.
+ expect(FINISH_BONES.allGreat).toBeGreaterThan(FINISH_BONES.fullCombo);expect(FINISH_BONES.fullCombo).toBeGreaterThan(10*FINISH_BONES.clear);
  expect(finishBones({gauge:40,fullCombo:false,allGreat:false})).toEqual([]);
 });
 
@@ -147,16 +150,18 @@ it('the four friends are a slot draw: rare coats get likelier friend by friend, 
 
 it('each friend pays for what their coat completes; リーチ when the fourth can complete a set',()=>{
  expect(joinBonuses([],'kuro')).toEqual({items:[],set:null,rare:false});
- expect(joinBonuses(['kuro'],'kuro').items).toEqual([{label:'ペア',bones:10}]);
- expect(joinBonuses(['kuro','kuro','shiro'],'shiro')).toMatchObject({set:'twoPair',items:[{label:'ダブルペア',bones:30}]});
- expect(joinBonuses(['kin','kin'],'kin')).toEqual({set:'three',rare:true,items:[{label:'3匹そろい',bones:50},{label:'レア柴',bones:20}]});
- expect(joinBonuses(['aka','aka','aka'],'aka').items[0]).toEqual({label:'4匹そろい',bones:200});
+ expect(joinBonuses(['kuro'],'kuro').items).toEqual([{label:'ペア',bones:SET_BONES.pair}]);
+ expect(joinBonuses(['kuro','kuro','shiro'],'shiro')).toMatchObject({set:'twoPair',items:[{label:'ダブルペア',bones:SET_BONES.twoPair}]});
+ expect(joinBonuses(['kin','kin'],'kin')).toEqual({set:'three',rare:true,items:[{label:'3匹そろい',bones:SET_BONES.three},{label:'レア柴',bones:SET_BONES.rare}]});
+ expect(joinBonuses(['aka','aka','aka'],'aka').items[0]).toEqual({label:'4匹そろい',bones:SET_BONES.four});
+ // The rarer the set, the bigger: four the same is a jackpot (most of a draw's worth of play).
+ expect([SET_BONES.pair,SET_BONES.twoPair,SET_BONES.three,SET_BONES.four]).toEqual([...[SET_BONES.pair,SET_BONES.twoPair,SET_BONES.three,SET_BONES.four]].sort((a,b)=>a-b));
  expect([isReach(['kuro','shiro','goma']),isReach(['kuro','shiro','kuro']),isReach(['gin','gin','gin']),isReach(['kuro','kuro'])]).toEqual([false,true,true,false]);
  const c=new BoneCounter();c.setFriends(['kuro','kuro','kin','kuro']);
- c.add([],30);c.add([],50);expect(c.bonuses).toEqual([{label:'ペア',bones:10}]);
+ c.add([],30);c.add([],50);expect(c.bonuses).toEqual([{label:'ペア',bones:SET_BONES.pair}]);
  c.add([],100);
  expect(c.bonuses.map(b=>b.label)).toEqual(['ペア','レア柴','3匹そろい','全員集合']);
- expect(mergeBonuses([...c.bonuses,{label:'レア柴',bones:20},{label:'クリア',bones:20}])).toEqual([{label:'ペア',bones:10},{label:'レア柴',bones:40},{label:'3匹そろい',bones:50},{label:'全員集合',bones:30},{label:'クリア',bones:20}]);
+ expect(mergeBonuses([...c.bonuses,{label:'レア柴',bones:SET_BONES.rare},{label:'クリア',bones:20}])).toEqual([{label:'ペア',bones:SET_BONES.pair},{label:'レア柴',bones:2*SET_BONES.rare},{label:'3匹そろい',bones:SET_BONES.three},{label:'全員集合',bones:ALL_FRIENDS_BONES},{label:'クリア',bones:20}]);
 });
 
 import {drawSlot,slotPayout,xpForRun,levelFor,nearMiss,dayKey,SLOT_SYMBOLS,LEVEL_UP_BONES,DAILY_BONES} from '../../web/src/game/festival';

@@ -57,6 +57,12 @@ export function drawFriends(random:()=>number,owned:Readonly<Record<string,numbe
 }
 
 export interface Bonus {label:string;bones:number}
+/**
+ * Bones for the friends' sets and a rare coat. The rare sets pay big (four
+ * the same is a jackpot of nearly half a draw); the ones that come almost
+ * every run stay small, so they don't decide how often one can draw.
+ */
+export const SET_BONES={pair:10,twoPair:80,three:200,four:1000,rare:20} as const;
 /** One line per kind of bonus (for the result): the same label adds up, in first-seen order. */
 export function mergeBonuses(items:readonly Bonus[]):Bonus[]{
  const out:Bonus[]=[];
@@ -68,14 +74,14 @@ export type FriendSet='pair'|'twoPair'|'three'|'four';
 export function joinBonuses(before:readonly string[],coat:string):{items:Bonus[];set:FriendSet|null;rare:boolean}{
  const same=before.filter(c=>c===coat).length+1,items:Bonus[]=[];
  let set:FriendSet|null=null;
- if(same===4){set='four';items.push({label:'4匹そろい',bones:200});}
- else if(same===3){set='three';items.push({label:'3匹そろい',bones:50});}
+ if(same===4){set='four';items.push({label:'4匹そろい',bones:SET_BONES.four});}
+ else if(same===3){set='three';items.push({label:'3匹そろい',bones:SET_BONES.three});}
  else if(same===2){
   const otherPair=before.some(c=>c!==coat&&before.filter(x=>x===c).length===2);
-  set=otherPair?'twoPair':'pair';items.push(otherPair?{label:'ダブルペア',bones:30}:{label:'ペア',bones:10});
+  set=otherPair?'twoPair':'pair';items.push(otherPair?{label:'ダブルペア',bones:SET_BONES.twoPair}:{label:'ペア',bones:SET_BONES.pair});
  }
  const rare=isRare(coat);
- if(rare)items.push({label:'レア柴',bones:20});
+ if(rare)items.push({label:'レア柴',bones:SET_BONES.rare});
  return {items,set,rare};
 }
 /** FEVER while the combo is at least this. */
@@ -98,12 +104,13 @@ export function boneGain(e:Pick<EffectEvent,'kind'|'size'|'value'>,fever:number)
  return 0;
 }
 
-/** Bones added when the song ends. */
+/** Bones when the song ends: a clear, and a full combo or all 良 (rare, so they pay big). */
+export const FINISH_BONES={clear:20,fullCombo:300,allGreat:800} as const;
 export function finishBones(s:Pick<GameSnapshot,'gauge'|'fullCombo'|'allGreat'>){
  const items:{label:string;bones:number}[]=[];
- if(s.gauge>=70)items.push({label:'クリア',bones:20});
- if(s.allGreat)items.push({label:'全良',bones:100});
- else if(s.fullCombo)items.push({label:'フルコンボ',bones:50});
+ if(s.gauge>=70)items.push({label:'クリア',bones:FINISH_BONES.clear});
+ if(s.allGreat)items.push({label:'全良',bones:FINISH_BONES.allGreat});
+ else if(s.fullCombo)items.push({label:'フルコンボ',bones:FINISH_BONES.fullCombo});
  return items;
 }
 

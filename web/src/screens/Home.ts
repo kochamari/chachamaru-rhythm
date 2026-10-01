@@ -42,11 +42,12 @@ export function homeScreen(root:HTMLElement):()=>void{
  // Until the first finished run of the day, the start drum wears a bonus tag.
  let alive=true;
  void dailyWaiting().then(w=>{if(w&&alive)root.querySelector('#start-game')?.insertAdjacentHTML('beforeend','<span class="daily-badge" aria-label="きょうの初プレイでほねっこ＋'+DAILY_BONES+'">きょうの<b>＋'+DAILY_BONES+'</b></span>');});
- // The login bonus (once a day), then badges: missions still to do, and the free draw.
+ // The login bonus (once a day), then badges: missions still to do, and the free draw (or bones enough for a draw).
  void showLoginBonus().then(()=>dailyBadges()).then(b=>{
   if(!alive)return;
   if(b.missionsLeft)root.querySelector('.festival-chip')?.insertAdjacentHTML('beforeend',`<span class="chip-badge" aria-label="残りのミッション ${b.missionsLeft}">${b.missionsLeft}</span>`);
   if(b.freeDraw)root.querySelector('.gacha-chip')?.insertAdjacentHTML('beforeend','<span class="chip-badge free" aria-label="きょうの無料ガチャあり">無料</span>');
+  else if(b.canDraw)root.querySelector('.gacha-chip')?.insertAdjacentHTML('beforeend','<span class="chip-badge ready" aria-label="ほねっこがたまって、ガチャをひけます">ひける</span>');
  });
  return ()=>{alive=false;stop();clearInterval(drummer);nav.reset();};
 }

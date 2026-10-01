@@ -134,7 +134,7 @@ export const ACHIEVEMENTS:Achievement[]=[
  {id:'ag',name:'全良',unit:'回',stat:'ag',tiers:[1,5,20],titles:['全良のひと','全良マスター','伝説の全良']},
  {id:'hard',name:'むずかしいをクリア',unit:'回',stat:'hardClears',tiers:[1,10,50],titles:['むずかしい挑戦者','むずかしい常連','太鼓の達人']},
  {id:'rolls',name:'連打',unit:'回',stat:'rolls',tiers:[500,3000,10000],titles:['連打っ子','連打職人','連打の嵐']},
- {id:'jackpot',name:'仲間の4匹そろい',unit:'回',stat:'jackpots',tiers:[1,5,20],titles:['しば運','しば運の持ち主','大当たり柴使い']},
+ {id:'jackpot',name:'仲間の4匹そろい',unit:'回',stat:'jackpots',tiers:[1,3,8],titles:['しば運','しば運の持ち主','大当たり柴使い']},
  {id:'zukan',name:'しばずかん',unit:'種類',stat:'collected',tiers:[20,40,COSTUMES.length],titles:['しばコレクター','しば博士','しばずかん名人']},
  {id:'login',name:'ログインした日',unit:'日',stat:'loginDays',tiers:[7,30,100],titles:['毎日たいこ','たいこ一筋','たいこと共に']},
  {id:'streak',name:'連続ログイン',unit:'日',stat:'streakBest',tiers:[3,7,30],titles:['三日坊主こえ','一週間皆勤','ひと月皆勤']},

@@ -10,14 +10,15 @@ import {beatPhase,downbeatTimes,inSection,friendsForGauge,FRIEND_STEPS} from './
 import {DRUMMER,DANCER,DrummerState,drummerPose,dancerPose,ATLAS_FILES,REGIONS,type Side} from './rig';
 import {PixiCharacter,type AtlasTextures} from './PixiCharacter';
 import {FRIEND_VARIANTS,recolorAtlas} from './recolor';
-import {feverLevel,joinBonuses,isReach,isRare,rarePool,COMMON_COATS,ALL_FRIENDS_BONES,type Bonus} from '../game/festival';
+import {chartLevel} from '../app/songinfo';
+import {feverLevel,joinBonuses,isReach,isRare,rarePool,COMMON_COATS,ALL_FRIENDS_BONES,SET_BONES,type Bonus} from '../game/festival';
 import {COSTUMES,COATS} from './costumes';
 import type {EffectName} from '../audio/synth';
 import * as art from './art';
 
 const {C}=art;
 type Baked=art.Baked;
-export const DIFFICULTY_STYLE:Record<Difficulty,{label:string;color:number;stars:number}>={easy:{label:'かんたん',color:0xef8f2f,stars:2},normal:{label:'ふつう',color:0x3f9a55,stars:3},hard:{label:'むずかしい',color:0xd23f47,stars:5}};
+export const DIFFICULTY_STYLE:Record<Difficulty,{label:string;color:number}>={easy:{label:'かんたん',color:0xef8f2f},normal:{label:'ふつう',color:0x3f9a55},hard:{label:'むずかしい',color:0xd23f47}};
 
 export type StageTheme='day'|'evening'|'sunset'|'night';
 export interface RendererOptions {chart:Chart;manifest:Manifest;settings:Settings;difficulty:Difficulty;title:string;artist:string;showPads:boolean;tag?:string;inputHint?:'keyboard'|'midi'|'touch';theme?:StageTheme;
@@ -474,7 +475,8 @@ export class PlayRenderer {
   const artist=new Text({text:this.opts.artist+(this.opts.tag?`　［${this.opts.tag}］`:''),style:{fontFamily:art.FONT,fontSize:L.portrait?15:13,fontWeight:'700',fill:0xf3dfb0}});
   artist.position.set(t.x+23,t.y+(L.portrait?42:31));
   if(artist.width>maxW)artist.scale.set(maxW/artist.width);
-  const badge=new Text({text:`${d.label}  ${'★'.repeat(d.stars)}`,style:{fontFamily:art.FONT,fontSize:13,fontWeight:'900',fill:0xffffff,stroke:{color:0x000000,width:3}}});
+  // The chart's own level, as on the song list (★7), not a fixed number of stars per difficulty.
+  const badge=new Text({text:`${d.label}  ★${chartLevel(this.opts.chart)}`,style:{fontFamily:art.FONT,fontSize:13,fontWeight:'900',fill:0xffffff,stroke:{color:0x000000,width:3}}});
   badge.anchor.set(.5);badge.position.set(bx+badgeW/2,by+badgeH/2);
   if(badge.width>badgeW-12)badge.scale.set((badgeW-12)/badge.width);
   this.titleRoot.addChild(title,artist,badge);
@@ -832,10 +834,10 @@ export class PlayRenderer {
   if(this.effects!=='off')for(let k=0;k<(rare?24:14);k++){const a=k/(rare?24:14)*Math.PI*2;this.particle(k%2?'spark':'petal',p.x,p.y-p.height*.55,Math.cos(a)*(2.5+Math.random()*2),Math.sin(a)*(2.5+Math.random()*2)-1.5,700,rare?[0xffd23f,0xff8fb8,0x7fe8ff][k%3]:k%3?0xffd86b:0xff8fb8,{gravity:.05,spin:.1});}
   // Sets: a label over them, a chime that grows with the set, fireworks for four.
   // Three or four the same get the big stage message; smaller sets (or a missed リーチ) a label over the friend.
-  const label=set==='twoPair'?'ダブルペア！ ＋30':set==='pair'?'ペア！ ＋10':!set&&f.reach?'おしい！':rare&&!set?'レア！ ＋20':'';
+  const label=set==='twoPair'?`ダブルペア！ ＋${SET_BONES.twoPair}`:set==='pair'?`ペア！ ＋${SET_BONES.pair}`:!set&&f.reach?'おしい！':rare&&!set?`レア！ ＋${SET_BONES.rare}`:'';
   if(label){this.setLabelText.text=label;this.setLabelText.style.fill=set==='four'?0xff5fa2:set==='three'?0xffd23f:set?0xfff2ce:0xb9c4d6;this.setLabelIndex=i;this.setLabelAt=now+150;}
-  if(set==='four'){this.opts.onSound?.('allGreat');this.showMessage('4匹そろった！！','大当たり！ ほねっこ ＋200');const st=this.layout.stage;if(this.effects!=='off')[0,200,400,600].forEach((d,k)=>window.setTimeout(()=>{if(this.alive)this.firework(st.x+st.w*(.2+.2*k),st.y+st.h*(.14+.08*(k%2)));},d));}
-  else if(set==='three'){this.opts.onSound?.('fullCombo');this.showMessage('3匹そろった！','ほねっこ ＋50');}
+  if(set==='four'){this.opts.onSound?.('allGreat');this.showMessage('4匹そろった！！',`大当たり！ ほねっこ ＋${SET_BONES.four.toLocaleString()}`);const st=this.layout.stage;if(this.effects!=='off')[0,200,400,600].forEach((d,k)=>window.setTimeout(()=>{if(this.alive)this.firework(st.x+st.w*(.2+.2*k),st.y+st.h*(.14+.08*(k%2)));},d));}
+  else if(set==='three'){this.opts.onSound?.('fullCombo');this.showMessage('3匹そろった！',`ほねっこ ＋${SET_BONES.three}`);}
   else if(set)this.opts.onSound?.(set==='twoPair'?'combo50':'combo10');
   const bonus:Bonus[]=[...items];
   if(i===FRIEND_SLOTS-1){bonus.push({label:'全員集合',bones:ALL_FRIENDS_BONES});if(!set)this.onAllFriends();else if(this.effects!=='off')this.onAllFriends(true);}

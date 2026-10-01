@@ -37,11 +37,11 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
  const back=backParam&&/^#\/(?!gacha)[\w/?=&%.-]*$/.test(backParam)?backParam:'#/';
  let festival:FestivalData=await loadFestival();
  let busy=false,disposed=false;
- root.innerHTML=`${header()}<section class="page gacha-page"><div class="page-heading"><div><span class="eyebrow">ほねっこで、お祭りの仲間をふやそう</span><h1>しばガチャ</h1><p>当たった衣装は、演奏中に来てくれる仲間の柴犬が着て登場します。当てた毛色の柴犬も、演奏中に仲間として来るようになります。</p><p class="gacha-news"><b>大型アップデート</b> 衣装が${COSTUMES.length}種類に！ シリーズをそろえると ほねっこボーナス、80回で ウルトラレア確定。</p></div><a class="button" id="gacha-back" href="${escape(back)}" data-nav>もどる</a></div>
+ root.innerHTML=`${header()}<section class="page gacha-page"><div class="page-heading"><div><span class="eyebrow">ほねっこで、お祭りの仲間をふやそう</span><h1>しばガチャ</h1><p>当たった衣装は、演奏中に来てくれる仲間の柴犬が着て登場します。当てた毛色の柴犬も、演奏中に仲間として来るようになります。</p></div><a class="button" id="gacha-back" href="${escape(back)}" data-nav>もどる</a></div>
   <div class="gacha-main">
    <div class="gacha-machine">${machineSvg()}<div class="drop-capsule" hidden></div></div>
    <div class="gacha-panel paper">
-    <div class="wallet"><span class="wallet-icon">${boneSvg()}</span><span>もっている ほねっこ</span><b id="wallet">0</b></div>
+    <div class="wallet"><span class="wallet-icon">${boneSvg()}</span><span>ほねっこ</span><b id="wallet">0</b></div>
     <button class="gacha-free" id="pull-free" data-nav hidden>きょうの無料1回<small>1日1回、ほねっこなしで ひける</small></button>
     <button class="primary gacha-one" id="pull-1" data-nav>1回ひく<small>ほねっこ ${PULL_COST.toLocaleString()}</small></button>
     <button class="gacha-ten" id="pull-10" data-nav>10回ひく<small>ほねっこ ${(PULL_COST*TEN_PULLS).toLocaleString()}・スーパーレア以上が1つ確定</small></button>

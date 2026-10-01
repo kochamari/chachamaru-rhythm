@@ -506,6 +506,8 @@ html[data-render="software"] .new-best{animation:none}
 .summary-tile i{position:absolute;top:-8px;right:-6px;font-style:normal;font-size:10px;font-weight:900;padding:1px 6px;border-radius:999px;background:#ff5f5f;color:#fff;border:2px solid var(--ink)}
 .tile-pic{display:grid;place-items:center;height:70px}
 @media (max-width:640px){.gacha-main{grid-template-columns:1fr}.gacha-machine{max-width:220px}.summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* A sideways phone: the heading in one line, so the machine and the buttons are in the first screen. */
+@media (max-height:500px) and (orientation:landscape){.gacha-page .page-heading{margin-bottom:8px;align-items:center}.gacha-page .page-heading .eyebrow,.gacha-page .page-heading p{display:none}.gacha-page .page-heading h1{margin:0;font-size:24px}.gacha-page .page-heading .button{min-height:36px;padding:6px 14px}.gacha-main{gap:12px;align-items:start}.gacha-panel{gap:8px}.gacha-panel .wallet b{font-size:24px}}
 @media (max-height:500px) and (orientation:landscape){.gacha-machine{max-width:200px}.gacha-reveal{padding:10px 16px}.reveal-card{padding:10px 12px 12px}.card-pic{min-height:90px}.summary-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.tile-pic{height:56px}}
 @media (prefers-reduced-motion:reduce){.reveal-rays,.reveal-capsule{animation:none}}
 .gacha-chip svg.bone-svg{width:30px;height:20px}
@@ -657,8 +659,6 @@ html[data-render="software"] .new-best{animation:none}
 .reveal-confetti i{position:absolute;width:9px;height:14px;margin:-7px -4.5px;border-radius:2px;opacity:0;animation:gacha-confetti 1.6s linear var(--d) both}
 @keyframes gacha-confetti{0%{opacity:1;transform:translate(0,0) rotate(0)}30%{opacity:1;transform:translate(calc(var(--x) * 30vw),calc(var(--up) * -1)) rotate(calc(var(--r) * .4))}100%{opacity:0;transform:translate(calc(var(--x) * 44vw),40vh) rotate(var(--r))}}
 /* Gacha update: news line, 天井 counter, series shelves and the completion dialog. */
-.gacha-news{display:inline-block;margin-top:8px!important;padding:6px 12px;border-radius:12px;background:#ffd86b;color:var(--ink)!important;font-weight:800}
-.gacha-news b{margin-right:6px;color:#b8322a}
 .pity{display:grid;grid-template-columns:auto auto auto 1fr;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#6b5a48}
 .pity b{font-size:18px;color:#d9338f;font-variant-numeric:tabular-nums}
 .pity i{position:relative;height:8px;border-radius:999px;background:#eadfc6;overflow:hidden;border:1.5px solid #d9c9a6}
@@ -732,7 +732,7 @@ html[data-render="software"] .new-best{animation:none}
 .chip-button{position:relative}
 .chip-button .paw{width:22px;height:22px;flex:none}
 .chip-badge{position:absolute;top:-7px;right:-6px;min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:999px;background:#ff4d4d;color:#fff;font-size:11px;font-weight:900;border:2px solid #fff4d8;box-shadow:0 2px 0 #0006;animation:badge-pulse 1.8s ease-in-out infinite}
-.chip-badge.free{background:#2f8a3a}
+.chip-badge.free{background:#2f8a3a}.chip-badge.ready{background:#e8892b;top:-13px;right:-10px}
 @keyframes badge-pulse{50%{transform:scale(1.12)}}
 /* Song select: mission chip, chosen title, featured song tag. */
 .mission-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:4px 12px;border-radius:999px;background:#1e1726cc;border:2px solid #ffd86b88;color:#fff4d8;font-size:13px;font-weight:800;white-space:nowrap;text-decoration:none}

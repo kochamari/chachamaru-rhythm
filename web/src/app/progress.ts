@@ -2,6 +2,7 @@ import {boneSvg,escape} from './ui';
 import {loadFestival} from '../storage/festival';
 import {levelFor,dayKey,fortuneFor,DAILY_BONES,type Fortune} from '../game/festival';
 import {todayDaily,titleName} from '../game/daily';
+import {PULL_COST} from '../game/gacha';
 
 // Small progress chips for menus: 太鼓レベル (with a thin bar and the chosen
 // title), ほねっこ (a link to the draw), today's missions (a link to the daily
@@ -24,9 +25,9 @@ export async function progressChips(back:string){
 /** Today's missions not done yet, and whether the free draw is still waiting. */
 export async function dailyBadges(){
  const f=await loadFestival().catch(()=>null);
- if(!f)return {missionsLeft:0,freeDraw:false};
+ if(!f)return {missionsLeft:0,freeDraw:false,canDraw:false};
  const today=dayKey(),d=todayDaily(f.daily,today);
- return {missionsLeft:d.ids.filter(id=>!d.paid.includes(id)).length,freeDraw:f.freeDay!==today};
+ return {missionsLeft:d.ids.filter(id=>!d.paid.includes(id)).length,freeDraw:f.freeDay!==today,canDraw:f.bones>=PULL_COST};
 }
 
 /** Whether today's first-run bonus is still waiting. */
