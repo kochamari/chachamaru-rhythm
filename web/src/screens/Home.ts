@@ -2,6 +2,7 @@ import {BRAND} from '../app/brand';
 import {Character,flowerSvg} from '../render/Character';
 import {nav} from '../app/context';
 import {boneSvg} from '../app/ui';
+import {DAILY_BONES} from '../game/festival';
 import {dailyWaiting,dailyBadges} from '../app/progress';
 import {showLoginBonus,pawSvg} from '../app/loginBonus';
 
@@ -40,7 +41,7 @@ export function homeScreen(root:HTMLElement):()=>void{
  root.querySelector<HTMLElement>('#start-game')?.focus({preventScroll:true});
  // Until the first finished run of the day, the start drum wears a bonus tag.
  let alive=true;
- void dailyWaiting().then(w=>{if(w&&alive)root.querySelector('#start-game')?.insertAdjacentHTML('beforeend','<span class="daily-badge" aria-label="きょうの初プレイでほねっこ＋50">きょうの<b>＋50</b></span>');});
+ void dailyWaiting().then(w=>{if(w&&alive)root.querySelector('#start-game')?.insertAdjacentHTML('beforeend','<span class="daily-badge" aria-label="きょうの初プレイでほねっこ＋'+DAILY_BONES+'">きょうの<b>＋'+DAILY_BONES+'</b></span>');});
  // The login bonus (once a day), then badges: missions still to do, and the free draw.
  void showLoginBonus().then(()=>dailyBadges()).then(b=>{
   if(!alive)return;

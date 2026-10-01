@@ -2,12 +2,13 @@
 // is passed in). Only for fun: nothing here changes play or scores.
 import {COSTUMES,SERIES,COMPLETE_BONUS,type Rarity,type Series} from '../render/costumes';
 
-export const PULL_COST=100;
+/** One draw (the balance of 2026-10-01: a draw is earned over a few songs, see DECISIONS). */
+export const PULL_COST=2500;
 export const TEN_PULLS=10;
 export const RARITIES:Rarity[]=['N','R','SR','SSR'];
 export const RATES:Record<Rarity,number>={N:.58,R:.3,SR:.1,SSR:.02};
 /** Bones back when an outfit is drawn again. */
-export const DUPLICATE_BONES:Record<Rarity,number>={N:10,R:20,SR:50,SSR:100};
+export const DUPLICATE_BONES:Record<Rarity,number>={N:100,R:200,SR:500,SSR:1000};
 /** 天井: this many draws in a row without ウルトラレア make the last one ウルトラレア. */
 export const PITY=80;
 
@@ -32,7 +33,9 @@ export function drawOutfits(count:number,random:()=>number,owned:Readonly<Record
   if(count===TEN_PULLS&&i===TEN_PULLS-1&&!pulls.some(p=>p.rarity==='SR'||p.rarity==='SSR'))rarity=random()<RATES.SR/(RATES.SR+RATES.SSR)?'SR':'SSR';
   if(pity&&rarity!=='SSR'&&pity.since>=PITY-1){rarity='SSR';forced=true;}
   if(pity)pity.since=rarity==='SSR'?0:pity.since+1;
-  const pool=COSTUMES.filter(c=>c.rarity===rarity);
+  // スーパーレア and ウルトラレア come as outfits not yet owned while any are left.
+  const all=COSTUMES.filter(c=>c.rarity===rarity),fresh=all.filter(c=>!seen[c.id]);
+  const pool=(rarity==='SR'||rarity==='SSR')&&fresh.length?fresh:all;
   const item=pool[Math.min(pool.length-1,Math.floor(random()*pool.length))];
   const isNew=!seen[item.id];
   seen[item.id]=(seen[item.id]??0)+1;

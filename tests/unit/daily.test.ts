@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import {beforeEach,it,expect} from 'vitest';
-import {daysBetween,nextLogin,nextStreakGoal,missionsFor,todayDaily,advanceMissions,featuredSong,newTiers,tierFor,unlockedTitles,titleName,runStats,festivalStats,MISSIONS,MISSION_BY_ID,ACHIEVEMENTS,LOGIN_REWARDS,ALL_MISSIONS_BONES,TIER_BONES,DEFAULT_TITLE,type RunFacts} from '../../web/src/game/daily';
+import {daysBetween,nextLogin,nextStreakGoal,missionsFor,todayDaily,advanceMissions,featuredSong,newTiers,tierFor,unlockedTitles,titleName,runStats,festivalStats,MISSIONS,MISSION_BY_ID,ACHIEVEMENTS,LOGIN_REWARDS,STREAK_BONUS,ALL_MISSIONS_BONES,TIER_BONES,DEFAULT_TITLE,type RunFacts} from '../../web/src/game/daily';
 import {claimLogin,awardBones,spendOnDraws,loadFestival,saveFestival,setTitle,validFestival,emptyFestival,featuredToday} from '../../web/src/storage/festival';
 import {db,saveRun} from '../../web/src/storage/Database';
 import {PULL_COST} from '../../web/src/game/gacha';
@@ -28,7 +28,7 @@ it('login bonus: a stamp a day on a 7-day card, a streak with milestones, a welc
  expect(t.card).toBe(7);
  const back=nextLogin(t,'2026-10-12')!;
  expect(back.state.card).toBe(1);expect(back.items.map(i=>i.label)).toContain('おかえりボーナス');
- expect(nextStreakGoal(1)).toEqual({day:3,left:2,bones:50});expect(nextStreakGoal(5)?.day).toBe(7);
+ expect(nextStreakGoal(1)).toEqual({day:3,left:2,bones:STREAK_BONUS[3]});expect(nextStreakGoal(5)?.day).toBe(7);
 });
 
 it('missions: three a day (easy, middle, fun), the same all day; paid once, plus a bonus for all three',()=>{
@@ -116,8 +116,9 @@ it('a finished run advances missions and pays やりこみ from the saved runs; 
 it('one free draw a day; a draw advances the gacha mission',async()=>{
  await saveFestival({...emptyFestival(),bones:0,daily:{day:'2026-10-01',ids:['play2','great150','gacha1'],progress:{},paid:[],allPaid:false}});
  const one=await spendOnDraws(1,()=>[{id:'hachimaki',refund:0}],PULL_COST,undefined,{free:true,now:noon('2026-10-01')});
- expect(one.extras).toEqual([{label:'ミッション「しばガチャをひく」',bones:30}]);
- expect(one.festival.bones).toBe(30);expect(one.festival.freeDay).toBe('2026-10-01');
+ const gacha1=MISSION_BY_ID.get('gacha1')!.bones;
+ expect(one.extras).toEqual([{label:'ミッション「しばガチャをひく」',bones:gacha1}]);
+ expect(one.festival.bones).toBe(gacha1);expect(one.festival.freeDay).toBe('2026-10-01');
  await expect(spendOnDraws(1,()=>[{id:'uchiwa',refund:0}],PULL_COST,undefined,{free:true,now:noon('2026-10-01')})).rejects.toThrow('きょうの無料ガチャは、もうひきました');
  const next=await spendOnDraws(1,()=>[{id:'uchiwa',refund:0}],PULL_COST,undefined,{free:true,now:noon('2026-10-02')});
  expect(next.festival.owned).toEqual({hachimaki:1,uchiwa:1});

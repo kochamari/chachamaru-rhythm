@@ -1,6 +1,6 @@
 import {boneSvg,escape} from './ui';
 import {loadFestival} from '../storage/festival';
-import {levelFor,dayKey,fortuneFor,type Fortune} from '../game/festival';
+import {levelFor,dayKey,fortuneFor,DAILY_BONES,type Fortune} from '../game/festival';
 import {todayDaily,titleName} from '../game/daily';
 
 // Small progress chips for menus: 太鼓レベル (with a thin bar and the chosen
@@ -17,7 +17,7 @@ export async function progressChips(back:string){
   <span class="lv-chip" title="太鼓レベル（遊ぶと経験値がたまります）">太鼓Lv.<b>${lv.level}</b><i style="--p:${(lv.into/lv.need).toFixed(3)}"></i><em class="title-tag">${escape(titleName(f.title,f.achieved??{}))}</em></span>
   <a class="bone-chip" href="#/gacha?back=${encodeURIComponent(back)}" data-nav aria-label="ほねっこ ${f.bones}本（しばガチャへ）">${boneSvg()}<b>${f.bones.toLocaleString()}</b></a>
   <a class="mission-chip ${done>=d.ids.length?'done':''}" href="#/daily?back=${encodeURIComponent(back)}" data-nav aria-label="きょうのミッション ${done}/${d.ids.length}">ミッション <b>${done}/${d.ids.length}</b></a>
-  ${daily?'<span class="daily-hint">きょうの初プレイ <b>＋50</b></span>':''}
+  ${daily?'<span class="daily-hint">きょうの初プレイ <b>＋'+DAILY_BONES+'</b></span>':''}
  </div>`;
 }
 

@@ -7,9 +7,10 @@
 import {escape,boneSvg} from '../app/ui';
 import {flowerSvg} from '../render/Character';
 import {uiAudio} from '../app/context';
-import {levelFor,slotPayout,SLOT_SYMBOLS,type SlotSymbol} from '../game/festival';
+import {levelFor,slotPayout,SLOT_SYMBOLS,DAILY_BONES,type SlotSymbol} from '../game/festival';
 import {ATLAS_FILES,REGIONS} from '../render/rig';
 import {MISSION_BY_ID} from '../game/daily';
+import {PULL_COST} from '../game/gacha';
 import type {Award,FestivalData} from '../storage/festival';
 
 const SLOT_LINE=/^スロット /;
@@ -34,10 +35,15 @@ function missionsRow(award:Award){
  }).join('')}</div>`;
 }
 
+/** The way to しばガチャ: a thin bar fills toward the next draw; ひける！ (and a glow) once there are bones for one. */
+function gachaButton(bones:number,href:string){
+ if(bones>=PULL_COST)return `<a class="button bone-gacha ready" href="${escape(href)}" data-nav aria-label="ガチャ（1回ひけます）">ガチャ<small>ひける！</small></a>`;
+ return `<a class="button bone-gacha" href="${escape(href)}" data-nav aria-label="ガチャ（あと${(PULL_COST-bones).toLocaleString()}本で1回ひけます）" style="--fill:${(bones/PULL_COST).toFixed(3)}">ガチャ<i class="gacha-fill" aria-hidden="true"></i></a>`;
+}
 export function rewardsHtml(award:Award,festival:FestivalData,gachaHref:string){
  const level=levelFor(award.xp?.before??festival.xp??0);
  return `<section class="result-rewards" aria-label="ごほうび（タップですぐ全部表示）">
-  <div class="reward-row reward-bones"><span class="bone-award-icon">${boneSvg()}</span><div class="bone-main"><b>ほねっこ ＋<span id="bone-count">0</span></b><span class="bone-line"><span class="bone-total">もっている <b id="bone-total">${(festival.bones-award.total).toLocaleString()}</b></span>${award.daily?'<span class="daily-chip" id="daily-chip" hidden><span class="long">きょうの</span>初プレイ ＋50</span>':''}</span></div><a class="button bone-gacha" href="${escape(gachaHref)}" data-nav>ガチャ</a><div class="bone-items" id="bone-items"></div></div>
+  <div class="reward-row reward-bones"><span class="bone-award-icon">${boneSvg()}</span><div class="bone-main"><b>ほねっこ ＋<span id="bone-count">0</span></b><span class="bone-line"><span class="bone-total">もっている <b id="bone-total">${(festival.bones-award.total).toLocaleString()}</b></span>${award.daily?'<span class="daily-chip" id="daily-chip" hidden><span class="long">きょうの</span>初プレイ ＋'+(award.items.find(i=>i.label==='きょうの初プレイ')?.bones??DAILY_BONES)+'</span>':''}</span></div>${gachaButton(festival.bones,gachaHref)}<div class="bone-items" id="bone-items"></div></div>
   ${award.slot?`<div class="reward-row reward-slot"><span class="slot-label">ボーナス<br>スロット</span><div class="slot-reels">${[0,1,2].map(()=>'<span class="reel"><span class="strip"></span></span>').join('')}</div><b class="slot-result" id="slot-result" aria-live="polite"></b></div>`:''}
   ${missionsRow(award)}
   ${award.titles?.length?`<div class="reward-titles" id="reward-titles" hidden><span class="title-get-head">称号ゲット！</span>${award.titles.map(t=>`<b class="title-get">${escape(t)}</b>`).join('')}</div>`:''}
@@ -131,7 +137,7 @@ export function playRewards(root:HTMLElement,award:Award,festival:FestivalData,d
  const reveal=()=>{const r=panel.getBoundingClientRect();if(r.bottom>innerHeight||r.top<0)panel.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'end'});};
  if(award.slot){later(t,()=>{reveal();showSlot();});t+=1800+(award.slot.symbols[0]===award.slot.symbols[1]?1000:0)+800;}
  // 3. The first finished run of the day.
- if(award.daily){later(t,()=>{const chip=$('#daily-chip');if(chip){chip.hidden=false;pop(chip);}uiAudio.effect('combo10');items.innerHTML=describe(award.items.filter(i=>i.label!=='レベルアップ'));countTo(shown+50,500);});t+=700;}
+ if(award.daily){later(t,()=>{const chip=$('#daily-chip');if(chip){chip.hidden=false;pop(chip);}uiAudio.effect('combo10');items.innerHTML=describe(award.items.filter(i=>i.label!=='レベルアップ'));countTo(shown+(award.items.find(i=>i.label==='きょうの初プレイ')?.bones??DAILY_BONES),500);});t+=700;}
  // 4. 太鼓レベル: the bar fills; LEVEL UP when it passes the end.
  function showLevel(instant=false){
   const xp=award.xp!,fill=$('#level-fill'),num=$('#level-num'),up=$('#level-up');

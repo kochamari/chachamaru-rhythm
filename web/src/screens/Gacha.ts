@@ -43,11 +43,11 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
    <div class="gacha-panel paper">
     <div class="wallet"><span class="wallet-icon">${boneSvg()}</span><span>もっている ほねっこ</span><b id="wallet">0</b></div>
     <button class="gacha-free" id="pull-free" data-nav hidden>きょうの無料1回<small>1日1回、ほねっこなしで ひける</small></button>
-    <button class="primary gacha-one" id="pull-1" data-nav>1回ひく<small>ほねっこ ${PULL_COST}</small></button>
-    <button class="gacha-ten" id="pull-10" data-nav>10回ひく<small>ほねっこ ${PULL_COST*TEN_PULLS}・スーパーレア以上が1つ確定</small></button>
+    <button class="primary gacha-one" id="pull-1" data-nav>1回ひく<small>ほねっこ ${PULL_COST.toLocaleString()}</small></button>
+    <button class="gacha-ten" id="pull-10" data-nav>10回ひく<small>ほねっこ ${(PULL_COST*TEN_PULLS).toLocaleString()}・スーパーレア以上が1つ確定</small></button>
     <p class="gacha-hint" id="gacha-hint" role="status"></p>
     <div class="pity" aria-label="ウルトラレア確定までの回数"><span>ウルトラレア確定まで</span><b id="pity-left">${PITY}</b><span>回</span><i><em id="pity-bar"></em></i></div>
-    <details class="gacha-rates"><summary>出る確率と、かぶったとき</summary><p>ノーマル 58%・レア 30%・スーパーレア 10%・ウルトラレア 2%。10回ひくと、最後の1回はスーパーレア以上です。<br>同じ衣装が出たら ほねっこが戻ります（ノーマル ${DUPLICATE_BONES.N}・レア ${DUPLICATE_BONES.R}・スーパーレア ${DUPLICATE_BONES.SR}・ウルトラレア ${DUPLICATE_BONES.SSR}）。<br>ウルトラレアが出ないまま${PITY}回ひくと、${PITY}回目はウルトラレアです（天井）。<br>シリーズをぜんぶ集めると ほねっこボーナス、しばずかんをコンプリートすると ＋${COMPLETE_BONUS.toLocaleString()}。<br>ほねっこは演奏でたまります（良1本、フィーバー中は2本、50コンボごと・全員集合・クリアなどでボーナス）。</p></details>
+    <details class="gacha-rates"><summary>出る確率と、かぶったとき</summary><p>ノーマル 58%・レア 30%・スーパーレア 10%・ウルトラレア 2%。10回ひくと、最後の1回はスーパーレア以上です。<br>スーパーレアとウルトラレアは、まだ持っていない衣装から出ます（その中の衣装をぜんぶ持つまで）。<br>同じ衣装が出たら ほねっこが戻ります（ノーマル ${DUPLICATE_BONES.N}・レア ${DUPLICATE_BONES.R}・スーパーレア ${DUPLICATE_BONES.SR}・ウルトラレア ${DUPLICATE_BONES.SSR.toLocaleString()}）。<br>ウルトラレアが出ないまま${PITY}回ひくと、${PITY}回目はウルトラレアです（天井）。<br>シリーズをぜんぶ集めると ほねっこボーナス、しばずかんをコンプリートすると ＋${COMPLETE_BONUS.toLocaleString()}。<br>ほねっこは演奏でたまります（良1本、フィーバー中は2本、50コンボごと・全員集合・クリアなどでボーナス）。</p></details>
    </div>
   </div>
   <section class="zukan paper"><h2>しばずかん <span id="zukan-count"></span></h2><div class="zukan-series" id="zukan"></div></section>
@@ -60,7 +60,7 @@ export async function gachaScreen(root:HTMLElement,backParam:string|null):Promis
   wallet.textContent=festival.bones.toLocaleString();
   one.disabled=busy||festival.bones<PULL_COST;ten.disabled=busy||festival.bones<PULL_COST*TEN_PULLS;
   free.hidden=festival.freeDay===dayKey();free.disabled=busy;
-  hint.textContent=festival.bones<PULL_COST?`あと ${PULL_COST-festival.bones}本で1回ひけます。演奏して ほねっこを集めよう！`:festival.bones<PULL_COST*TEN_PULLS?`あと ${PULL_COST*TEN_PULLS-festival.bones}本で10回まとめてひけます。`:'';
+  hint.textContent=festival.bones<PULL_COST?`あと ${(PULL_COST-festival.bones).toLocaleString()}本で1回ひけます。演奏して ほねっこを集めよう！`:festival.bones<PULL_COST*TEN_PULLS?`あと ${(PULL_COST*TEN_PULLS-festival.bones).toLocaleString()}本で10回まとめてひけます。`:'';
   const since=festival.sinceSSR??0;
   $('#pity-left').textContent=String(PITY-since);$<HTMLElement>('#pity-bar').style.width=`${since/PITY*100}%`;
  }

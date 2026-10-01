@@ -510,6 +510,13 @@ html[data-render="software"] .new-best{animation:none}
 @media (prefers-reduced-motion:reduce){.reveal-rays,.reveal-capsule{animation:none}}
 .gacha-chip svg.bone-svg{width:30px;height:20px}
 .bone-gacha{min-height:40px;padding:6px 12px;font-size:14px;border:2.5px solid var(--ink);box-shadow:0 3px 0 var(--ink);background:linear-gradient(#ffe38a,#ffc233);flex:none}
+/* A thin bar fills toward the next draw; ひける！ under the label once there are bones for one (and the button glows). */
+.bone-gacha{position:relative;overflow:hidden;flex-direction:column;gap:0;line-height:1.1}
+.bone-gacha .gacha-fill{position:absolute;left:0;right:0;bottom:0;height:5px;background:rgba(30,23,38,.18)}.bone-gacha .gacha-fill::after{content:'';display:block;height:100%;width:calc(var(--fill,0)*100%);background:#e3402b}
+.bone-gacha small{font-size:10px;font-weight:800;white-space:nowrap}
+.bone-gacha.ready{overflow:visible;animation:gacha-ready 1.6s ease-in-out infinite}.bone-gacha.ready small{color:#c2410c}
+@keyframes gacha-ready{50%{box-shadow:0 3px 0 var(--ink),0 0 0 5px rgba(255,194,51,.45)}}
+@media (prefers-reduced-motion:reduce){.bone-gacha.ready{animation:none}}
 /* Title screen on a sideways phone: the menu chips in two columns. */
 @media (max-height:500px) and (orientation:landscape){.title-links{grid-template-columns:repeat(2,auto);gap:8px}.title-actions{flex-wrap:nowrap}.title-links .chip-button{white-space:nowrap}}
 /* iPhone Safari zooms into a focused select or text field whose text is

@@ -23,11 +23,11 @@ function seeded(seed:number){let x=seed%2147483646+1;return ()=>{x=(x*16807)%214
 // ------------------------------------------------------------ login bonus --
 
 /** Bones for day 1…7 of a stamp card; the 7th day is the big one. */
-export const LOGIN_REWARDS=[50,50,80,80,100,120,300] as const;
+export const LOGIN_REWARDS=[100,100,160,160,200,240,600] as const;
 /** Streak milestones (consecutive days) and their bonus. */
-export const STREAK_BONUS:Readonly<Record<number,number>>={3:50,7:150,14:300,30:600,60:1000,100:2000};
+export const STREAK_BONUS:Readonly<Record<number,number>>={3:100,7:300,14:600,30:1200,60:2000,100:4000};
 /** Back after this many days away: a welcome-back bonus. */
-export const WELCOME_BACK_DAYS=3,WELCOME_BACK_BONES=100;
+export const WELCOME_BACK_DAYS=3,WELCOME_BACK_BONES=200;
 
 export interface LoginState {day:string;count:number;card:number;streak:number;best:number}
 /**
@@ -61,26 +61,26 @@ export interface RunFacts {cleared:boolean;great:number;maxCombo:number;rollHits
 export type MissionTier='easy'|'mid'|'fun';
 export interface Mission {id:string;name:string;target:number;bones:number;tier:MissionTier;gain:(r:RunFacts)=>number}
 export const MISSIONS:Mission[]=[
- {id:'play2',name:'2曲あそぶ',target:2,bones:40,tier:'easy',gain:()=>1},
- {id:'play3',name:'3曲あそぶ',target:3,bones:60,tier:'easy',gain:()=>1},
- {id:'clear1',name:'1曲クリアする',target:1,bones:40,tier:'easy',gain:r=>r.cleared?1:0},
- {id:'great150',name:'良を150回出す',target:150,bones:50,tier:'mid',gain:r=>r.great},
- {id:'great300',name:'良を300回出す',target:300,bones:80,tier:'mid',gain:r=>r.great},
- {id:'combo50',name:'50コンボを出す',target:1,bones:50,tier:'mid',gain:r=>r.maxCombo>=50?1:0},
- {id:'combo100',name:'100コンボを出す',target:1,bones:80,tier:'mid',gain:r=>r.maxCombo>=100?1:0},
- {id:'roll50',name:'連打を50回',target:50,bones:40,tier:'mid',gain:r=>r.rollHits},
- {id:'fever3',name:'フィーバーに3回入る',target:3,bones:50,tier:'mid',gain:r=>r.fevers},
- {id:'friends4',name:'仲間を4匹そろえる',target:1,bones:60,tier:'fun',gain:r=>r.friendsAll?1:0},
- {id:'pair',name:'仲間の毛色をそろえる',target:1,bones:50,tier:'fun',gain:r=>r.anySet?1:0},
- {id:'hard1',name:'むずかしいで1曲あそぶ',target:1,bones:60,tier:'fun',gain:r=>r.hard?1:0},
- {id:'osusume',name:'おすすめ曲をあそぶ',target:1,bones:50,tier:'fun',gain:r=>r.featured?1:0},
- {id:'fc1',name:'フルコンボを出す',target:1,bones:100,tier:'fun',gain:r=>r.fullCombo?1:0},
- {id:'clear2',name:'2曲クリアする',target:2,bones:60,tier:'fun',gain:r=>r.cleared?1:0},
- {id:'gacha1',name:'しばガチャをひく',target:1,bones:30,tier:'fun',gain:()=>0},
+ {id:'play2',name:'2曲あそぶ',target:2,bones:80,tier:'easy',gain:()=>1},
+ {id:'play3',name:'3曲あそぶ',target:3,bones:120,tier:'easy',gain:()=>1},
+ {id:'clear1',name:'1曲クリアする',target:1,bones:80,tier:'easy',gain:r=>r.cleared?1:0},
+ {id:'great150',name:'良を150回出す',target:150,bones:100,tier:'mid',gain:r=>r.great},
+ {id:'great300',name:'良を300回出す',target:300,bones:160,tier:'mid',gain:r=>r.great},
+ {id:'combo50',name:'50コンボを出す',target:1,bones:100,tier:'mid',gain:r=>r.maxCombo>=50?1:0},
+ {id:'combo100',name:'100コンボを出す',target:1,bones:160,tier:'mid',gain:r=>r.maxCombo>=100?1:0},
+ {id:'roll50',name:'連打を50回',target:50,bones:80,tier:'mid',gain:r=>r.rollHits},
+ {id:'fever3',name:'フィーバーに3回入る',target:3,bones:100,tier:'mid',gain:r=>r.fevers},
+ {id:'friends4',name:'仲間を4匹そろえる',target:1,bones:120,tier:'fun',gain:r=>r.friendsAll?1:0},
+ {id:'pair',name:'仲間の毛色をそろえる',target:1,bones:100,tier:'fun',gain:r=>r.anySet?1:0},
+ {id:'hard1',name:'むずかしいで1曲あそぶ',target:1,bones:120,tier:'fun',gain:r=>r.hard?1:0},
+ {id:'osusume',name:'おすすめ曲をあそぶ',target:1,bones:100,tier:'fun',gain:r=>r.featured?1:0},
+ {id:'fc1',name:'フルコンボを出す',target:1,bones:200,tier:'fun',gain:r=>r.fullCombo?1:0},
+ {id:'clear2',name:'2曲クリアする',target:2,bones:120,tier:'fun',gain:r=>r.cleared?1:0},
+ {id:'gacha1',name:'しばガチャをひく',target:1,bones:60,tier:'fun',gain:()=>0},
 ];
 export const MISSION_BY_ID=new Map(MISSIONS.map(m=>[m.id,m]));
 /** Bones for finishing all three of the day. */
-export const ALL_MISSIONS_BONES=150;
+export const ALL_MISSIONS_BONES=300;
 
 /** The day's three missions: one easy, one middle, one fun (the same all day). */
 export function missionsFor(day:string){
@@ -125,7 +125,7 @@ export function featuredSong(day:string,packIds:readonly string[]){
 export interface LifeStats {plays?:number;great?:number;maxCombo?:number;fc?:number;ag?:number;hardClears?:number;rolls?:number;jackpots?:number;collected?:number;loginDays?:number;streakBest?:number;level?:number}
 export interface Achievement {id:string;name:string;unit:string;stat:keyof LifeStats;tiers:readonly number[];titles:readonly string[]}
 export const TIER_NAMES=['銅','銀','金'] as const;
-export const TIER_BONES=[100,300,800] as const;
+export const TIER_BONES=[200,600,1600] as const;
 export const ACHIEVEMENTS:Achievement[]=[
  {id:'plays',name:'演奏した曲',unit:'曲',stat:'plays',tiers:[10,50,200],titles:['お祭りデビュー','お祭りの常連','お祭りの主']},
  {id:'great',name:'出した良',unit:'回',stat:'great',tiers:[1000,10000,50000],titles:['良の見習い','良の職人','良の達人']},

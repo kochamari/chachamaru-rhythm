@@ -169,8 +169,8 @@ export function levelFor(xp:number){
  while(rest>=100+20*(level-1)){rest-=100+20*(level-1);level++;}
  return {level,into:rest,need:100+20*(level-1)};
 }
-export const LEVEL_UP_BONES=50;
-export const DAILY_BONES=50;
+export const LEVEL_UP_BONES=100;
+export const DAILY_BONES=100;
 /** The local calendar day, for the first-run-of-the-day bonus. */
 export function dayKey(date=new Date()){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 

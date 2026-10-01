@@ -17,20 +17,20 @@ export interface Costume {id:string;name:string;rarity:Rarity;blurb:string;serie
 /** A set of outfits; collecting all of a series pays its bonus once. */
 export interface Series {id:string;name:string;bonus:number}
 export const SERIES:Series[]=[
- {id:'hachimaki',name:'はちまき',bonus:150},
- {id:'yatai',name:'屋台のごちそう',bonus:200},
- {id:'ennichi',name:'縁日あそび',bonus:150},
- {id:'omen',name:'お面',bonus:250},
- {id:'ishou',name:'お祭りの衣装',bonus:300},
- {id:'natsuyo',name:'夏の夜',bonus:300},
- {id:'oshare',name:'おしゃれ小物',bonus:200},
- {id:'boushi',name:'ぼうし・かざり',bonus:250},
- {id:'hare',name:'晴れの日',bonus:350},
- {id:'kenami',name:'特別な毛色',bonus:600},
- {id:'densetsu',name:'伝説の柴',bonus:800},
+ {id:'hachimaki',name:'はちまき',bonus:900},
+ {id:'yatai',name:'屋台のごちそう',bonus:1200},
+ {id:'ennichi',name:'縁日あそび',bonus:900},
+ {id:'omen',name:'お面',bonus:1500},
+ {id:'ishou',name:'お祭りの衣装',bonus:1800},
+ {id:'natsuyo',name:'夏の夜',bonus:1800},
+ {id:'oshare',name:'おしゃれ小物',bonus:1200},
+ {id:'boushi',name:'ぼうし・かざり',bonus:1500},
+ {id:'hare',name:'晴れの日',bonus:2100},
+ {id:'kenami',name:'特別な毛色',bonus:3600},
+ {id:'densetsu',name:'伝説の柴',bonus:4800},
 ];
 /** Bones for collecting every outfit. */
-export const COMPLETE_BONUS=3000;
+export const COMPLETE_BONUS=15000;
 
 const INK='#1e1726';
 function stroke(g:CanvasRenderingContext2D,width=3,color=INK){g.lineWidth=width;g.strokeStyle=color;g.lineJoin='round';g.lineCap='round';g.stroke();}

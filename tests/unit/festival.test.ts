@@ -82,19 +82,19 @@ it('a ten-draw always brings SR or better; repeats are marked and pay bones back
  // Always 0.1: a ノーマル outfit (a tenth of the way through the list), already owned here.
  const normals=COSTUMES.filter(c=>c.rarity==='N'),expected=normals[Math.floor(.1*normals.length)].id;
  const owned={[expected]:1};
- expect(drawOutfits(1,()=>.1,owned)[0]).toEqual({id:expected,rarity:'N',isNew:false,refund:10});
+ expect(drawOutfits(1,()=>.1,owned)[0]).toEqual({id:expected,rarity:'N',isNew:false,refund:DUPLICATE_BONES.N});
  expect(collected(owned)).toEqual({have:1,all:COSTUMES.length});
 });
 
 it('spending bones checks the balance and saves the new outfits',async()=>{
  await expect(spendOnDraws(1,o=>drawOutfits(1,seeded(3),o),PULL_COST,undefined,quiet)).rejects.toThrow('ほねっこが足りません');
- await awardBones('run-x',250,[]);
+ await awardBones('run-x',2*PULL_COST+150,[]);
  const first=await spendOnDraws(1,o=>drawOutfits(1,seeded(3),o),PULL_COST,undefined,quiet);
- expect(first.festival.bones).toBe(150);expect(first.festival.owned[first.pulls[0].id]).toBe(1);expect(first.festival.pulls).toBe(1);
- // The same outfit again: 100 spent, the repeat bonus paid back.
- const again=await spendOnDraws(1,()=>[{id:first.pulls[0].id,refund:10}],PULL_COST,undefined,quiet);
- expect(again.festival.bones).toBe(60);expect(again.festival.owned[first.pulls[0].id]).toBe(2);
- const f=await loadFestival();expect(f.bones).toBe(60);
+ expect(first.festival.bones).toBe(PULL_COST+150);expect(first.festival.owned[first.pulls[0].id]).toBe(1);expect(first.festival.pulls).toBe(1);
+ // The same outfit again: a draw spent, the repeat bonus paid back.
+ const again=await spendOnDraws(1,()=>[{id:first.pulls[0].id,refund:DUPLICATE_BONES.N}],PULL_COST,undefined,quiet);
+ expect(again.festival.bones).toBe(150+DUPLICATE_BONES.N);expect(again.festival.owned[first.pulls[0].id]).toBe(2);
+ const f=await loadFestival();expect(f.bones).toBe(150+DUPLICATE_BONES.N);
  await saveFestival({...f,bones:5});expect((await loadFestival()).bones).toBe(5);
 });
 
@@ -103,7 +103,7 @@ import {defaults} from '../../web/src/app/store';
 
 it('backups carry ほねっこ and collected outfits; a broken one is refused',async()=>{
  await saveSettings(defaults);
- await awardBones('run-b',300,[]);
+ await awardBones('run-b',PULL_COST+200,[]);
  await spendOnDraws(1,()=>[{id:'kin',refund:0}],PULL_COST,undefined,quiet);
  const b=await backup();
  expect(b.festival?.owned).toEqual({kin:1});
@@ -243,7 +243,7 @@ it('series and the whole book pay once when completed',()=>{
  const owned=Object.fromEntries(omen.map(id=>[id,1]));
  expect(seriesProgress(owned).find(p=>p.series.id==='omen')).toMatchObject({have:omen.length,all:omen.length,done:true});
  const first=settleCollection(owned,[],false);
- expect(first.bonuses).toEqual([expect.objectContaining({label:'お面 コンプ',bones:250})]);
+ expect(first.bonuses).toEqual([expect.objectContaining({label:'お面 コンプ',bones:SERIES.find(x=>x.id==='omen')!.bonus})]);
  expect(settleCollection(owned,first.paid,false).bonuses).toEqual([]);
  const everything=Object.fromEntries(COSTUMES.map(c=>[c.id,1]));
  const all=settleCollection(everything,first.paid,false);
@@ -254,13 +254,13 @@ it('series and the whole book pay once when completed',()=>{
 });
 
 it('spending settles series bonuses in the same transaction and saves the 天井 counter',async()=>{
- await awardBones('run-s',300,[]);
+ await awardBones('run-s',PULL_COST+300,[]);
  const f0=await loadFestival();
  await saveFestival({...f0,owned:{kitsune:1,oni:1,tengu:1,hyottoko:1},sinceSSR:12});
  const r=await spendOnDraws(1,(owned,pity)=>{pity.since+=1;return [{id:'okame',refund:0}];},PULL_COST,settleCollection,quiet);
  expect(r.bonuses.map(b=>b.label)).toEqual(['お面 コンプ']);
  const f=await loadFestival();
- expect([f.bones,f.sets,f.sinceSSR]).toEqual([300-PULL_COST+250,['omen'],13]);
+ expect([f.bones,f.sets,f.sinceSSR]).toEqual([300+SERIES.find(x=>x.id==='omen')!.bonus,['omen'],13]);
  expect(validFestival({...f,sinceSSR:-1})).toBe(false);
  expect(validFestival({...f,sets:['<x>']})).toBe(false);
 });
@@ -278,7 +278,7 @@ it('てんしの柴 was replaced by 獅子舞の柴: whoever drew it owns the li
  expect(COSTUME_BY_ID.has('tenshi')).toBe(false);
  expect(COSTUME_BY_ID.get('shishimai')).toMatchObject({rarity:'SSR',series:'densetsu'});
  await (await db()).clear('settings');
- await saveFestival({...emptyFestival(),bones:300,earned:300,owned:{tenshi:1,kin:2}});
+ await saveFestival({...emptyFestival(),bones:PULL_COST,earned:PULL_COST,owned:{tenshi:1,kin:2}});
  expect((await loadFestival()).owned).toEqual({kin:2,shishimai:1});
  // Draws see the replacement as owned, and the stored data drops the old id.
  let seen:Record<string,number>={};
